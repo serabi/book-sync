@@ -239,13 +239,31 @@
                             </div>
 
                             <div id="kosync_public_url_group" class="info-box full-width">
-                                <h4>Public URL (Put this in KOReader)</h4>
-                                <div class="input-row">
-                                    <input type="text" id="public_kosync_url" aria-label="Public KOSync URL" value=""
-                                        onclick="this.select()">
-                                    <button type="button" class="btn" onclick="copyPublicUrl()" title="Copy to clipboard">Copy</button>
+                                <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+                                    <div style="flex: 1; min-width: 200px;">
+                                        <h4>LAN Address</h4>
+                                        <div class="input-row">
+                                            <input type="text" id="kosync_lan_address" aria-label="KOSync LAN Address"
+                                                value="" readonly style="opacity: 0.7; cursor: not-allowed;"
+                                                onclick="this.select()">
+                                            <button type="button" class="btn" onclick="copyInputValue('kosync_lan_address')" title="Copy to clipboard">Copy</button>
+                                        </div>
+                                        <div class="help-text" style="margin-top: 6px;">For devices on your local network.</div>
+                                    </div>
+                                    <div style="flex: 1; min-width: 200px;">
+                                        <h4>Public URL</h4>
+                                        <div class="input-row">
+                                            <input type="text" name="KOSYNC_PUBLIC_URL" id="public_kosync_url"
+                                                aria-label="Public KOSync URL"
+                                                value="{{ get_val('KOSYNC_PUBLIC_URL') }}"
+                                                placeholder="https://sync.example.com"
+                                                onclick="this.select()">
+                                            <button type="button" class="btn" onclick="copyInputValue('public_kosync_url')" title="Copy to clipboard">Copy</button>
+                                        </div>
+                                        <div class="help-text" style="margin-top: 6px;">For remote access via reverse proxy. Saved to settings.</div>
+                                    </div>
                                 </div>
-                                <div class="help-text" style="margin-top: 6px;">Replace 'localhost' with your server IP or Domain if accessing remotely.</div>
+                                <div class="help-text" style="margin-top: 8px;">Use the LAN address for devices on your local network. Set the Public URL if you expose KOSync through a reverse proxy for remote access.</div>
                             </div>
 
                             <div class="form-group full-width">
@@ -963,8 +981,8 @@
             }
         }
 
-        function copyPublicUrl() {
-            var copyText = document.getElementById("public_kosync_url");
+        function copyInputValue(inputId) {
+            var copyText = document.getElementById(inputId);
             copyText.select();
             copyText.setSelectionRange(0, 99999);
             navigator.clipboard.writeText(copyText.value);
@@ -997,12 +1015,15 @@
 
         document.addEventListener('DOMContentLoaded', function () {
             var configuredPort = "{{ get_val('KOSYNC_PORT', '4477') }}";
-            var suggestedUrl = 'http://localhost:' + configuredPort;
+            var lanAddress = window.location.protocol + '//' + window.location.hostname + ':' + configuredPort;
+
+            var lanInput = document.getElementById('kosync_lan_address');
+            lanInput.value = lanAddress;
 
             var publicUrlInput = document.getElementById('public_kosync_url');
-            publicUrlInput.value = suggestedUrl;
-            publicUrlInput.removeAttribute('readonly');
-            publicUrlInput.style.cursor = "text";
+            if (!publicUrlInput.value) {
+                publicUrlInput.placeholder = lanAddress;
+            }
 
             initDynamicForms();
 
