@@ -14,39 +14,42 @@ from src.sync_clients.sync_client_interface import LocatorResult
 logger = logging.getLogger(__name__)
 
 class BookloreClient:
-    def __init__(self, database_service=None):
-        raw_url = os.environ.get("BOOKLORE_SERVER", "").rstrip('/')
+    def __init__(self, database_service=None, config_prefix="BOOKLORE", source_tag="booklore"):
+        self.config_prefix = config_prefix
+        self.source_tag = source_tag
+
+        raw_url = os.environ.get(f"{config_prefix}_SERVER", "").rstrip('/')
         if raw_url and not raw_url.lower().startswith(('http://', 'https://')):
             raw_url = f"http://{raw_url}"
         self.base_url = raw_url
-        self.username = os.environ.get("BOOKLORE_USER")
-        self.password = os.environ.get("BOOKLORE_PASSWORD")
+        self.username = os.environ.get(f"{config_prefix}_USER")
+        self.password = os.environ.get(f"{config_prefix}_PASSWORD")
         self.db = database_service
-        
+
         # In-memory cache for performance (populated from DB)
-        self._book_cache = {} 
+        self._book_cache = {}
         self._book_id_cache = {}
         self._cache_timestamp = 0
-        
+
         self._token = None
         self._token_timestamp = 0
         self._token_max_age = 300
         self.session = requests.Session()
 
-        # Legacy Cache file path (for migration only)
+        # Legacy Cache file path (for migration only — primary instance only)
         self.legacy_cache_file = Path(os.environ.get("DATA_DIR", "/data")) / "booklore_cache.json"
 
         # Load cache from DB (and migrate if needed)
-        self.target_library_id = os.environ.get("BOOKLORE_LIBRARY_ID")
+        self.target_library_id = os.environ.get(f"{config_prefix}_LIBRARY_ID")
         self._load_cache()
 
     def _load_cache(self):
         """Load cache from DB, migrating legacy JSON if needed."""
-        # 1. Migrate Legacy JSON if it exists and DB is empty
-        if self.legacy_cache_file.exists():
+        # 1. Migrate Legacy JSON if it exists and DB is empty (primary instance only)
+        if self.config_prefix == "BOOKLORE" and self.legacy_cache_file.exists():
             try:
                 # Check if DB is empty to avoid overwriting newer SQL data
-                if self.db and not self.db.get_all_booklore_books():
+                if self.db and not self.db.get_all_booklore_books(source=self.source_tag):
                     logger.info("Booklore: Migrating legacy JSON cache to SQLite...")
                     with open(self.legacy_cache_file, 'r', encoding='utf-8') as f:
                         data = json.load(f)
@@ -56,21 +59,22 @@ class BookloreClient:
                             try:
                                 from src.db.models import BookloreBook
                                 import json as pyjson
-                                
+
                                 # Convert book_info to BookloreBook model
                                 b_model = BookloreBook(
                                     filename=filename,
                                     title=book_info.get('title'),
                                     authors=book_info.get('authors'),
-                                    raw_metadata=pyjson.dumps(book_info)
+                                    raw_metadata=pyjson.dumps(book_info),
+                                    source=self.source_tag
                                 )
                                 self.db.save_booklore_book(b_model)
                                 count += 1
                             except Exception as e:
                                 logger.warning(f"Failed to migrate book {filename}: {e}")
-                        
+
                         logger.info(f"Booklore: Migrated {count} books to database.")
-                        
+
                     # Rename legacy file to .bak after successful migration
                     try:
                         self.legacy_cache_file.rename(self.legacy_cache_file.with_suffix('.json.bak'))
@@ -83,7 +87,7 @@ class BookloreClient:
         # 2. Load from DB into memory
         if self.db:
             try:
-                db_books = self.db.get_all_booklore_books()
+                db_books = self.db.get_all_booklore_books(source=self.source_tag)
                 self._book_cache = {}
                 self._book_id_cache = {}
                 
@@ -171,7 +175,7 @@ class BookloreClient:
 
     def is_configured(self):
         """Return True if Booklore is configured, False otherwise."""
-        enabled_val = os.environ.get("BOOKLORE_ENABLED", "").lower()
+        enabled_val = os.environ.get(f"{self.config_prefix}_ENABLED", "").lower()
         if enabled_val == 'false':
             return False
         return bool(self.base_url and self.username and self.password)
@@ -403,7 +407,7 @@ class BookloreClient:
                     # Remove from Database
                     try:
                         # Use the CACHE KEY (fname) which corresponds to the database `filename` column (lowercase)
-                        self.db.delete_booklore_book(fname)
+                        self.db.delete_booklore_book(fname, source=self.source_tag)
                     except Exception as e:
                         logger.error(f"Failed to prune stale book {fname}: {e}")
 
@@ -502,7 +506,8 @@ class BookloreClient:
                     filename=filename.lower(), # Store key as lowercase filename for consistency
                     title=title,
                     authors=author_str,
-                    raw_metadata=pyjson.dumps(book_info)
+                    raw_metadata=pyjson.dumps(book_info),
+                    source=self.source_tag
                 )
                 self.db.save_booklore_book(b_model)
             except Exception as e:
@@ -743,7 +748,7 @@ class BookloreClient:
     def add_to_shelf(self, ebook_filename, shelf_name=None):
         """Add a book to a shelf, creating the shelf if it doesn't exist."""
         if not shelf_name:
-             shelf_name = os.environ.get("BOOKLORE_SHELF_NAME", "abs-kosync")
+             shelf_name = os.environ.get(f"{self.config_prefix}_SHELF_NAME", "abs-kosync")
 
         try:
             # Find the book
@@ -794,7 +799,7 @@ class BookloreClient:
     def remove_from_shelf(self, ebook_filename, shelf_name=None):
         """Remove a book from a shelf."""
         if not shelf_name:
-             shelf_name = os.environ.get("BOOKLORE_SHELF_NAME", "abs-kosync")
+             shelf_name = os.environ.get(f"{self.config_prefix}_SHELF_NAME", "abs-kosync")
 
         try:
             # Find the book

@@ -40,6 +40,34 @@ def get_covers_dir():
     return current_app.config['COVERS_DIR']
 
 
+# --------------- Booklore multi-instance helpers ---------------
+
+def get_booklore_clients():
+    """Return a list of configured (or all) BookloreClient instances from the container."""
+    container = get_container()
+    clients = [container.booklore_client()]
+    try:
+        clients.append(container.booklore_client_2())
+    except Exception:
+        pass
+    return clients
+
+
+def find_in_booklore(filename):
+    """Search both Booklore instances, return (book_info, client) or (None, None)."""
+    for client in get_booklore_clients():
+        if client.is_configured():
+            book = client.find_book_by_filename(filename)
+            if book:
+                return book, client
+    return None, None
+
+
+def any_booklore_configured():
+    """Return True if any Booklore instance is configured."""
+    return any(c.is_configured() for c in get_booklore_clients())
+
+
 # --------------- Helper functions ---------------
 
 def get_audiobooks_conditionally():
@@ -100,17 +128,20 @@ def get_kosync_id_for_ebook(ebook_filename, booklore_id=None, original_filename=
     container = get_container()
     EBOOK_DIR = get_ebook_dir()
 
-    # Try Booklore API first
-    if booklore_id and container.booklore_client().is_configured():
-        try:
-            content = container.booklore_client().download_book(booklore_id)
-            if content:
-                kosync_id = container.ebook_parser().get_kosync_id_from_bytes(ebook_filename, content)
-                if kosync_id:
-                    logger.debug(f"Computed KOSync ID from Booklore download: '{kosync_id}'")
-                    return kosync_id
-        except Exception as e:
-            logger.warning(f"Failed to get KOSync ID from Booklore, falling back to filesystem: {e}")
+    # Try Booklore API first (check all instances)
+    if booklore_id:
+        for bl_client in get_booklore_clients():
+            if not bl_client.is_configured():
+                continue
+            try:
+                content = bl_client.download_book(booklore_id)
+                if content:
+                    kosync_id = container.ebook_parser().get_kosync_id_from_bytes(ebook_filename, content)
+                    if kosync_id:
+                        logger.debug(f"Computed KOSync ID from Booklore download: '{kosync_id}'")
+                        return kosync_id
+            except Exception as e:
+                logger.warning(f"Failed to get KOSync ID from Booklore ({bl_client.source_tag}), trying next: {e}")
 
     # Fall back to filesystem
     ebook_path = find_ebook_file(ebook_filename)
@@ -192,7 +223,7 @@ def get_kosync_id_for_ebook(ebook_filename, booklore_id=None, original_filename=
             logger.error(f"   Failed CWA on-demand download: {e}")
 
     # Neither source available
-    if not container.booklore_client().is_configured() and not EBOOK_DIR.exists():
+    if not any_booklore_configured() and not EBOOK_DIR.exists():
         logger.warning(
             f"Cannot compute KOSync ID for '{ebook_filename}': "
             "Neither Booklore integration nor /books volume is configured. "
@@ -249,14 +280,19 @@ def get_searchable_ebooks(search_term):
     found_filenames = set()
     found_stems = set()
 
-    # 1. Booklore
-    if container.booklore_client().is_configured():
+    # 1. Booklore (all instances)
+    for bl_client in get_booklore_clients():
+        if not bl_client.is_configured():
+            continue
         try:
-            books = container.booklore_client().search_books(search_term)
+            label = os.environ.get(f"{bl_client.config_prefix}_LABEL", "Booklore")
+            books = bl_client.search_books(search_term)
             if books:
                 for b in books:
                     fname = b.get('fileName', '')
                     if fname.lower().endswith('.epub'):
+                        if fname.lower() in found_filenames:
+                            continue
                         found_filenames.add(fname.lower())
                         found_stems.add(Path(fname).stem.lower())
                         results.append(EbookResult(
@@ -265,10 +301,10 @@ def get_searchable_ebooks(search_term):
                             subtitle=b.get('subtitle'),
                             authors=b.get('authors'),
                             booklore_id=b.get('id'),
-                            source='Booklore'
+                            source=label
                         ))
         except Exception as e:
-            logger.warning(f"Booklore search failed: {e}")
+            logger.warning(f"Booklore ({bl_client.source_tag}) search failed: {e}")
 
     # 2. ABS ebook libraries
     if search_term:
@@ -338,7 +374,7 @@ def get_searchable_ebooks(search_term):
         except Exception as e:
             logger.warning(f"Filesystem search failed: {e}")
 
-    if not results and not EBOOK_DIR.exists() and not container.booklore_client().is_configured():
+    if not results and not EBOOK_DIR.exists() and not any_booklore_configured():
         logger.warning(
             "No ebooks available: Neither Booklore integration nor /books volume is configured. "
             "Enable Booklore (BOOKLORE_SERVER, BOOKLORE_USER, BOOKLORE_PASSWORD) "
@@ -400,13 +436,14 @@ def cleanup_mapping_resources(book):
     except Exception as e:
         logger.warning(f"Failed to remove from ABS collection: {e}")
 
-    if book.ebook_filename and container.booklore_client().is_configured():
-        shelf_name = os.environ.get('BOOKLORE_SHELF_NAME', 'Kobo')
-        try:
-            shelf_filename = book.original_ebook_filename or book.ebook_filename
-            container.booklore_client().remove_from_shelf(shelf_filename, shelf_name)
-        except Exception as e:
-            logger.warning(f"Failed to remove from Booklore shelf: {e}")
+    if book.ebook_filename:
+        shelf_filename = book.original_ebook_filename or book.ebook_filename
+        for bl_client in get_booklore_clients():
+            if bl_client.is_configured():
+                try:
+                    bl_client.remove_from_shelf(shelf_filename)
+                except Exception as e:
+                    logger.warning(f"Failed to remove from Booklore ({bl_client.source_tag}) shelf: {e}")
 
 
 def restart_server():

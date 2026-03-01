@@ -732,10 +732,13 @@ class DatabaseService:
                 session.expunge(book)
             return book
 
-    def get_all_booklore_books(self) -> List[BookloreBook]:
-        """Get all cached Booklore books."""
+    def get_all_booklore_books(self, source: str = None) -> List[BookloreBook]:
+        """Get all cached Booklore books, optionally filtered by source."""
         with self.get_session() as session:
-            books = session.query(BookloreBook).all()
+            query = session.query(BookloreBook)
+            if source:
+                query = query.filter(BookloreBook.source == source)
+            books = query.all()
             for book in books:
                 session.expunge(book)
             return books
@@ -744,7 +747,8 @@ class DatabaseService:
         """Save or update a Booklore book."""
         with self.get_session() as session:
             existing = session.query(BookloreBook).filter(
-                BookloreBook.filename == booklore_book.filename
+                BookloreBook.filename == booklore_book.filename,
+                BookloreBook.source == booklore_book.source
             ).first()
 
             if existing:
@@ -762,15 +766,16 @@ class DatabaseService:
                 session.expunge(booklore_book)
                 return booklore_book
 
-    def delete_booklore_book(self, filename: str) -> bool:
+    def delete_booklore_book(self, filename: str, source: str = None) -> bool:
         """Delete a Booklore book from the cache table."""
         try:
             from src.db.models import BookloreBook
             # Use safe session context manager
             with self.get_session() as session:
-                # STRICT DELETION: Use exact filename as passed by client
-                # This ensures we delete "mybook.epub" but not "MyBook.epub" if both exist
-                session.query(BookloreBook).filter(BookloreBook.filename == filename).delete(synchronize_session=False)
+                query = session.query(BookloreBook).filter(BookloreBook.filename == filename)
+                if source:
+                    query = query.filter(BookloreBook.source == source)
+                query.delete(synchronize_session=False)
                 return True
         except Exception as e:
             logger.error(f"Failed to delete Booklore book '{filename}': {e}")

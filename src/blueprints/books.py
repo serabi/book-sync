@@ -12,6 +12,7 @@ from src.blueprints.helpers import (
     get_container, get_manager, get_database_service,
     get_audiobooks_conditionally, audiobook_matches_search,
     get_kosync_id_for_ebook, get_searchable_ebooks, cleanup_mapping_resources,
+    find_in_booklore, get_booklore_clients,
 )
 from src.db.models import Book, State
 from src.sync_clients.sync_client_interface import LocatorResult, UpdateProgressRequest
@@ -65,10 +66,9 @@ def match():
             if not ebook_filename:
                 return "Ebook filename is required", 400
             booklore_id = None
-            if container.booklore_client().is_configured():
-                bl_book = container.booklore_client().find_book_by_filename(ebook_filename)
-                if bl_book:
-                    booklore_id = bl_book.get('id')
+            bl_book, _ = find_in_booklore(ebook_filename)
+            if bl_book:
+                booklore_id = bl_book.get('id')
             kosync_doc_id = get_kosync_id_for_ebook(ebook_filename, booklore_id)
             if not kosync_doc_id:
                 return "Could not compute KOSync ID for ebook", 404
@@ -96,10 +96,9 @@ def match():
             if not book:
                 return "Book not found", 404
             booklore_id = None
-            if container.booklore_client().is_configured():
-                bl_book = container.booklore_client().find_book_by_filename(ebook_filename)
-                if bl_book:
-                    booklore_id = bl_book.get('id')
+            bl_book, bl_client = find_in_booklore(ebook_filename)
+            if bl_book:
+                booklore_id = bl_book.get('id')
             kosync_doc_id = get_kosync_id_for_ebook(ebook_filename, booklore_id)
             if not kosync_doc_id:
                 return "Could not compute KOSync ID for ebook", 404
@@ -107,9 +106,8 @@ def match():
             book.kosync_doc_id = kosync_doc_id
             book.status = 'pending'
             database_service.save_book(book)
-            if container.booklore_client().is_configured():
-                BOOKLORE_SHELF_NAME = os.environ.get("BOOKLORE_SHELF_NAME", "Kobo")
-                container.booklore_client().add_to_shelf(ebook_filename, BOOKLORE_SHELF_NAME)
+            if bl_client:
+                bl_client.add_to_shelf(ebook_filename)
             database_service.dismiss_suggestion(kosync_doc_id)
             return redirect(url_for('dashboard.index'))
 
@@ -159,10 +157,9 @@ def match():
         booklore_id = None
         storyteller_uuid = request.form.get('storyteller_uuid')
 
-        if container.booklore_client().is_configured():
-            book = container.booklore_client().find_book_by_filename(ebook_filename)
-            if book:
-                booklore_id = book.get('id')
+        bl_match, bl_match_client = find_in_booklore(ebook_filename)
+        if bl_match:
+            booklore_id = bl_match.get('id')
 
         kosync_doc_id = get_kosync_id_for_ebook(ebook_filename, booklore_id)
 
@@ -220,9 +217,9 @@ def match():
             hardcover_sync_client._automatch_hardcover(book)
 
         container.abs_client().add_to_collection(abs_id, ABS_COLLECTION_NAME)
-        if container.booklore_client().is_configured():
+        if bl_match_client:
             shelf_filename = original_ebook_filename or ebook_filename
-            container.booklore_client().add_to_shelf(shelf_filename, BOOKLORE_SHELF_NAME)
+            bl_match_client.add_to_shelf(shelf_filename)
         # Auto-dismiss pending suggestions
         database_service.dismiss_suggestion(abs_id)
         database_service.dismiss_suggestion(kosync_doc_id)
@@ -349,10 +346,9 @@ def batch_match():
                 booklore_id = None
                 kosync_doc_id = None
 
-                if container.booklore_client().is_configured():
-                    book = container.booklore_client().find_book_by_filename(ebook_filename)
-                    if book:
-                        booklore_id = book.get('id')
+                bl_match, bl_match_client = find_in_booklore(ebook_filename)
+                if bl_match:
+                    booklore_id = bl_match.get('id')
 
                 kosync_doc_id = get_kosync_id_for_ebook(ebook_filename, booklore_id)
 
@@ -386,9 +382,9 @@ def batch_match():
                     hardcover_sync_client._automatch_hardcover(book)
 
                 container.abs_client().add_to_collection(item['abs_id'], ABS_COLLECTION_NAME)
-                if container.booklore_client().is_configured():
+                if bl_match_client:
                     shelf_filename = original_ebook_filename or ebook_filename
-                    container.booklore_client().add_to_shelf(shelf_filename, BOOKLORE_SHELF_NAME)
+                    bl_match_client.add_to_shelf(shelf_filename)
                 database_service.dismiss_suggestion(item['abs_id'])
                 database_service.dismiss_suggestion(kosync_doc_id)
 
@@ -529,10 +525,9 @@ def update_hash(abs_id):
         target_filename = book.original_ebook_filename or book.ebook_filename
 
         booklore_id = None
-        if container.booklore_client().is_configured():
-            bl_book = container.booklore_client().find_book_by_filename(target_filename)
-            if bl_book:
-                booklore_id = bl_book.get('id')
+        bl_book, _ = find_in_booklore(target_filename)
+        if bl_book:
+            booklore_id = bl_book.get('id')
 
         recalc_hash = get_kosync_id_for_ebook(target_filename, booklore_id, original_filename=book.ebook_filename)
 

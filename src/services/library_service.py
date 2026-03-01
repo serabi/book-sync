@@ -16,9 +16,11 @@ from src.api.cwa_client import CWAClient
 logger = logging.getLogger(__name__)
 
 class LibraryService:
-    def __init__(self, database_service: DatabaseService, booklore_client, cwa_client: CWAClient, abs_client: ABSClient, epub_cache_dir: str):
+    def __init__(self, database_service: DatabaseService, booklore_client, cwa_client: CWAClient, abs_client: ABSClient, epub_cache_dir: str, booklore_client_2=None):
         self.database_service = database_service
         self.booklore = booklore_client
+        self.booklore_2 = booklore_client_2
+        self._booklore_clients = [c for c in [booklore_client, booklore_client_2] if c]
         self.cwa_client = cwa_client
         self.abs_client = abs_client
         self.epub_cache_dir = epub_cache_dir
@@ -136,34 +138,24 @@ class LibraryService:
     def sync_library_books(self):
         """
         Main Routine: Synchronize our local library DB with external metadata sources (Booklore).
-        
+
         The new BookloreClient handles its own file-based caching internally.
         This method now simply triggers a cache refresh by calling get_all_books().
         """
         books = self.get_syncable_books()
         logger.info(f"LibraryService: Syncing metadata for {len(books)} books...")
-        
-        # Check if Booklore is configured
-        if not self.booklore or not self.booklore.is_configured():
-            logger.info("   Booklore not configured, skipping library sync.")
-            return
-            
-        logger.info("Booklore integration enabled - ebooks sourced from API")
-        
-        # Trigger cache refresh by calling get_all_books()
-        # This will refresh the internal JSON-based cache if stale and PRUNE ghosts
-        try:
-            # Note: get_all_books() triggers _refresh_book_cache() if needed.
-            # The client now handles persistence of new/pruned items internally.
-            # We do NOT need to iterate and save everything again, as that is redundant
-            # and could mask pruning operations.
-            
-            all_books = self.booklore.get_all_books()
-            logger.info(f"   Booklore cache is active with {len(all_books)} books.")
-            
-            # FUTURE: If we want to ensure DB sync for fields that changed without ID change,
-            # we could do it here, but efficiently. For now, trust the client's cache logic.
-            
-        except Exception as e:
-            logger.error(f"   Library sync failed: {e}")
+
+        any_configured = False
+        for bl_client in self._booklore_clients:
+            if not bl_client or not bl_client.is_configured():
+                continue
+            any_configured = True
+            try:
+                all_books = bl_client.get_all_books()
+                logger.info(f"   Booklore ({bl_client.source_tag}) cache is active with {len(all_books)} books.")
+            except Exception as e:
+                logger.error(f"   Library sync failed for Booklore ({bl_client.source_tag}): {e}")
+
+        if not any_configured:
+            logger.info("   No Booklore instances configured, skipping library sync.")
 

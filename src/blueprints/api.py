@@ -181,3 +181,14 @@ def get_booklore_libraries():
 
     libraries = container.booklore_client().get_libraries()
     return jsonify(libraries)
+
+
+@api_bp.route('/api/booklore/2/libraries', methods=['GET'])
+def get_booklore_2_libraries():
+    """Return available Booklore 2 libraries."""
+    container = get_container()
+    if not container.booklore_client_2().is_configured():
+        return jsonify({"error": "Booklore 2 not configured"}), 400
+
+    libraries = container.booklore_client_2().get_libraries()
+    return jsonify(libraries)

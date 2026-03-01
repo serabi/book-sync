@@ -6,7 +6,7 @@ import time
 
 from flask import Blueprint, render_template, redirect, url_for
 
-from src.blueprints.helpers import get_container, get_manager, get_database_service
+from src.blueprints.helpers import get_container, get_manager, get_database_service, get_booklore_clients
 from src.version import APP_VERSION, get_update_status
 
 logger = logging.getLogger(__name__)
@@ -163,19 +163,24 @@ def index():
         else:
             mapping['abs_url'] = None
 
-        if manager.booklore_client.is_configured() and book.ebook_filename:
-            bl_book = manager.booklore_client.find_book_by_filename(book.ebook_filename, allow_refresh=False)
-            if not bl_book and book.original_ebook_filename:
-                bl_book = manager.booklore_client.find_book_by_filename(book.original_ebook_filename, allow_refresh=False)
-        else:
-            bl_book = None
-
-        if bl_book:
-            mapping['booklore_id'] = bl_book.get('id')
-            mapping['booklore_url'] = f"{manager.booklore_client.base_url}/book/{bl_book.get('id')}?tab=view"
-        else:
-            mapping['booklore_id'] = None
-            mapping['booklore_url'] = None
+        # Booklore deep links (check all instances)
+        mapping['booklore_id'] = None
+        mapping['booklore_url'] = None
+        mapping['booklore_2_url'] = None
+        if book.ebook_filename:
+            for bl_client in get_booklore_clients():
+                if not bl_client.is_configured():
+                    continue
+                bl_book = bl_client.find_book_by_filename(book.ebook_filename, allow_refresh=False)
+                if not bl_book and book.original_ebook_filename:
+                    bl_book = bl_client.find_book_by_filename(book.original_ebook_filename, allow_refresh=False)
+                if bl_book:
+                    url = f"{bl_client.base_url}/book/{bl_book.get('id')}?tab=view"
+                    if bl_client.source_tag == 'booklore':
+                        mapping['booklore_id'] = bl_book.get('id')
+                        mapping['booklore_url'] = url
+                    else:
+                        mapping['booklore_2_url'] = url
 
         if mapping.get('hardcover_slug'):
             mapping['hardcover_url'] = f"https://hardcover.app/books/{mapping['hardcover_slug']}"
@@ -220,6 +225,9 @@ def index():
 
     latest_version, update_available = get_update_status()
 
+    booklore_label = os.environ.get('BOOKLORE_LABEL', 'Booklore') or 'Booklore'
+    booklore_2_label = os.environ.get('BOOKLORE_2_LABEL', 'Booklore 2') or 'Booklore 2'
+
     return render_template(
         'index.html',
         mappings=mappings,
@@ -228,7 +236,9 @@ def index():
         suggestions=suggestions,
         app_version=APP_VERSION,
         update_available=update_available,
-        latest_version=latest_version
+        latest_version=latest_version,
+        booklore_label=booklore_label,
+        booklore_2_label=booklore_2_label
     )
 
 

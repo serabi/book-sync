@@ -10,9 +10,10 @@ from src.sync_clients.sync_client_interface import SyncClient, SyncResult, Updat
 logger = logging.getLogger(__name__)
 
 class BookloreSyncClient(SyncClient):
-    def __init__(self, booklore_client: BookloreClient, ebook_parser: EbookParser):
+    def __init__(self, booklore_client: BookloreClient, ebook_parser: EbookParser, client_name: str = 'BookLore'):
         super().__init__(ebook_parser)
         self.booklore_client = booklore_client
+        self.client_name = client_name
         self.delta_kosync_thresh = float(os.getenv("SYNC_DELTA_KOSYNC_PERCENT", 1)) / 100.0
 
     def is_configured(self) -> bool:
@@ -45,7 +46,7 @@ class BookloreSyncClient(SyncClient):
             delta=delta,
             threshold=self.delta_kosync_thresh,
             is_configured=self.booklore_client.is_configured(),
-            display=("BookLore", "{prev:.4%} -> {curr:.4%}"),
+            display=(self.client_name, "{prev:.4%} -> {curr:.4%}"),
             value_formatter=lambda v: f"{v*100:.4f}%"
         )
 
@@ -64,7 +65,7 @@ class BookloreSyncClient(SyncClient):
         if success:
             try:
                 from src.services.write_tracker import record_write
-                record_write('BookLore', book.abs_id)
+                record_write(self.client_name, book.abs_id)
             except ImportError:
                 pass
         updated_state = {

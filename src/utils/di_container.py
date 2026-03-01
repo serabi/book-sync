@@ -83,7 +83,16 @@ class Container(containers.DeclarativeContainer):
 
     booklore_client = providers.Singleton(
         BookloreClient,
-        database_service=database_service
+        database_service=database_service,
+        config_prefix="BOOKLORE",
+        source_tag="booklore"
+    )
+
+    booklore_client_2 = providers.Singleton(
+        BookloreClient,
+        database_service=database_service,
+        config_prefix="BOOKLORE_2",
+        source_tag="booklore_2"
     )
 
     hardcover_client = providers.Singleton(HardcoverClient)
@@ -118,6 +127,7 @@ class Container(containers.DeclarativeContainer):
         LibraryService,
         database_service=database_service,
         booklore_client=booklore_client,
+        booklore_client_2=booklore_client_2,
         cwa_client=cwa_client,
         abs_client=abs_client,
         epub_cache_dir=epub_cache_dir
@@ -168,7 +178,15 @@ class Container(containers.DeclarativeContainer):
     booklore_sync_client = providers.Singleton(
         BookloreSyncClient,
         booklore_client,
-        ebook_parser
+        ebook_parser,
+        client_name="BookLore"
+    )
+
+    booklore_sync_client_2 = providers.Singleton(
+        BookloreSyncClient,
+        booklore_client_2,
+        ebook_parser,
+        client_name="BookLore2"
     )
 
     abs_ebook_sync_client = providers.Singleton(
@@ -192,6 +210,7 @@ class Container(containers.DeclarativeContainer):
         KoSync=kosync_sync_client,
         Storyteller=storyteller_sync_client,
         BookLore=booklore_sync_client,
+        BookLore2=booklore_sync_client_2,
         Hardcover=hardcover_sync_client
     )
 
@@ -200,13 +219,14 @@ class Container(containers.DeclarativeContainer):
         SyncManager,
         abs_client=abs_client,
         booklore_client=booklore_client,
+        booklore_client_2=booklore_client_2,
         hardcover_client=hardcover_client,
         storyteller_client=storyteller_client,
         transcriber=transcriber,
         ebook_parser=ebook_parser,
         database_service=database_service,
         sync_clients=sync_clients,
-        
+
         alignment_service=alignment_service,
         library_service=library_service,
         migration_service=migration_service,

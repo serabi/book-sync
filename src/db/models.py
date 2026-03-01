@@ -2,6 +2,7 @@
 SQLAlchemy ORM models for Book Stitch database.
 """
 
+import sqlalchemy as sa
 from sqlalchemy import create_engine, Column, Integer, String, Float, Text, DateTime, ForeignKey, Numeric
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
@@ -290,9 +291,13 @@ class BookloreBook(Base):
     Model for caching Booklore search results, replacing local JSON cache.
     """
     __tablename__ = 'booklore_books'
+    __table_args__ = (
+        sa.UniqueConstraint('filename', 'source', name='uq_booklore_books_filename_source'),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    filename = Column(String(500), index=True, nullable=False, unique=True)
+    filename = Column(String(500), index=True, nullable=False)
+    source = Column(String(50), default='booklore')
     title = Column(String(500))
     authors = Column(String(500))
     raw_metadata = Column(Text)  # JSON blob of full booklore response
@@ -306,11 +311,13 @@ class BookloreBook(Base):
         except json.JSONDecodeError:
             return {}
 
-    def __init__(self, filename: str, title: str = None, authors: str = None, raw_metadata: str = None):
+    def __init__(self, filename: str, title: str = None, authors: str = None,
+                 raw_metadata: str = None, source: str = 'booklore'):
         self.filename = filename
         self.title = title
         self.authors = authors
         self.raw_metadata = raw_metadata
+        self.source = source
 
 
 # Database configuration

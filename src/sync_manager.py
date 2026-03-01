@@ -39,6 +39,7 @@ class SyncManager:
     def __init__(self,
                  abs_client=None,
                  booklore_client=None,
+                 booklore_client_2=None,
                  hardcover_client=None,
                  transcriber=None,
                  ebook_parser=None,
@@ -56,6 +57,8 @@ class SyncManager:
         # Use dependency injection
         self.abs_client = abs_client
         self.booklore_client = booklore_client
+        self.booklore_client_2 = booklore_client_2
+        self._booklore_clients = [c for c in [booklore_client, booklore_client_2] if c]
         self.hardcover_client = hardcover_client
         self.transcriber = transcriber
         self.ebook_parser = ebook_parser
@@ -383,14 +386,15 @@ class SyncManager:
             logger.info(f"Found EPUB in cache: '{cached_path}'")
             return cached_path
 
-        # Try to download from Booklore API
-        # Note: We use hasattr to prevent crashes if BookloreClient wasn't updated with these methods yet
-        if hasattr(self.booklore_client, 'is_configured') and self.booklore_client.is_configured():
-            book = self.booklore_client.find_book_by_filename(ebook_filename)
+        # Try to download from Booklore API (check all instances)
+        for bl_client in self._booklore_clients:
+            if not (hasattr(bl_client, 'is_configured') and bl_client.is_configured()):
+                continue
+            book = bl_client.find_book_by_filename(ebook_filename)
             if book:
                 logger.info(f"Downloading EPUB from Booklore: {sanitize_log_data(ebook_filename)}")
-                if hasattr(self.booklore_client, 'download_book'):
-                    content = self.booklore_client.download_book(book['id'])
+                if hasattr(bl_client, 'download_book'):
+                    content = bl_client.download_book(book['id'])
                     if content:
                         with open(cached_path, 'wb') as f:
                             f.write(content)
@@ -398,10 +402,9 @@ class SyncManager:
                         return cached_path
                     else:
                         logger.error(f"Failed to download EPUB content from Booklore")
-            else:
-                logger.error(f"EPUB not found in Booklore: {sanitize_log_data(ebook_filename)}")
-            if not filesystem_matches:
-                logger.error(f"EPUB not found on filesystem and Booklore not configured")
+
+        if not filesystem_matches and not any(c.is_configured() for c in self._booklore_clients if hasattr(c, 'is_configured')):
+            logger.error(f"EPUB not found on filesystem and Booklore not configured")
 
         return None
 
@@ -484,11 +487,13 @@ class SyncManager:
             
             found_filenames = set()
             
-            # 2a. Search Booklore
-            if self.booklore_client and self.booklore_client.is_configured():
+            # 2a. Search Booklore (all instances)
+            for bl_client in self._booklore_clients:
+                if not (bl_client and bl_client.is_configured()):
+                    continue
                 try:
-                    bl_results = self.booklore_client.search_books(search_title)
-                    logger.debug(f"Booklore returned {len(bl_results)} results for '{search_title}'")
+                    bl_results = bl_client.search_books(search_title)
+                    logger.debug(f"Booklore ({bl_client.source_tag}) returned {len(bl_results)} results for '{search_title}'")
                     for b in bl_results:
                          # Filter for EPUBs
                          fname = b.get('fileName', '')
@@ -498,7 +503,7 @@ class SyncManager:
                                  "source": "booklore",
                                  "title": b.get('title'),
                                  "author": b.get('authors'),
-                                 "filename": fname, # Important for auto-linking
+                                 "filename": fname,
                                  "id": str(b.get('id')),
                                  "confidence": "high" if search_title.lower() in b.get('title', '').lower() else "medium"
                              })
