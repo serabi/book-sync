@@ -35,6 +35,44 @@ _kosync_debounce: dict = {}  # {abs_id: {'last_event': float, 'title': str, 'syn
 _kosync_debounce_lock = threading.Lock()
 _debounce_thread_started = False
 
+# Rate limiting (token bucket per IP)
+_RATE_LIMIT_CAPACITY = 30     # max burst
+_RATE_LIMIT_REFILL = 2.0      # tokens per second
+_AUTH_TOKEN_COST = 5           # auth attempts are expensive
+_rate_limit_store: dict = {}   # {ip: {'tokens': float, 'last': float}}
+_rate_limit_lock = threading.Lock()
+
+# Auto-discovery concurrency cap
+_MAX_ACTIVE_SCANS = 5
+
+
+def _rate_limit_check(ip: str, cost: int = 1) -> bool:
+    """Consume tokens from the bucket for `ip`. Returns True if allowed."""
+    now = time.time()
+    with _rate_limit_lock:
+        bucket = _rate_limit_store.get(ip)
+        if bucket is None:
+            bucket = {'tokens': _RATE_LIMIT_CAPACITY, 'last': now}
+            _rate_limit_store[ip] = bucket
+
+        elapsed = now - bucket['last']
+        bucket['tokens'] = min(_RATE_LIMIT_CAPACITY, bucket['tokens'] + elapsed * _RATE_LIMIT_REFILL)
+        bucket['last'] = now
+
+        if bucket['tokens'] >= cost:
+            bucket['tokens'] -= cost
+            return True
+        return False
+
+
+def _prune_rate_limit_store():
+    """Remove entries idle for more than 5 minutes."""
+    now = time.time()
+    with _rate_limit_lock:
+        stale = [ip for ip, b in _rate_limit_store.items() if now - b['last'] > 300]
+        for ip in stale:
+            del _rate_limit_store[ip]
+
 
 def init_kosync_server(database_service, container, manager, ebook_dir=None):
     """Initialize KoSync server with required dependencies."""
@@ -88,11 +126,17 @@ def _kosync_debounce_loop() -> None:
             for k in stale:
                 del _kosync_debounce[k]
 
+        # Prune stale rate-limit buckets
+        _prune_rate_limit_store()
+
 
 def kosync_auth_required(f):
     """Decorator for KOSync authentication."""
     @wraps(f)
     def decorated_function(*args, **kwargs):
+        if not _rate_limit_check(request.remote_addr, _AUTH_TOKEN_COST):
+            return jsonify({"error": "Too many requests"}), 429
+
         user = request.headers.get('x-auth-user')
         key = request.headers.get('x-auth-key')
 
@@ -126,6 +170,9 @@ def kosync_healthcheck():
 @kosync_sync_bp.route('/koreader/users/auth', methods=['GET'])
 def kosync_users_auth():
     """KOReader auth check - validates credentials per kosync-dotnet spec"""
+    if not _rate_limit_check(request.remote_addr, _AUTH_TOKEN_COST):
+        return jsonify({"message": "Too many requests"}), 429
+
     user = request.headers.get('x-auth-user')
     key = request.headers.get('x-auth-key')
 
@@ -154,6 +201,9 @@ def kosync_users_auth():
 @kosync_sync_bp.route('/koreader/users/create', methods=['POST'])
 def kosync_users_create():
     """Stub for KOReader user registration check"""
+    if not _rate_limit_check(request.remote_addr, _AUTH_TOKEN_COST):
+        return jsonify({"error": "Too many requests"}), 429
+
     return jsonify({
         "id": 1,
         "username": os.environ.get("KOSYNC_USER", "user")
@@ -164,6 +214,9 @@ def kosync_users_create():
 @kosync_sync_bp.route('/koreader/users/login', methods=['POST'])
 def kosync_users_login():
     """Stub for KOReader login check"""
+    if not _rate_limit_check(request.remote_addr, _AUTH_TOKEN_COST):
+        return jsonify({"error": "Too many requests"}), 429
+
     return jsonify({
         "id": 1,
         "username": os.environ.get("KOSYNC_USER", "user"),
@@ -185,6 +238,9 @@ def kosync_get_progress(doc_id):
       3. Sibling hash resolution (same book, different epub hash)
       4. Background auto-discovery for completely unknown hashes
     """
+    if len(doc_id) > 64:
+        return jsonify({"error": "Document ID too long"}), 400
+
     logger.info(f"KOSync: GET progress for doc {doc_id[:8]}... from {request.remote_addr}")
 
     # Step 1: Direct hash lookup
@@ -224,7 +280,7 @@ def kosync_get_progress(doc_id):
 
     # Step 4: Unknown hash — register stub and start background discovery
     auto_create = os.environ.get('AUTO_CREATE_EBOOK_MAPPING', 'true').lower() == 'true'
-    if auto_create and doc_id not in _active_scans:
+    if auto_create and doc_id not in _active_scans and len(_active_scans) < _MAX_ACTIVE_SCANS:
         _active_scans.add(doc_id)
         from src.db.models import KosyncDocument as KD
         stub = KD(document_hash=doc_id)
@@ -252,16 +308,26 @@ def kosync_put_progress():
         return jsonify({"error": "No data"}), 400
 
     doc_hash = data.get('document')
-    if not doc_hash:
+    if not doc_hash or not isinstance(doc_hash, str):
         logger.warning(f"KOSync: PUT progress with no document ID from {request.remote_addr}")
         return jsonify({"error": "Missing document ID"}), 400
+    if len(doc_hash) > 64:
+        return jsonify({"error": "Document hash too long"}), 400
+
+    # Validate percentage
+    percentage = data.get('percentage', 0)
+    try:
+        percentage = float(percentage)
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid percentage value"}), 400
+    if percentage < 0.0 or percentage > 1.0:
+        return jsonify({"error": "Percentage must be between 0.0 and 1.0"}), 400
 
     logger.info(f"KOSync: PUT progress request for doc {doc_hash[:8]}... from {request.remote_addr} (device: {data.get('device', 'unknown')})")
 
-    percentage = data.get('percentage', 0)
-    progress = data.get('progress', '')
-    device = data.get('device', '')
-    device_id = data.get('device_id', '')
+    progress = str(data.get('progress', ''))[:512]
+    device = str(data.get('device', ''))[:128]
+    device_id = str(data.get('device_id', ''))[:64]
 
     now = datetime.utcnow()
 
@@ -321,7 +387,7 @@ def kosync_put_progress():
         auto_create = os.environ.get('AUTO_CREATE_EBOOK_MAPPING', 'true').lower() == 'true'
 
         if auto_create:
-            if doc_hash not in _active_scans:
+            if doc_hash not in _active_scans and len(_active_scans) < _MAX_ACTIVE_SCANS:
                 _active_scans.add(doc_hash)
 
                 def run_auto_discovery(doc_hash_val):
