@@ -4,9 +4,9 @@ import logging
 import os
 import time
 
-from flask import Blueprint, render_template, redirect, url_for
+from flask import Blueprint, redirect, render_template, url_for
 
-from src.blueprints.helpers import get_container, get_manager, get_database_service, get_booklore_clients
+from src.blueprints.helpers import get_booklore_clients, get_container, get_database_service, get_manager
 from src.version import APP_VERSION, get_update_status
 
 logger = logging.getLogger(__name__)

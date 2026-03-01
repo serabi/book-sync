@@ -6,12 +6,11 @@ AudioBookShelf (ABS), Booklore (Metadata), and our local database.
 
 import logging
 import os
-from typing import List, Optional
 
-from src.db.models import Book
-from src.db.database_service import DatabaseService
 from src.api.api_clients import ABSClient
 from src.api.cwa_client import CWAClient
+from src.db.database_service import DatabaseService
+from src.db.models import Book
 
 logger = logging.getLogger(__name__)
 
@@ -24,21 +23,21 @@ class LibraryService:
         self.cwa_client = cwa_client
         self.abs_client = abs_client
         self.epub_cache_dir = epub_cache_dir
-        
+
         if not os.path.exists(self.epub_cache_dir):
             try:
                 os.makedirs(self.epub_cache_dir)
             except Exception:
                 pass
 
-    def get_syncable_books(self) -> List[Book]:
+    def get_syncable_books(self) -> list[Book]:
         """
         Returns a list of books that are active and candidates for synchronization.
         """
         # This wraps the low-level DB query
         return self.database_service.get_all_books()
 
-    def acquire_ebook(self, abs_item: dict) -> Optional[str]:
+    def acquire_ebook(self, abs_item: dict) -> str | None:
         """
         Attempt to acquire an ebook for the given audiobook item.
         Priority Chain:
@@ -47,7 +46,7 @@ class LibraryService:
         3. CWA (Automated Library Search via OPDS)
         4. ABS Search (Search other libraries for title)
         5. Filesystem (Fallback - handled by caller)
-        
+
         Returns:
             Absolute path to the downloaded/found ebook, or None.
         """
@@ -57,7 +56,7 @@ class LibraryService:
         item_id = abs_item.get('id')
         title = abs_item.get('media', {}).get('metadata', {}).get('title')
         author = abs_item.get('media', {}).get('metadata', {}).get('authorName')
-        
+
         # Sanity check
         if not item_id or not title:
             return None
@@ -76,7 +75,7 @@ class LibraryService:
                 target = ebooks[0]
                 filename = f"{item_id}_direct.{target['ext']}"
                 output_path = os.path.join(self.epub_cache_dir, filename)
-                
+
                 # Check if already exists?
                 if os.path.exists(output_path) and os.path.getsize(output_path) > 1024:
                     logger.info(f"   Using cached ebook: {output_path}")
@@ -87,23 +86,23 @@ class LibraryService:
                      return output_path
 
         # 2. Booklore (Curated)
-        # Placeholder for curated DB lookup. 
+        # Placeholder for curated DB lookup.
         # Future: Check self.db.find_booklore_match(title, author)
-        
+
         # 3. CWA (OPDS)
         if self.cwa_client and self.cwa_client.is_configured():
             # Use title + author for better precision
             query = f"{title}"
             if author:
                 query += f" {author}"
-            
+
             results = self.cwa_client.search_ebooks(query)
             if results:
                 logger.info(f"   Priority 3 (CWA): Found {len(results)} matches for '{query}'")
                 target = results[0]
                 filename = f"{item_id}_cwa.{target['ext']}"
                 output_path = os.path.join(self.epub_cache_dir, filename)
-                
+
                 if self.cwa_client.download_ebook(target['download_url'], output_path):
                     logger.info(f"   Downloaded CWA match to {output_path}")
                     return output_path
@@ -127,7 +126,7 @@ class LibraryService:
                          tf = target_files[0]
                          filename = f"{item_id}_abs_search.{tf['ext']}"
                          output_path = os.path.join(self.epub_cache_dir, filename)
-                         
+
                          if self.abs_client.download_file(tf['stream_url'], output_path):
                              logger.info(f"   Downloaded ABS search match to {output_path}")
                              return output_path

@@ -6,13 +6,18 @@ import threading
 import time
 from pathlib import Path
 
-from flask import Blueprint, render_template, request, redirect, url_for, jsonify, session, flash
+from flask import Blueprint, flash, jsonify, redirect, render_template, request, session, url_for
 
 from src.blueprints.helpers import (
-    get_container, get_manager, get_database_service,
-    get_audiobooks_conditionally, audiobook_matches_search,
-    get_kosync_id_for_ebook, get_searchable_ebooks, cleanup_mapping_resources,
-    find_in_booklore, get_booklore_clients,
+    audiobook_matches_search,
+    cleanup_mapping_resources,
+    find_in_booklore,
+    get_audiobooks_conditionally,
+    get_container,
+    get_database_service,
+    get_kosync_id_for_ebook,
+    get_manager,
+    get_searchable_ebooks,
 )
 from src.db.models import Book, State
 from src.sync_clients.sync_client_interface import LocatorResult, UpdateProgressRequest
@@ -30,7 +35,6 @@ def match():
     database_service = get_database_service()
 
     ABS_COLLECTION_NAME = os.environ.get("ABS_COLLECTION_NAME", "Synced with KOReader")
-    BOOKLORE_SHELF_NAME = os.environ.get("BOOKLORE_SHELF_NAME", "Kobo")
 
     if request.method == 'POST':
         action = request.form.get('action', '')
@@ -282,7 +286,6 @@ def batch_match():
     database_service = get_database_service()
 
     ABS_COLLECTION_NAME = os.environ.get("ABS_COLLECTION_NAME", "Synced with KOReader")
-    BOOKLORE_SHELF_NAME = os.environ.get("BOOKLORE_SHELF_NAME", "Kobo")
 
     if request.method == 'POST':
         action = request.form.get('action')
@@ -503,7 +506,6 @@ def mark_complete(abs_id):
 
 @books_bp.route('/update-hash/<abs_id>', methods=['POST'])
 def update_hash(abs_id):
-    container = get_container()
     manager = get_manager()
     database_service = get_database_service()
 

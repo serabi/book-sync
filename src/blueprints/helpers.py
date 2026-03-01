@@ -208,7 +208,7 @@ def get_kosync_id_for_ebook(ebook_filename, booklore_id=None, original_filename=
                     if target and target.get('download_url'):
                         logger.info(f"Using direct download link from search for '{target.get('title', 'Unknown')}'")
                     else:
-                        logger.debug(f"Search did not return a usable result, trying direct ID lookup")
+                        logger.debug("Search did not return a usable result, trying direct ID lookup")
                         target = cwa_client.get_book_by_id(cwa_id)
 
                     if target and target.get('download_url'):

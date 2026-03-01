@@ -1,15 +1,14 @@
+import json
+import logging
 import os
 import time
-import logging
-from typing import Optional
-import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
-
-import requests
 from pathlib import Path
 
-from src.utils.logging_utils import sanitize_log_data
+import requests
+
 from src.sync_clients.sync_client_interface import LocatorResult
+from src.utils.logging_utils import sanitize_log_data
 
 logger = logging.getLogger(__name__)
 
@@ -51,14 +50,15 @@ class BookloreClient:
                 # Check if DB is empty to avoid overwriting newer SQL data
                 if self.db and not self.db.get_all_booklore_books(source=self.source_tag):
                     logger.info("Booklore: Migrating legacy JSON cache to SQLite...")
-                    with open(self.legacy_cache_file, 'r', encoding='utf-8') as f:
+                    with open(self.legacy_cache_file, encoding='utf-8') as f:
                         data = json.load(f)
                         books = data.get('books', {})
                         count = 0
                         for filename, book_info in books.items():
                             try:
-                                from src.db.models import BookloreBook
                                 import json as pyjson
+
+                                from src.db.models import BookloreBook
 
                                 # Convert book_info to BookloreBook model
                                 b_model = BookloreBook(
@@ -90,7 +90,7 @@ class BookloreClient:
                 db_books = self.db.get_all_booklore_books(source=self.source_tag)
                 self._book_cache = {}
                 self._book_id_cache = {}
-                
+
                 for db_book in db_books:
                     # Parse raw metadata back to dict
                     book_info = db_book.raw_metadata_dict
@@ -101,14 +101,14 @@ class BookloreClient:
                             'title': db_book.title,
                             'authors': db_book.authors
                         }
-                    
+
                     self._book_cache[db_book.filename] = book_info
-                    
+
                     # Update ID cache
                     bid = book_info.get('id')
                     if bid:
                         self._book_id_cache[bid] = book_info
-                        
+
                 # Set to 0 to force a refresh/validation against API on next access
                 self._cache_timestamp = 0
                 logger.info(f"Booklore: Loaded {len(self._book_cache)} books from database")
@@ -119,7 +119,7 @@ class BookloreClient:
     def _save_cache(self):
         """
         Save cache to DB.
-        Note: We now save individual books on update, so this is mostly a no-op 
+        Note: We now save individual books on update, so this is mostly a no-op
         or used for bulk updates/timestamp management.
         """
         pass # Database persistence is handled atomically per book elsewhere
@@ -210,7 +210,7 @@ class BookloreClient:
     def get_libraries(self):
         """Fetch all available libraries to help user configure the bridge."""
         self._get_fresh_token()
-        
+
         # Strategy 1: Try direct libraries endpoint
         try:
             response = self._make_request("GET", "/api/v1/libraries")
@@ -228,7 +228,7 @@ class BookloreClient:
             if response and response.status_code == 200:
                 data = response.json()
                 books = data if isinstance(data, list) else data.get('content', [])
-                
+
                 unique_libs = {}
                 for b in books:
                     lid = b.get('libraryId')
@@ -241,7 +241,7 @@ class BookloreClient:
                 return list(unique_libs.values())
         except Exception as e:
             logger.error(f"Booklore: Failed to discover libraries via book scan: {e}")
-            
+
         return []
 
     def _fetch_book_detail(self, book_id, token):
@@ -273,21 +273,21 @@ class BookloreClient:
         all_books_list = []
         page = 0
         batch_size = 200  # Reasonable chunk size
-        
+
         logger.info("Booklore: Starting full library scan...")
-        
+
         while True:
             # Request specific page and size
             # Note: Booklore/Spring usually expects 'page' (0-indexed) and 'size'
             endpoint = f"/api/v1/books?page={page}&size={batch_size}"
             response = self._make_request("GET", endpoint)
-            
+
             if not response or response.status_code != 200:
                 logger.error(f"Booklore: Failed to fetch page {page}")
                 return False
 
             data = response.json()
-            
+
             # Handle different response shapes (List vs Page Object)
             current_batch = []
             if isinstance(data, list):
@@ -295,10 +295,10 @@ class BookloreClient:
             elif isinstance(data, dict) and 'content' in data:
                 # Spring Data Page object wrapper
                 current_batch = data['content']
-            
+
             if not current_batch:
                 break  # No more books, we are done
-            
+
             # Filter by libraryId if configured
             if self.target_library_id and current_batch:
                 filtered_batch = []
@@ -319,12 +319,12 @@ class BookloreClient:
 
             all_books_list.extend(current_batch)
             logger.debug(f"Booklore: Fetched page {page} ({len(current_batch)} items)")
-            
+
             # If we got fewer items than requested, we are on the last page
             # Also break if we got MORE items than requested (server ignored size param)
             if len(current_batch) != batch_size:
                 break
-                
+
             page += 1
 
         if not all_books_list:
@@ -341,36 +341,36 @@ class BookloreClient:
         if self.db and all_books_list:
             # 1. Map valid IDs to their live data for strict verification
             live_map = {str(b['id']): b for b in all_books_list if b.get('id')}
-            
+
             # 2. Check existing cache for ghosts
             cached_filenames = list(self._book_cache.keys())
             stale_count = 0
-            
+
             for fname in cached_filenames:
                 book_info = self._book_cache[fname]
                 bid = book_info.get('id')
-                
+
                 is_stale = False
-                
+
                 # Check 1: ID Validity
                 if not bid or str(bid) not in live_map:
                     is_stale = True
                     logger.debug(f"   Pruning {fname}: ID {bid} not in live map")
                 else:
                     # Check 2: Content Consistency
-                    
+
                     # A. Filename Check
                     # Ideally, we compare the Live filename with the Cached filename.
                     # Problem 1: The Live API 'List' view might return empty filenames (Live: '').
                     # Problem 2: Cache Key 'fname' is lowercase, but real filename is in book_info['fileName'].
-                    
+
                     live_book = live_map[str(bid)]
                     raw_live_filename = live_book.get('primaryFile', {}).get('fileName', live_book.get('fileName', ''))
                     # Clean filename to ensure we don't treat whitespace/control chars as valid names
                     live_filename = str(raw_live_filename).strip() if raw_live_filename else ''
-                    
+
                     cached_real_filename = book_info.get('fileName', fname)
-                    
+
                     # Only prune if we HAVE a valid, non-empty live filename to compare against
                     if live_filename:
                         # Strict check: If API returns explicit filename, it must match.
@@ -385,13 +385,13 @@ class BookloreClient:
                         # If titles differ significantly, it's likely a reused ID (Ghost)
                         live_title = live_book.get('title')
                         cached_title = book_info.get('title')
-                        
+
                         if live_title and cached_title:
                             # Normalize for safety (ignore case/whitespace/symbols)
                             # This catches "The Book" vs "Another Book" (ID Reuse)
                             lt_norm = self._normalize_string(live_title)
                             ct_norm = self._normalize_string(cached_title)
-                            
+
                             # Use a generous equality check to avoid false positives on minor edits
                             if lt_norm and ct_norm and lt_norm != ct_norm:
                                  is_stale = True
@@ -403,7 +403,7 @@ class BookloreClient:
                     self._book_cache.pop(fname, None)
                     if bid:
                         self._book_id_cache.pop(bid, None)
-                    
+
                     # Remove from Database
                     try:
                         # Use the CACHE KEY (fname) which corresponds to the database `filename` column (lowercase)
@@ -415,7 +415,7 @@ class BookloreClient:
                 logger.info(f"Booklore: Pruned {stale_count} stale books from database.")
 
         # --- Proceed with Step 2: Detail Fetching (Same as before) ---
-        
+
         # Step 2: For books not in cache, fetch details to get fileName
         new_book_ids = [b['id'] for b in all_books_list if b['id'] not in self._book_id_cache]
 
@@ -492,16 +492,17 @@ class BookloreClient:
         }
 
         # Let's keep it consistent with what we see in database migration
-        
+
         self._book_cache[filename.lower()] = book_info
         self._book_id_cache[detail['id']] = book_info
 
         # Persist to DB
         if self.db:
             try:
-                from src.db.models import BookloreBook
                 import json as pyjson
-                
+
+                from src.db.models import BookloreBook
+
                 b_model = BookloreBook(
                     filename=filename.lower(), # Store key as lowercase filename for consistency
                     title=title,
@@ -526,20 +527,20 @@ class BookloreClient:
         Find a book by its filename using exact, stem, or normalized matching.
         """
         # Ensure cache is initialized if empty, but respect allow_refresh for updates
-        if not self._book_cache and allow_refresh: 
+        if not self._book_cache and allow_refresh:
             self._refresh_book_cache()
-            
+
         # Check cache freshness if refresh is allowed
         if allow_refresh and time.time() - self._cache_timestamp > 3600:
             self._refresh_book_cache()
 
         target_name = Path(ebook_filename).name.lower()
-        
+
         # 1. Exact Filename Match
         if target_name in self._book_cache: return self._book_cache[target_name]
 
         target_stem = Path(ebook_filename).stem.lower()
-        
+
         # 2. Strict Stem Match
         for cached_name, book_info in list(self._book_cache.items()):
             if Path(cached_name).stem.lower() == target_stem: return book_info
@@ -557,17 +558,17 @@ class BookloreClient:
             from difflib import SequenceMatcher
             best_match = None
             best_ratio = 0.0
-            
+
             for cached_name, book_info in list(self._book_cache.items()):
                 cached_norm = self._normalize_string(Path(cached_name).stem)
                 # Calculate similarity ratio
                 ratio = SequenceMatcher(None, target_norm, cached_norm).ratio()
-                
+
                 # Require high similarity (90%+) to avoid matching sequels
                 if ratio > 0.90 and ratio > best_ratio:
                     best_ratio = ratio
                     best_match = (cached_name, book_info)
-            
+
             if best_match:
                 logger.debug(f"Fuzzy match: '{target_stem}' ~= '{best_match[0]}' (similarity: {best_ratio:.1%})")
                 return best_match[1]
@@ -596,7 +597,7 @@ class BookloreClient:
 
         search_lower = search_term.lower()
         search_norm = self._normalize_string(search_term)
-        
+
         results = []
         for book_info in list(self._book_cache.values()):
             title = (book_info.get('title') or '').lower()
@@ -607,19 +608,19 @@ class BookloreClient:
             if search_lower in title or search_lower in authors or search_lower in filename:
                 results.append(book_info)
                 continue
-            
+
             # 2. Normalized match (for "Dragon's" vs "Dragons")
             # Only perform if standard match failed
             title_norm = self._normalize_string(title)
             authors_norm = self._normalize_string(authors)
             filename_norm = self._normalize_string(filename)
-            
+
             if len(search_norm) > 3: # Avoid extremely short noisy matches
-                if (search_norm in title_norm or 
-                    search_norm in authors_norm or 
+                if (search_norm in title_norm or
+                    search_norm in authors_norm or
                     search_norm in filename_norm):
                     results.append(book_info)
-        
+
         return results
 
     def download_book(self, book_id):
@@ -633,7 +634,7 @@ class BookloreClient:
 
         try:
             response = self.session.get(url, headers=headers, timeout=60)
-            
+
             # Fallback for newer Booklore versions or different configurations
             if response.status_code == 404:
                 file_url = f"{self.base_url}/api/v1/books/{book_id}/file"
@@ -671,7 +672,7 @@ class BookloreClient:
                 return (pct / 100.0 if pct else 0.0), None
         return None, None
 
-    def update_progress(self, ebook_filename, percentage, rich_locator: Optional[LocatorResult] = None):
+    def update_progress(self, ebook_filename, percentage, rich_locator: LocatorResult | None = None):
         book = self.find_book_by_filename(ebook_filename)
         if not book:
             logger.debug(f"Booklore: Book not found: {ebook_filename}")
@@ -728,7 +729,7 @@ class BookloreClient:
     def get_recent_activity(self, min_progress=0.01):
         if not self._book_cache: self._refresh_book_cache()
         results = []
-        for filename, book in list(self._book_cache.items()):
+        for _filename, book in list(self._book_cache.items()):
             progress = 0
             if book.get('epubProgress'):
                 progress = (book['epubProgress'].get('percentage') or 0) / 100.0

@@ -2,12 +2,12 @@
 SQLAlchemy ORM models for Book Stitch database.
 """
 
-import sqlalchemy as sa
-from sqlalchemy import create_engine, Column, Integer, String, Float, Text, DateTime, ForeignKey, Numeric
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime
-from typing import Optional
+
+import sqlalchemy as sa
+from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, Numeric, String, Text, create_engine
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import relationship, sessionmaker
 
 Base = declarative_base()
 
@@ -25,12 +25,12 @@ class KosyncDocument(Base):
     device = Column(String(128), nullable=True)
     device_id = Column(String(64), nullable=True)
     timestamp = Column(DateTime, nullable=True)
-    
+
     # Bridge specific fields
     linked_abs_id = Column(String(255), ForeignKey('books.abs_id'), nullable=True, index=True)
     first_seen = Column(DateTime, default=datetime.utcnow)
     last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
+
     # Hash cache replacement fields
     filename = Column(String(500), nullable=True)
     source = Column(String(50), nullable=True)
@@ -223,7 +223,7 @@ class PendingSuggestion(Base):
     status = Column(String(20), default='pending')
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    def __init__(self, source_id: str, title: str, author: str = None, 
+    def __init__(self, source_id: str, title: str, author: str = None,
                  cover_url: str = None, matches_json: str = "[]", status: str = 'pending'):
         self.source_id = source_id
         self.title = title
@@ -240,7 +240,7 @@ class PendingSuggestion(Base):
             return json.loads(self.matches_json) if self.matches_json else []
         except json.JSONDecodeError:
             return []
-    
+
     @property
     def audiobook_count(self):
         """Count only audiobook matches, excluding ebook entries."""
@@ -332,11 +332,11 @@ class DatabaseManager:
         # Increase timeout to reduce lock errors, enable WAL mode for concurrency, allow multi-thread access
         # Using 4 slashes guarantees an absolute path in SQLAlchemy
         self.engine = create_engine(
-            f'sqlite:///{self.db_path}', 
-            echo=False, 
+            f'sqlite:///{self.db_path}',
+            echo=False,
             connect_args={'timeout': 30, 'check_same_thread': False}
         )
-        
+
         from sqlalchemy import event
         @event.listens_for(self.engine, "connect")
         def set_sqlite_pragma(dbapi_connection, connection_record):

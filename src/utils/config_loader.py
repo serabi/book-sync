@@ -1,6 +1,7 @@
 
-import os
 import logging
+import os
+
 from src.db.database_service import DatabaseService
 
 logger = logging.getLogger(__name__)
@@ -145,19 +146,19 @@ class ConfigLoader:
                 return
 
             logger.info("Bootstrapping configuration from environment variables...")
-            
+
             count = 0
             for key in ALL_SETTINGS:
                 # Priority: 1. Env Var, 2. Default, 3. Empty string
                 val = os.environ.get(key, DEFAULT_CONFIG.get(key, ""))
-                
+
                 # Check for None explicitly
                 if val is None:
                     val = ""
-                
+
                 db_service.set_setting(key, str(val))
                 count += 1
-            
+
             logger.info(f"Bootstrapped {count} settings to database")
 
         except Exception as e:
@@ -167,18 +168,18 @@ class ConfigLoader:
     def load_settings(db_service: DatabaseService):
         """
         Load all settings from database and update os.environ.
-        
+
         Args:
             db_service: Initialized DatabaseService instance
         """
         try:
             settings = db_service.get_all_settings()
             count = 0
-            
+
             for key, value in settings.items():
                 # Apply validation or type conversion if needed (mostly string for env vars)
                 val_str = str(value) if value is not None else ""
-                
+
                 # Preserve existing non-empty env vars when DB value is blank.
                 if val_str != "":
                     os.environ[key] = val_str
@@ -186,11 +187,11 @@ class ConfigLoader:
                     existing_env = os.environ.get(key, "")
                     if not existing_env:
                         os.environ[key] = ""
-                
+
                 count += 1
-            
+
             logger.info(f"Loaded {count} settings from database")
-            
+
         except Exception as e:
             logger.error(f"Error loading settings from database: {e}")
             # Do not re-raise, fall back to existing env vars

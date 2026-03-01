@@ -2,9 +2,8 @@
 
 import json
 import logging
-import os
 
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, jsonify, request
 
 from src.blueprints.helpers import get_container, get_database_service
 

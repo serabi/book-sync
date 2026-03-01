@@ -4,7 +4,7 @@ import logging
 import os
 import threading
 
-from flask import Blueprint, render_template, request, redirect, url_for, session
+from flask import Blueprint, redirect, render_template, request, session, url_for
 
 from src.blueprints.helpers import get_database_service, restart_server
 

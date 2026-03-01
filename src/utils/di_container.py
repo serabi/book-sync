@@ -5,8 +5,8 @@ Using python-dependency-injector library for proper DI functionality.
 """
 
 import logging
-from pathlib import Path
 import os
+from pathlib import Path
 
 from dependency_injector import containers, providers
 
@@ -17,20 +17,20 @@ from src.api.cwa_client import CWAClient
 from src.api.hardcover_client import HardcoverClient
 from src.api.storyteller_api import StorytellerAPIClient
 from src.db.database_service import DatabaseService
-from src.utils.ebook_utils import EbookParser
-from src.utils.transcriber import AudioTranscriber
-from src.utils.smil_extractor import SmilExtractor
-from src.utils.polisher import Polisher
 from src.services.alignment_service import AlignmentService
 from src.services.library_service import LibraryService
 from src.services.migration_service import MigrationService
+from src.sync_clients.abs_ebook_sync_client import ABSEbookSyncClient
 from src.sync_clients.abs_sync_client import ABSSyncClient
+from src.sync_clients.booklore_sync_client import BookloreSyncClient
+from src.sync_clients.hardcover_sync_client import HardcoverSyncClient
 from src.sync_clients.kosync_sync_client import KoSyncSyncClient
 from src.sync_clients.storyteller_sync_client import StorytellerSyncClient
-from src.sync_clients.booklore_sync_client import BookloreSyncClient
-from src.sync_clients.abs_ebook_sync_client import ABSEbookSyncClient
-from src.sync_clients.hardcover_sync_client import HardcoverSyncClient
 from src.sync_manager import SyncManager
+from src.utils.ebook_utils import EbookParser
+from src.utils.polisher import Polisher
+from src.utils.smil_extractor import SmilExtractor
+from src.utils.transcriber import AudioTranscriber
 
 logger = logging.getLogger(__name__)
 
@@ -44,11 +44,11 @@ class Container(containers.DeclarativeContainer):
     data_dir = providers.Factory(
         lambda: Path(os.environ.get("DATA_DIR", "/data"))
     )
-    
+
     books_dir = providers.Factory(
         lambda: Path(os.environ.get("BOOKS_DIR", "/books"))
     )
-    
+
     db_file = providers.Factory(
         lambda data_dir: data_dir / "mapping_db.json",
         data_dir=data_dir
@@ -61,7 +61,7 @@ class Container(containers.DeclarativeContainer):
         lambda data_dir: data_dir / "epub_cache",
         data_dir=data_dir
     )
-    
+
     # Lazy load specific config values
     delta_abs_thresh = providers.Factory(lambda: float(os.getenv("SYNC_DELTA_ABS_SECONDS", 60)))
     delta_kosync_thresh = providers.Factory(lambda: float(os.getenv("SYNC_DELTA_KOSYNC_PERCENT", 1)) / 100.0)
