@@ -70,7 +70,7 @@ class BookloreClient:
                                 )
                                 self.db.save_booklore_book(b_model)
                                 count += 1
-                            except Exception as e:
+                            except (KeyError, TypeError, ValueError) as e:
                                 logger.warning(f"Failed to migrate book {filename}: {e}")
 
                         logger.info(f"Booklore: Migrated {count} books to database.")
@@ -742,7 +742,7 @@ class BookloreClient:
                     "id": book['id'],
                     "filename": book['fileName'],
                     "progress": progress,
-                    "source": "BOOKLORE"
+                    "source": self.source_tag
                 })
         return results
 

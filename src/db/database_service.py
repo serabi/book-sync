@@ -781,13 +781,15 @@ class DatabaseService:
 
     def delete_booklore_book(self, filename: str, source: str = None) -> bool:
         """Delete a Booklore book from the cache table."""
+        if not source:
+            logger.warning(f"delete_booklore_book called without source for '{filename}', skipping to avoid cross-instance deletion")
+            return False
         try:
-            from src.db.models import BookloreBook
-            # Use safe session context manager
             with self.get_session() as session:
-                query = session.query(BookloreBook).filter(BookloreBook.filename == filename)
-                if source:
-                    query = query.filter(BookloreBook.source == source)
+                query = session.query(BookloreBook).filter(
+                    BookloreBook.filename == filename,
+                    BookloreBook.source == source
+                )
                 query.delete(synchronize_session=False)
                 return True
         except Exception as e:

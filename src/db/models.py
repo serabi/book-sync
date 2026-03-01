@@ -311,8 +311,8 @@ class BookloreBook(Base):
         except json.JSONDecodeError:
             return {}
 
-    def __init__(self, filename: str, title: str = None, authors: str = None,
-                 raw_metadata: str = None, source: str = 'booklore'):
+    def __init__(self, filename: str, title: str | None = None, authors: str | None = None,
+                 raw_metadata: str | None = None, source: str = 'booklore'):
         self.filename = filename
         self.title = title
         self.authors = authors

@@ -171,23 +171,21 @@ def get_abs_libraries():
 
 # ---------------- Booklore ----------------
 
+def _get_booklore_libraries(client_getter, name):
+    container = get_container()
+    client = client_getter(container)
+    if not client.is_configured():
+        return jsonify({"error": f"{name} not configured"}), 400
+    return jsonify(client.get_libraries())
+
+
 @api_bp.route('/api/booklore/libraries', methods=['GET'])
 def get_booklore_libraries():
     """Return available Booklore libraries."""
-    container = get_container()
-    if not container.booklore_client().is_configured():
-        return jsonify({"error": "Booklore not configured"}), 400
-
-    libraries = container.booklore_client().get_libraries()
-    return jsonify(libraries)
+    return _get_booklore_libraries(lambda c: c.booklore_client(), "Booklore")
 
 
 @api_bp.route('/api/booklore/2/libraries', methods=['GET'])
 def get_booklore_2_libraries():
     """Return available Booklore 2 libraries."""
-    container = get_container()
-    if not container.booklore_client_2().is_configured():
-        return jsonify({"error": "Booklore 2 not configured"}), 400
-
-    libraries = container.booklore_client_2().get_libraries()
-    return jsonify(libraries)
+    return _get_booklore_libraries(lambda c: c.booklore_client_2(), "Booklore 2")

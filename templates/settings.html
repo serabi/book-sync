@@ -356,7 +356,7 @@
                                 <div style="display: flex; gap: 10px;">
                                     <input type="text" name="BOOKLORE_LIBRARY_ID" value="{{ get_val('BOOKLORE_LIBRARY_ID') }}"
                                         placeholder="e.g. 1" style="flex: 1;">
-                                    <button class="btn" type="button" onclick="checkBookloreLibs()">Find IDs</button>
+                                    <button class="btn" type="button" onclick="checkBookloreLibs(event)">Find IDs</button>
                                 </div>
                                 <div class="help-text">Restricts sync to a specific library (e.g., 1). Leave empty to sync all.</div>
                             </div>
@@ -406,7 +406,7 @@
                                 <div style="display: flex; gap: 10px;">
                                     <input type="text" name="BOOKLORE_2_LIBRARY_ID" value="{{ get_val('BOOKLORE_2_LIBRARY_ID') }}"
                                         placeholder="e.g. 1" style="flex: 1;">
-                                    <button class="btn" type="button" onclick="checkBookloreLibs2()">Find IDs</button>
+                                    <button class="btn" type="button" onclick="checkBookloreLibs2(event)">Find IDs</button>
                                 </div>
                                 <div class="help-text">Restricts sync to a specific library (e.g., 1). Leave empty to sync all.</div>
                             </div>
@@ -884,15 +884,15 @@
 
         /* ─── Preserved Functions ─── */
 
-        function checkBookloreLibs() {
-            _fetchBookloreLibs('/api/booklore/libraries');
+        function checkBookloreLibs(event) {
+            _fetchBookloreLibs('/api/booklore/libraries', event);
         }
 
-        function checkBookloreLibs2() {
-            _fetchBookloreLibs('/api/booklore/2/libraries');
+        function checkBookloreLibs2(event) {
+            _fetchBookloreLibs('/api/booklore/2/libraries', event);
         }
 
-        function _fetchBookloreLibs(url) {
+        function _fetchBookloreLibs(url, event) {
             var btn = event.target;
             var originalText = btn.textContent;
             btn.textContent = 'Scanning...';

@@ -8,19 +8,19 @@
     {% macro render_book_card(mapping, integrations) %}
     {# Calculate sync discrepancy for highlighting #}
     {% set progress_values = [] %}
-    {% if mapping.states.abs is defined and mapping.states.abs.percentage %}
+    {% if mapping.states.abs is defined and mapping.states.abs.percentage is not none %}
     {% set _ = progress_values.append(mapping.states.abs.percentage) %}
     {% endif %}
-    {% if mapping.states.storyteller is defined and mapping.states.storyteller.percentage %}
+    {% if mapping.states.storyteller is defined and mapping.states.storyteller.percentage is not none %}
     {% set _ = progress_values.append(mapping.states.storyteller.percentage) %}
     {% endif %}
-    {% if mapping.states.booklore is defined and mapping.states.booklore.percentage %}
+    {% if mapping.states.booklore is defined and mapping.states.booklore.percentage is not none %}
     {% set _ = progress_values.append(mapping.states.booklore.percentage) %}
     {% endif %}
-    {% if mapping.states.booklore2 is defined and mapping.states.booklore2.percentage %}
+    {% if mapping.states.booklore2 is defined and mapping.states.booklore2.percentage is not none %}
     {% set _ = progress_values.append(mapping.states.booklore2.percentage) %}
     {% endif %}
-    {% if mapping.states.kosync is defined and mapping.states.kosync.percentage %}
+    {% if mapping.states.kosync is defined and mapping.states.kosync.percentage is not none %}
     {% set _ = progress_values.append(mapping.states.kosync.percentage) %}
     {% endif %}
     {% set max_diff = (progress_values|max|default(0) - progress_values|min|default(0)) if progress_values|length > 1

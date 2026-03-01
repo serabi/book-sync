@@ -48,8 +48,10 @@ def get_booklore_clients():
     clients = [container.booklore_client()]
     try:
         clients.append(container.booklore_client_2())
-    except Exception:
+    except AttributeError:
         pass
+    except Exception as e:
+        logger.debug(f"Failed to resolve booklore_client_2: {e}")
     return clients
 
 
@@ -120,7 +122,7 @@ def find_ebook_file(filename, ebook_dir=None):
     return matches[0] if matches else None
 
 
-def get_kosync_id_for_ebook(ebook_filename, booklore_id=None, original_filename=None):
+def get_kosync_id_for_ebook(ebook_filename, booklore_id=None, original_filename=None, bl_client=None):
     """Get KOSync document ID for an ebook.
     Tries Booklore API first (if configured and booklore_id provided),
     falls back to filesystem if needed.
@@ -128,20 +130,17 @@ def get_kosync_id_for_ebook(ebook_filename, booklore_id=None, original_filename=
     container = get_container()
     EBOOK_DIR = get_ebook_dir()
 
-    # Try Booklore API first (check all instances)
-    if booklore_id:
-        for bl_client in get_booklore_clients():
-            if not bl_client.is_configured():
-                continue
-            try:
-                content = bl_client.download_book(booklore_id)
-                if content:
-                    kosync_id = container.ebook_parser().get_kosync_id_from_bytes(ebook_filename, content)
-                    if kosync_id:
-                        logger.debug(f"Computed KOSync ID from Booklore download: '{kosync_id}'")
-                        return kosync_id
-            except Exception as e:
-                logger.warning(f"Failed to get KOSync ID from Booklore ({bl_client.source_tag}), trying next: {e}")
+    # Try Booklore API first — use the specific client that reported the ID
+    if booklore_id and bl_client and bl_client.is_configured():
+        try:
+            content = bl_client.download_book(booklore_id)
+            if content:
+                kosync_id = container.ebook_parser().get_kosync_id_from_bytes(ebook_filename, content)
+                if kosync_id:
+                    logger.debug(f"Computed KOSync ID from Booklore download: '{kosync_id}'")
+                    return kosync_id
+        except Exception as e:
+            logger.warning(f"Failed to get KOSync ID from Booklore ({bl_client.source_tag}): {e}")
 
     # Fall back to filesystem
     ebook_path = find_ebook_file(ebook_filename)

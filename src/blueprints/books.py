@@ -70,10 +70,11 @@ def match():
             if not ebook_filename:
                 return "Ebook filename is required", 400
             booklore_id = None
-            bl_book, _ = find_in_booklore(ebook_filename)
+            matched_bl_client = None
+            bl_book, matched_bl_client = find_in_booklore(ebook_filename)
             if bl_book:
                 booklore_id = bl_book.get('id')
-            kosync_doc_id = get_kosync_id_for_ebook(ebook_filename, booklore_id)
+            kosync_doc_id = get_kosync_id_for_ebook(ebook_filename, booklore_id, bl_client=matched_bl_client)
             if not kosync_doc_id:
                 return "Could not compute KOSync ID for ebook", 404
             book_id = f"ebook-{kosync_doc_id[:16]}"
@@ -103,7 +104,7 @@ def match():
             bl_book, bl_client = find_in_booklore(ebook_filename)
             if bl_book:
                 booklore_id = bl_book.get('id')
-            kosync_doc_id = get_kosync_id_for_ebook(ebook_filename, booklore_id)
+            kosync_doc_id = get_kosync_id_for_ebook(ebook_filename, booklore_id, bl_client=bl_client)
             if not kosync_doc_id:
                 return "Could not compute KOSync ID for ebook", 404
             book.ebook_filename = ebook_filename
@@ -165,7 +166,7 @@ def match():
         if bl_match:
             booklore_id = bl_match.get('id')
 
-        kosync_doc_id = get_kosync_id_for_ebook(ebook_filename, booklore_id)
+        kosync_doc_id = get_kosync_id_for_ebook(ebook_filename, booklore_id, bl_client=bl_match_client)
 
         if not kosync_doc_id:
             logger.warning(f"Cannot compute KOSync ID for '{sanitize_log_data(ebook_filename)}': File not found in Booklore or filesystem")
@@ -353,7 +354,7 @@ def batch_match():
                 if bl_match:
                     booklore_id = bl_match.get('id')
 
-                kosync_doc_id = get_kosync_id_for_ebook(ebook_filename, booklore_id)
+                kosync_doc_id = get_kosync_id_for_ebook(ebook_filename, booklore_id, bl_client=bl_match_client)
 
                 if not kosync_doc_id:
                     logger.warning(f"Could not compute KOSync ID for {sanitize_log_data(ebook_filename)}, skipping")
@@ -527,11 +528,11 @@ def update_hash(abs_id):
         target_filename = book.original_ebook_filename or book.ebook_filename
 
         booklore_id = None
-        bl_book, _ = find_in_booklore(target_filename)
+        bl_book, matched_bl_client = find_in_booklore(target_filename)
         if bl_book:
             booklore_id = bl_book.get('id')
 
-        recalc_hash = get_kosync_id_for_ebook(target_filename, booklore_id, original_filename=book.ebook_filename)
+        recalc_hash = get_kosync_id_for_ebook(target_filename, booklore_id, original_filename=book.ebook_filename, bl_client=matched_bl_client)
 
         if recalc_hash:
             book.kosync_doc_id = recalc_hash

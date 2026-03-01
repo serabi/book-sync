@@ -40,9 +40,11 @@ def upgrade() -> None:
         table_args=[
             sa.UniqueConstraint('filename', 'source', name='uq_booklore_books_filename_source'),
         ],
-    ) as batch_op:  # noqa: F841
+    ) as _batch_op:
         pass  # Table is recreated with the new constraint
 
 
 def downgrade() -> None:
+    # Intentionally non-reversible: the composite unique constraint
+    # (filename, source) cannot be safely reverted without data loss.
     pass
