@@ -90,17 +90,40 @@ You can use a local Whisper model (runs on CPU or NVIDIA GPU) or offload to a cl
 
 ## Split-port mode
 
-Book Stitch can expose the KoSync API on a separate port from the admin dashboard. This way you can make the sync endpoint available to your e-reader over the internet while keeping the dashboard on your local network:
+Book Stitch can expose the KoSync API on a separate port from the admin dashboard. This keeps the sync endpoint available to your e-reader over the internet while the dashboard stays on your local network.
+
+**Important:** Port 4477 (the dashboard) must stay on your LAN. Only the `KOSYNC_PORT` is safe to forward.
+
+### Setup
 
 ```yaml
 environment:
   - KOSYNC_PORT=5758
 ports:
-  - "8080:4477"   # Dashboard — LAN only
+  - "4477:4477"   # Dashboard — LAN only, do NOT forward
   - "5758:5758"   # Sync API — safe to expose
 ```
 
-Point KOReader's sync server setting at `https://your-domain:5758`.
+### TLS requirement
+
+KOSync credentials travel in HTTP headers (`x-auth-key`). Before exposing the sync port to the internet, put a reverse proxy with TLS in front of it (nginx, Caddy, Traefik, etc.). Without TLS, credentials are sent in plaintext.
+
+### Public URL configuration
+
+After setting up your reverse proxy, go to **Settings > KOSync** and enter your public URL (e.g. `https://sync.example.com`) in the **Public URL** field. This value is saved to the database and displayed on the settings page for easy copying into KOReader.
+
+The **LAN Address** field shows `http://<server-ip>:<KOSYNC_PORT>` automatically — use this for devices on the same local network.
+
+### KOReader setup
+
+1. Set `KOSYNC_PORT` in your Docker environment
+2. Configure your reverse proxy to forward `https://your-domain` to port `KOSYNC_PORT`
+3. In Book Stitch settings, enter the public URL
+4. In KOReader: Settings > Cloud storage > Progress sync > Custom server > enter your public URL
+
+### Security features
+
+The sync endpoint includes rate limiting, input validation, and MD5-hashed authentication per the KOSync protocol spec. Admin/management endpoints require credentials when accessed from public IPs.
 
 ---
 
