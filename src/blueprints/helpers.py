@@ -9,7 +9,7 @@ import html
 import logging
 import os
 import re
-import sys
+import signal
 import time
 from pathlib import Path
 
@@ -451,8 +451,8 @@ def restart_server():
     """
     logger.info("Stopping application (Supervisor will restart it)...")
     time.sleep(1.0)
-    logger.info("Exiting process to trigger restart...")
-    sys.exit(0)
+    logger.info("Sending SIGTERM to trigger restart...")
+    os.kill(os.getpid(), signal.SIGTERM)
 
 
 def safe_folder_name(name: str) -> str:

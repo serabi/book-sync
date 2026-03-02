@@ -1,5 +1,7 @@
 # KoSync Server - Extracted from web_server.py for clean code separation
 # Implements KOSync protocol compatible with kosync-dotnet
+import hmac
+import ipaddress
 import logging
 import os
 import threading
@@ -27,11 +29,50 @@ _manager = None
 _hash_cache = None
 _ebook_dir = None
 _active_scans = set()
+_active_scans_lock = threading.Lock()
 
 # KoSync PUT debounce state
 _kosync_debounce: dict = {}  # {abs_id: {'last_event': float, 'title': str, 'synced': bool}}
 _kosync_debounce_lock = threading.Lock()
 _debounce_thread_started = False
+
+# Rate limiting (token bucket per IP)
+_RATE_LIMIT_CAPACITY = 30     # max burst
+_RATE_LIMIT_REFILL = 2.0      # tokens per second
+_AUTH_TOKEN_COST = 5           # auth attempts are expensive
+_rate_limit_store: dict = {}   # {ip: {'tokens': float, 'last': float}}
+_rate_limit_lock = threading.Lock()
+
+# Auto-discovery concurrency cap
+_MAX_ACTIVE_SCANS = 5
+
+
+def _rate_limit_check(ip: str, cost: int = 1) -> bool:
+    """Consume tokens from the bucket for `ip`. Returns True if allowed."""
+    now = time.time()
+    with _rate_limit_lock:
+        bucket = _rate_limit_store.get(ip)
+        if bucket is None:
+            bucket = {'tokens': _RATE_LIMIT_CAPACITY, 'last': now}
+            _rate_limit_store[ip] = bucket
+
+        elapsed = now - bucket['last']
+        bucket['tokens'] = min(_RATE_LIMIT_CAPACITY, bucket['tokens'] + elapsed * _RATE_LIMIT_REFILL)
+        bucket['last'] = now
+
+        if bucket['tokens'] >= cost:
+            bucket['tokens'] -= cost
+            return True
+        return False
+
+
+def _prune_rate_limit_store():
+    """Remove entries idle for more than 5 minutes."""
+    now = time.time()
+    with _rate_limit_lock:
+        stale = [ip for ip, b in _rate_limit_store.items() if now - b['last'] > 300]
+        for ip in stale:
+            del _rate_limit_store[ip]
 
 
 def init_kosync_server(database_service, container, manager, ebook_dir=None):
@@ -86,11 +127,19 @@ def _kosync_debounce_loop() -> None:
             for k in stale:
                 del _kosync_debounce[k]
 
+        # Prune stale rate-limit buckets
+        _prune_rate_limit_store()
+
 
 def kosync_auth_required(f):
     """Decorator for KOSync authentication."""
     @wraps(f)
     def decorated_function(*args, **kwargs):
+        remote = request.remote_addr
+        is_loopback = remote in ('127.0.0.1', '::1')
+        if not is_loopback and not _rate_limit_check(remote, _AUTH_TOKEN_COST):
+            return jsonify({"error": "Too many requests"}), 429
+
         user = request.headers.get('x-auth-user')
         key = request.headers.get('x-auth-key')
 
@@ -103,12 +152,24 @@ def kosync_auth_required(f):
 
         expected_hash = hash_kosync_key(expected_password)
 
-        if user and expected_user and user.lower() == expected_user.lower() and (key == expected_password or key == expected_hash):
+        if (user and key and expected_user
+                and user.lower() == expected_user.lower()
+                and hmac.compare_digest(key, expected_hash)):
             return f(*args, **kwargs)
 
         logger.warning(f"KOSync Integrated Server: Unauthorized access attempt from '{request.remote_addr}' (user: '{user}')")
         return jsonify({"error": "Unauthorized"}), 401
     return decorated_function
+
+
+# ---------------- CORS: block browser preflight ----------------
+
+@kosync_sync_bp.before_request
+def _kosync_cors_preflight():
+    """Return bare 204 for OPTIONS requests. KOReader is native — it never
+    sends Origin/OPTIONS.  This blocks browser-based cross-origin abuse."""
+    if request.method == 'OPTIONS':
+        return '', 204
 
 
 # ---------------- KOSync Protocol Endpoints ----------------
@@ -124,6 +185,10 @@ def kosync_healthcheck():
 @kosync_sync_bp.route('/koreader/users/auth', methods=['GET'])
 def kosync_users_auth():
     """KOReader auth check - validates credentials per kosync-dotnet spec"""
+    remote = request.remote_addr
+    if remote not in ('127.0.0.1', '::1') and not _rate_limit_check(remote, _AUTH_TOKEN_COST):
+        return jsonify({"message": "Too many requests"}), 429
+
     user = request.headers.get('x-auth-user')
     key = request.headers.get('x-auth-key')
 
@@ -140,7 +205,7 @@ def kosync_users_auth():
 
     expected_hash = hash_kosync_key(expected_password)
 
-    if user.lower() == expected_user.lower() and (key == expected_password or key == expected_hash):
+    if user.lower() == expected_user.lower() and hmac.compare_digest(key, expected_hash):
         logger.debug(f"KOSync Auth: User '{user}' authenticated successfully")
         return jsonify({"username": user}), 200
 
@@ -152,6 +217,10 @@ def kosync_users_auth():
 @kosync_sync_bp.route('/koreader/users/create', methods=['POST'])
 def kosync_users_create():
     """Stub for KOReader user registration check"""
+    remote = request.remote_addr
+    if remote not in ('127.0.0.1', '::1') and not _rate_limit_check(remote, _AUTH_TOKEN_COST):
+        return jsonify({"error": "Too many requests"}), 429
+
     return jsonify({
         "id": 1,
         "username": os.environ.get("KOSYNC_USER", "user")
@@ -162,11 +231,14 @@ def kosync_users_create():
 @kosync_sync_bp.route('/koreader/users/login', methods=['POST'])
 def kosync_users_login():
     """Stub for KOReader login check"""
+    remote = request.remote_addr
+    if remote not in ('127.0.0.1', '::1') and not _rate_limit_check(remote, _AUTH_TOKEN_COST):
+        return jsonify({"error": "Too many requests"}), 429
+
     return jsonify({
         "id": 1,
         "username": os.environ.get("KOSYNC_USER", "user"),
-        "active": True,
-        "token": os.environ.get("KOSYNC_KEY", "")
+        "active": True
     }), 200
 
 
@@ -184,6 +256,9 @@ def kosync_get_progress(doc_id):
       3. Sibling hash resolution (same book, different epub hash)
       4. Background auto-discovery for completely unknown hashes
     """
+    if len(doc_id) > 64:
+        return jsonify({"error": "Document ID too long"}), 400
+
     logger.info(f"KOSync: GET progress for doc {doc_id[:8]}... from {request.remote_addr}")
 
     # Step 1: Direct hash lookup
@@ -223,8 +298,12 @@ def kosync_get_progress(doc_id):
 
     # Step 4: Unknown hash — register stub and start background discovery
     auto_create = os.environ.get('AUTO_CREATE_EBOOK_MAPPING', 'true').lower() == 'true'
-    if auto_create and doc_id not in _active_scans:
-        _active_scans.add(doc_id)
+    start_discovery = False
+    with _active_scans_lock:
+        if auto_create and doc_id not in _active_scans and len(_active_scans) < _MAX_ACTIVE_SCANS:
+            _active_scans.add(doc_id)
+            start_discovery = True
+    if start_discovery:
         from src.db.models import KosyncDocument as KD
         stub = KD(document_hash=doc_id)
         _database_service.save_kosync_document(stub)
@@ -251,16 +330,26 @@ def kosync_put_progress():
         return jsonify({"error": "No data"}), 400
 
     doc_hash = data.get('document')
-    if not doc_hash:
+    if not doc_hash or not isinstance(doc_hash, str):
         logger.warning(f"KOSync: PUT progress with no document ID from {request.remote_addr}")
         return jsonify({"error": "Missing document ID"}), 400
+    if len(doc_hash) > 64:
+        return jsonify({"error": "Document hash too long"}), 400
+
+    # Validate percentage
+    percentage = data.get('percentage', 0)
+    try:
+        percentage = float(percentage)
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid percentage value"}), 400
+    if percentage < 0.0 or percentage > 1.0:
+        return jsonify({"error": "Percentage must be between 0.0 and 1.0"}), 400
 
     logger.info(f"KOSync: PUT progress request for doc {doc_hash[:8]}... from {request.remote_addr} (device: {data.get('device', 'unknown')})")
 
-    percentage = data.get('percentage', 0)
-    progress = data.get('progress', '')
-    device = data.get('device', '')
-    device_id = data.get('device_id', '')
+    progress = str(data.get('progress', ''))[:512]
+    device = str(data.get('device', ''))[:128]
+    device_id = str(data.get('device_id', ''))[:64]
 
     now = datetime.utcnow()
 
@@ -320,9 +409,13 @@ def kosync_put_progress():
         auto_create = os.environ.get('AUTO_CREATE_EBOOK_MAPPING', 'true').lower() == 'true'
 
         if auto_create:
-            if doc_hash not in _active_scans:
-                _active_scans.add(doc_hash)
+            start_discovery = False
+            with _active_scans_lock:
+                if doc_hash not in _active_scans and len(_active_scans) < _MAX_ACTIVE_SCANS:
+                    _active_scans.add(doc_hash)
+                    start_discovery = True
 
+            if start_discovery:
                 def run_auto_discovery(doc_hash_val):
                     try:
                         import json
@@ -434,8 +527,8 @@ def kosync_put_progress():
                     except Exception as e:
                         logger.error(f"Error in auto-discovery background task: {e}")
                     finally:
-                        if doc_hash_val in _active_scans:
-                            _active_scans.remove(doc_hash_val)
+                        with _active_scans_lock:
+                            _active_scans.discard(doc_hash_val)
 
                 threading.Thread(target=run_auto_discovery, args=(doc_hash,), daemon=True).start()
 
@@ -739,12 +832,67 @@ def _run_get_auto_discovery(doc_id: str):
     except Exception as e:
         logger.error(f"Error in GET auto-discovery: {e}")
     finally:
-        _active_scans.discard(doc_id)
+        with _active_scans_lock:
+            _active_scans.discard(doc_id)
+
+
+# ---------------- Admin Auth ----------------
+
+_PRIVATE_NETWORKS = (
+    ipaddress.ip_network('10.0.0.0/8'),
+    ipaddress.ip_network('172.16.0.0/12'),
+    ipaddress.ip_network('192.168.0.0/16'),
+    ipaddress.ip_network('127.0.0.0/8'),
+    ipaddress.ip_network('::1/128'),
+    ipaddress.ip_network('fd00::/8'),
+)
+
+
+def _is_private_ip(addr: str) -> bool:
+    """Check if an address is on a private/local network."""
+    try:
+        ip = ipaddress.ip_address(addr)
+        return any(ip in net for net in _PRIVATE_NETWORKS)
+    except (ValueError, TypeError):
+        return False
+
+
+def admin_or_local_required(f):
+    """Allow private IPs through; require KOSync credentials from public IPs.
+
+    Safety: this decorator is only used on kosync_admin_bp routes, which are
+    registered exclusively on the LAN dashboard (port 4477). The internet-facing
+    sync port only serves kosync_sync_bp, so the proxy bypass here is never
+    reachable from outside the local network.
+    """
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if _is_private_ip(request.remote_addr):
+            return f(*args, **kwargs)
+
+        # Public IP — require KOSync credentials
+        user = request.headers.get('x-auth-user')
+        key = request.headers.get('x-auth-key')
+        expected_user = os.environ.get("KOSYNC_USER")
+        expected_password = os.environ.get("KOSYNC_KEY")
+
+        if not expected_user or not expected_password:
+            return jsonify({"error": "Unauthorized"}), 401
+
+        expected_hash = hash_kosync_key(expected_password)
+        if (user and expected_user and user.lower() == expected_user.lower()
+                and key and hmac.compare_digest(key, expected_hash)):
+            return f(*args, **kwargs)
+
+        logger.warning(f"KOSync Admin: Unauthorized access attempt from public IP '{request.remote_addr}'")
+        return jsonify({"error": "Unauthorized"}), 401
+    return decorated_function
 
 
 # ---------------- KOSync Document Management API ----------------
 
 @kosync_admin_bp.route('/api/kosync-documents', methods=['GET'])
+@admin_or_local_required
 def api_get_kosync_documents():
     """Get all KOSync documents with their link status."""
     docs = _database_service.get_all_kosync_documents()
@@ -776,6 +924,7 @@ def api_get_kosync_documents():
 
 
 @kosync_admin_bp.route('/api/kosync-documents/<doc_hash>/link', methods=['POST'])
+@admin_or_local_required
 def api_link_kosync_document(doc_hash):
     """Link a KOSync document to an ABS book."""
     data = request.json
@@ -815,6 +964,7 @@ def api_link_kosync_document(doc_hash):
 
 
 @kosync_admin_bp.route('/api/kosync-documents/<doc_hash>/unlink', methods=['POST'])
+@admin_or_local_required
 def api_unlink_kosync_document(doc_hash):
     """Remove the ABS book link from a KOSync document."""
     success = _database_service.unlink_kosync_document(doc_hash)
@@ -826,12 +976,12 @@ def api_unlink_kosync_document(doc_hash):
 
 
 @kosync_admin_bp.route('/api/kosync-documents/<doc_hash>', methods=['DELETE'])
+@admin_or_local_required
 def api_delete_kosync_document(doc_hash):
     """Delete a KOSync document."""
+    _cleanup_cache_for_hash(doc_hash)  # Must run before delete (needs doc record for filename)
     success = _database_service.delete_kosync_document(doc_hash)
     if success:
-        # Cleanup cached EPUB for this hash
-        _cleanup_cache_for_hash(doc_hash)
         return jsonify({'success': True, 'message': 'Document deleted'})
     return jsonify({'error': 'Document not found'}), 404
 

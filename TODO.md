@@ -19,6 +19,12 @@
 
 ## Frontend
 - [ ] Continue frontend improvements (UI/UX polish, responsiveness, design consistency)
+- [x] ~~Improve System Paths in Settings -> General~~ — Removed; paths and timezone are now Docker-only env vars
+- [ ] Add a "Trigger Sync" button to the UI
+  - Currently the only way to force a full sync cycle is restarting the container
+  - Per-book sync exists (`/api/sync-now/<abs_id>`) but no full-cycle trigger
+  - Add a button (settings page or dashboard) that calls a new `/api/sync-all` endpoint
+  - Endpoint should call `manager.sync_cycle()` in a background thread
 
 ## Reading History
 - [ ] Add reading history feature
