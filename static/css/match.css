@@ -371,17 +371,52 @@ input[type="radio"] {
   flex-shrink: 0;
 }
 
+.queue-item-cover {
+  width: 40px;
+  height: 60px;
+  border-radius: 4px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.queue-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.queue-item-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.queue-item-ebook {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin: 2px 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.queue-item-label-audio {
+  color: #F59E0B;
+  font-size: 11px;
+}
+
+.queue-item-label-storyteller {
+  color: #a78bfa;
+  font-size: 11px;
+}
+
 /* Ebook select (batch_match.html) */
 .ebook-select {
   width: 100%;
   margin-top: 8px;
-}
-
-/* Matching grid (batch_match.html) */
-.matching-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 16px;
 }
 
 /* Responsive */
