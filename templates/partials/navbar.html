@@ -5,7 +5,7 @@
             <h1>Book Stitch</h1>
         </a>
     </div>
-    <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation">
+    <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation" aria-controls="nav-menu" aria-expanded="false">
         <span></span><span></span><span></span>
     </button>
     <nav class="nav-menu" id="nav-menu">
@@ -55,5 +55,6 @@
 document.getElementById('nav-toggle')?.addEventListener('click', function() {
     document.getElementById('nav-menu')?.classList.toggle('open');
     this.classList.toggle('active');
+    this.setAttribute('aria-expanded', this.classList.contains('active'));
 });
 </script>
