@@ -735,7 +735,7 @@ class CleanFlaskIntegrationTest(unittest.TestCase):
         self.mock_database_service.save_book.assert_called_once()
 
         saved_book = self.mock_database_service.save_book.call_args[0][0]
-        expected_hash = hashlib.md5('st-uuid-only-456'.encode()).hexdigest()[:16]
+        expected_hash = hashlib.md5(b'st-uuid-only-456').hexdigest()[:16]
         self.assertEqual(saved_book.abs_id, f'ebook-{expected_hash}')
         self.assertEqual(saved_book.abs_title, 'My Storyteller Book')
         self.assertIsNone(saved_book.ebook_filename)
