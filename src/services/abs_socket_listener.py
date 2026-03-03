@@ -296,10 +296,10 @@ class ABSSocketListener:
             logger.error(f"ABS Socket.IO: Failed to connect — {e}")
 
     def stop(self) -> None:
-        """
-        Stop the listener and disconnect the Socket.IO client.
+        """Stop the listener and disconnect the Socket.IO client.
 
-        When called, this method stops the background debounce loop and, if the Socket.IO client is connected, disconnects it and logs the action.
+        Stops the background debounce loop and, if the Socket.IO client
+        is connected, disconnects it and logs the action.
         """
         self._running = False
         try:
