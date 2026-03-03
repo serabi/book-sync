@@ -60,7 +60,9 @@ def settings():
 
             url_keys = [
                 'ABS_SERVER', 'BOOKLORE_SERVER', 'BOOKLORE_2_SERVER',
-                'STORYTELLER_API_URL', 'CWA_SERVER', 'KOSYNC_SERVER'
+                'STORYTELLER_API_URL', 'CWA_SERVER', 'KOSYNC_SERVER',
+                'ABS_WEB_URL', 'BOOKLORE_WEB_URL', 'BOOKLORE_2_WEB_URL',
+                'STORYTELLER_WEB_URL', 'CWA_WEB_URL', 'HARDCOVER_WEB_URL',
             ]
             if key in url_keys and clean_value:
                 lower_val = clean_value.lower()
