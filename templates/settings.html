@@ -913,11 +913,8 @@
             </div><!-- /settings-content -->
         </div><!-- /settings-shell -->
 
+        <input type="hidden" name="_active_tab" id="activeTabInput" value="general">
         <div class="submit-bar">
-            <span class="restart-warn">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                Application will restart on save
-            </span>
             <button type="submit" class="btn btn-primary">Save Settings</button>
         </div>
     </form>
@@ -931,6 +928,8 @@
             document.querySelector('[data-tab="' + tabId + '"]').classList.add('active');
             var panel = document.getElementById('panel-' + tabId);
             panel.classList.add('active');
+
+            document.getElementById('activeTabInput').value = tabId;
 
             panel.style.animation = 'none';
             panel.offsetHeight;
@@ -1075,6 +1074,13 @@
         }
 
         document.addEventListener('DOMContentLoaded', function () {
+            /* Restore active tab from ?tab= query param after save redirect */
+            var params = new URLSearchParams(window.location.search);
+            var savedTab = params.get('tab');
+            if (savedTab && document.getElementById('panel-' + savedTab)) {
+                switchTab(savedTab);
+            }
+
             var configuredPort = "{{ get_val('KOSYNC_PORT', '4477') }}";
             var lanAddress = window.location.protocol + '//' + window.location.hostname + ':' + configuredPort;
 

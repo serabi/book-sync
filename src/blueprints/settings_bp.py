@@ -2,11 +2,10 @@
 
 import logging
 import os
-import threading
 
-from flask import Blueprint, jsonify, redirect, render_template, request, session, url_for
+from flask import Blueprint, current_app, jsonify, redirect, render_template, request, session, url_for
 
-from src.blueprints.helpers import get_container, get_database_service, restart_server
+from src.blueprints.helpers import get_container, get_database_service
 
 logger = logging.getLogger(__name__)
 
@@ -80,15 +79,17 @@ def settings():
                 os.environ[key] = ""
 
         try:
-            threading.Thread(target=restart_server).start()
-            session['message'] = "Settings saved. Application is restarting..."
+            from src.web_server import apply_settings
+            apply_settings(current_app._get_current_object())
+            session['message'] = "Settings saved successfully."
             session['is_error'] = False
         except Exception as e:
-            session['message'] = f"Error saving settings: {e}"
+            session['message'] = f"Error applying settings: {e}"
             session['is_error'] = True
-            logger.error(f"Error saving settings: {e}")
+            logger.error(f"Error applying settings: {e}")
 
-        return redirect(url_for('settings_page.settings'))
+        active_tab = request.form.get('_active_tab', 'general')
+        return redirect(url_for('settings_page.settings', tab=active_tab))
 
     # GET Request
     message = session.pop('message', None)
