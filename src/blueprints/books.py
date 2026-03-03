@@ -571,6 +571,22 @@ def pause_book(abs_id):
     book.status = 'paused'
     database_service.save_book(book)
     logger.info(f"Book paused: '{sanitize_log_data(book.abs_title or abs_id)}'")
+
+    # Sync Paused status to Hardcover (status_id=4)
+    container = get_container()
+    hardcover_client = container.hardcover_client()
+    if hardcover_client.is_configured():
+        hc_details = database_service.get_hardcover_details(abs_id)
+        if hc_details and hc_details.hardcover_book_id:
+            try:
+                hardcover_client.update_status(
+                    int(hc_details.hardcover_book_id), 4,
+                    int(hc_details.hardcover_edition_id) if hc_details.hardcover_edition_id else None
+                )
+                logger.info(f"Hardcover status set to Paused for '{sanitize_log_data(book.abs_title)}'")
+            except Exception as e:
+                logger.warning(f"Failed to update Hardcover paused status: {e}")
+
     return jsonify({"success": True})
 
 
@@ -587,7 +603,7 @@ def dnf_book(abs_id):
     database_service.save_book(book)
     logger.info(f"Book marked DNF: '{sanitize_log_data(book.abs_title or abs_id)}'")
 
-    # Sync DNF status to Hardcover (status_id=4)
+    # Sync DNF status to Hardcover (status_id=5)
     container = get_container()
     hardcover_client = container.hardcover_client()
     if hardcover_client.is_configured():
@@ -595,7 +611,7 @@ def dnf_book(abs_id):
         if hc_details and hc_details.hardcover_book_id:
             try:
                 hardcover_client.update_status(
-                    int(hc_details.hardcover_book_id), 4,
+                    int(hc_details.hardcover_book_id), 5,
                     int(hc_details.hardcover_edition_id) if hc_details.hardcover_edition_id else None
                 )
                 logger.info(f"Hardcover status set to DNF for '{sanitize_log_data(book.abs_title)}'")
@@ -614,14 +630,14 @@ def resume_book(abs_id):
     if book.status not in ('paused', 'dnf'):
         return jsonify({"success": False, "error": f"Cannot resume a book with status '{book.status}'"}), 400
 
-    was_dnf = book.status == 'dnf'
+    was_inactive = book.status in ('dnf', 'paused')
     book.status = 'active'
     book.activity_flag = False
     database_service.save_book(book)
     logger.info(f"Book resumed: '{sanitize_log_data(book.abs_title or abs_id)}'")
 
-    # If resuming from DNF, reset Hardcover to Currently Reading (status_id=2)
-    if was_dnf:
+    # If resuming from DNF or Paused, reset Hardcover to Currently Reading (status_id=2)
+    if was_inactive:
         container = get_container()
         hardcover_client = container.hardcover_client()
         if hardcover_client.is_configured():
