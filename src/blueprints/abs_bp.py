@@ -34,9 +34,9 @@ def proxy_cover(abs_id):
         token = container.abs_client().token
         base_url = container.abs_client().base_url
 
-        url = f"{base_url.rstrip('/')}/api/items/{abs_id}/cover?token={token}"
+        url = f"{base_url.rstrip('/')}/api/items/{abs_id}/cover"
 
-        req = requests.get(url, stream=True, timeout=10)
+        req = requests.get(url, headers={"Authorization": f"Bearer {token}"}, stream=True, timeout=10)
         if req.status_code == 200:
             resp = Response(req.iter_content(chunk_size=1024), content_type=req.headers.get('content-type', 'image/jpeg'))
             resp.headers['Cache-Control'] = 'public, max-age=86400, immutable'

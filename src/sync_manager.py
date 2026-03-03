@@ -302,6 +302,10 @@ class SyncManager:
                 client_state = config[client_name]
                 client_pct = client_state.current.get('pct', 0)
                 try:
+                    client_pct = max(0.0, min(1.0, float(client_pct)))
+                except (TypeError, ValueError):
+                    client_pct = 0.0
+                try:
                     text_snippet = client.get_text_from_current_state(book, client_state)
                     if text_snippet:
                         loc = self.ebook_parser.find_text_location(

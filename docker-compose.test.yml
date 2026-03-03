@@ -4,7 +4,7 @@ services:
       context: .
       dockerfile: Dockerfile
     platform: linux/amd64
-    entrypoint: ["sh", "-c", "pip install -q pytest && python -m pytest tests/ $0 $@"]
+    entrypoint: ["sh", "-c", "pip install -q pytest && python -m pytest tests/ \"$@\"", "--"]
     volumes:
       - ./src:/app/src:ro
       - ./tests:/app/tests:ro
