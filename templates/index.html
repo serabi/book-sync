@@ -74,7 +74,7 @@
             {% if mapping.status in ['paused', 'dnf'] and mapping.activity_flag %}
             <div class="activity-notification">
                 <span>Activity detected</span>
-                <button onclick="resumeBook('{{ mapping.abs_id }}', this)">Resume</button>
+                <button onclick='resumeBook({{ mapping.abs_id|tojson }}, this)'>Resume</button>
             </div>
             {% endif %}
             {% endif %}
@@ -259,29 +259,29 @@
                         <div class="card-menu-divider"></div>
                         {# Actions - conditional on status #}
                         {% if mapping.status == 'active' %}
-                        <button class="card-menu-item" onclick="syncNow('{{ mapping.abs_id }}', this)">Sync Now</button>
-                        <button class="card-menu-item" onclick="pauseBook('{{ mapping.abs_id }}', this)">Pause</button>
-                        <button class="card-menu-item" onclick="dnfBook('{{ mapping.abs_id }}', '{{ mapping.abs_title | e }}')">Mark DNF</button>
-                        <button class="card-menu-item" onclick="markComplete('{{ mapping.abs_id }}', '{{ mapping.abs_title | e }}')">Mark Complete</button>
+                        <button class="card-menu-item" onclick='syncNow({{ mapping.abs_id|tojson }}, this)'>Sync Now</button>
+                        <button class="card-menu-item" onclick='pauseBook({{ mapping.abs_id|tojson }}, this)'>Pause</button>
+                        <button class="card-menu-item" onclick='dnfBook({{ mapping.abs_id|tojson }}, {{ mapping.abs_title|tojson }})'>Mark DNF</button>
+                        <button class="card-menu-item" onclick='markComplete({{ mapping.abs_id|tojson }}, {{ mapping.abs_title|tojson }})'>Mark Complete</button>
                         <button type="button" class="card-menu-item card-menu-warning"
-                            onclick="showConfirmModal('Clear Progress', 'Clear all reading progress for this book across all synced platforms?', '/clear-progress/{{ mapping.abs_id }}', 'warning')">Clear Progress</button>
+                            onclick='showConfirmModal("Clear Progress", "Clear all reading progress for this book across all synced platforms?", {{ ("/clear-progress/" ~ mapping.abs_id)|tojson }}, "warning")'>Clear Progress</button>
                         {% elif mapping.status == 'paused' %}
-                        <button class="card-menu-item" onclick="resumeBook('{{ mapping.abs_id }}', this)">Resume</button>
-                        <button class="card-menu-item" onclick="dnfBook('{{ mapping.abs_id }}', '{{ mapping.abs_title | e }}')">Mark DNF</button>
+                        <button class="card-menu-item" onclick='resumeBook({{ mapping.abs_id|tojson }}, this)'>Resume</button>
+                        <button class="card-menu-item" onclick='dnfBook({{ mapping.abs_id|tojson }}, {{ mapping.abs_title|tojson }})'>Mark DNF</button>
                         {% elif mapping.status == 'dnf' %}
-                        <button class="card-menu-item" onclick="resumeBook('{{ mapping.abs_id }}', this)">Resume Reading</button>
+                        <button class="card-menu-item" onclick='resumeBook({{ mapping.abs_id|tojson }}, this)'>Resume Reading</button>
                         {% else %}
-                        <button class="card-menu-item" onclick="syncNow('{{ mapping.abs_id }}', this)">Sync Now</button>
-                        <button class="card-menu-item" onclick="markComplete('{{ mapping.abs_id }}', '{{ mapping.abs_title | e }}')">Mark Complete</button>
+                        <button class="card-menu-item" onclick='syncNow({{ mapping.abs_id|tojson }}, this)'>Sync Now</button>
+                        <button class="card-menu-item" onclick='markComplete({{ mapping.abs_id|tojson }}, {{ mapping.abs_title|tojson }})'>Mark Complete</button>
                         <button type="button" class="card-menu-item card-menu-warning"
-                            onclick="showConfirmModal('Clear Progress', 'Clear all reading progress for this book across all synced platforms?', '/clear-progress/{{ mapping.abs_id }}', 'warning')">Clear Progress</button>
+                            onclick='showConfirmModal("Clear Progress", "Clear all reading progress for this book across all synced platforms?", {{ ("/clear-progress/" ~ mapping.abs_id)|tojson }}, "warning")'>Clear Progress</button>
                         {% endif %}
                         {% if mapping.status in ['failed_retry_later', 'failed_permanent'] %}
-                        <button class="card-menu-item" onclick="retryTranscription('{{ mapping.abs_id }}', this)">Retry Transcription</button>
+                        <button class="card-menu-item" onclick='retryTranscription({{ mapping.abs_id|tojson }}, this)'>Retry Transcription</button>
                         {% endif %}
                         <div class="card-menu-divider"></div>
                         <button type="button" class="card-menu-item card-menu-danger"
-                            onclick="showConfirmModal('Delete Book', 'Permanently delete this book mapping and all cached data?', '/delete/{{ mapping.abs_id }}', 'danger')">Delete</button>
+                            onclick='showConfirmModal("Delete Book", "Permanently delete this book mapping and all cached data?", {{ ("/delete/" ~ mapping.abs_id)|tojson }}, "danger")'>Delete</button>
                     </div>
                 </div>
             </div>
@@ -342,7 +342,7 @@
                                     <a href="/match?search={{ suggestion.title|urlencode }}"
                                         class="btn btn-sm btn-primary"
                                         style="padding: 4px 10px; font-size: 0.8rem; text-decoration: none;">Review</a>
-                                    <button onclick="dismissSuggestion(event, '{{ suggestion.source_id }}')"
+                                    <button onclick='dismissSuggestion(event, {{ suggestion.source_id|tojson }})'
                                         class="btn btn-sm"
                                         style="padding: 4px 10px; font-size: 0.8rem; background: rgba(255,255,255,0.1); border: none; cursor: pointer; color: #fff;">Dismiss</button>
                                 </div>
@@ -816,7 +816,12 @@
                             // Update overall progress in menu
                             const progressPercent = card.querySelector('.progress-percent');
                             if (progressPercent) {
-                                progressPercent.textContent = `${book.unified_progress.toFixed(1)}%`;
+                                const statusLabel = progressPercent.querySelector('.progress-status-label');
+                                progressPercent.textContent = `${book.unified_progress.toFixed(0)}%`;
+                                if (statusLabel) {
+                                    progressPercent.appendChild(document.createTextNode(' '));
+                                    progressPercent.appendChild(statusLabel);
+                                }
                             }
 
                             // Update data attribute for sorting

@@ -32,4 +32,12 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_column('books', 'activity_flag')
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+
+    if 'books' not in inspector.get_table_names():
+        return
+
+    columns = {c['name'] for c in inspector.get_columns('books')}
+    if 'activity_flag' in columns:
+        op.drop_column('books', 'activity_flag')
