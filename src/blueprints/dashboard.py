@@ -7,7 +7,7 @@ from pathlib import Path
 
 from flask import Blueprint, redirect, render_template, url_for
 
-from src.blueprints.helpers import get_abs_service, get_booklore_clients, get_container, get_database_service, get_manager
+from src.blueprints.helpers import get_abs_service, get_booklore_clients, get_container, get_database_service
 from src.version import APP_VERSION, get_update_status
 
 logger = logging.getLogger(__name__)
@@ -19,7 +19,6 @@ dashboard_bp = Blueprint('dashboard', __name__)
 def index():
     """Dashboard - loads books and progress from database service"""
     container = get_container()
-    manager = get_manager()
     database_service = get_database_service()
 
     books = database_service.get_all_books()
