@@ -1057,7 +1057,8 @@ select:focus {
   }
 
   .controls-divider {
-    display: none;
+    width: auto;
+    height: 1px;
   }
 }
 
