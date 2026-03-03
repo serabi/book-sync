@@ -1,7 +1,7 @@
 # Quick Start Guide - Book Stitch
 
 ## Goal
-Get your reading progress syncing across services in 10 minutes.
+Get your reading progress syncing across your self-hosted services, and track your reading history. Optionally syncs your reading progress with Hardcover.app.
 
 ---
 
@@ -19,60 +19,65 @@ Book Stitch syncs progress between any combination of these services:
 
 You need **at least two services** to sync between. Common setups:
 
-- **Audiobook + Ebook**: Audiobookshelf + KOSync (the classic setup)
-- **Ebook-only**: KOSync + Storyteller or KOSync + Booklore
+- **Audiobook + Ebook**: Audiobookshelf + KOSync or Booklore (the classic setup)
 - **Audio-only**: Audiobookshelf + Hardcover
 
 ---
 
-## Step 2: Prepare Your Folders
+## Step 2: Clone and Build
 
-Create a directory for the app:
+There is no published Docker image yet — you'll build from source:
+
 ```bash
-mkdir ~/book-stitch
-cd ~/book-stitch
+git clone https://github.com/serabi/book-stitch.git
+cd book-stitch
 ```
 
 ---
 
 ## Step 3: Create docker-compose.yml
 
-Copy this template and fill in the services you use:
+Copy this template. All service credentials (API keys, URLs, passwords) are configured in the **Settings** page after startup — not in this file.
 
 ```yaml
 services:
   book-stitch:
-    image: ghcr.io/your-org/book-stitch:latest
-    container_name: book_stitch
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: book-stitch
     restart: unless-stopped
-
     environment:
-      # Audiobookshelf (optional — enable if you use ABS)
-      # - ABS_SERVER=https://YOUR_ABS_SERVER.com
-      # - ABS_KEY=YOUR_API_TOKEN_HERE
-
-      # KOSync (optional — enable if you use KOReader)
-      # - KOSYNC_ENABLED=true
-      # - KOSYNC_SERVER=https://YOUR_KOSYNC_SERVER.com/api/koreader
-      # - KOSYNC_USER=YOUR_USERNAME
-      # - KOSYNC_KEY=YOUR_PASSWORD
-      # - KOSYNC_HASH_METHOD=content
-
-      # General settings
       - TZ=America/New_York
-      - LOG_LEVEL=INFO
-      - SYNC_PERIOD_MINS=5
-
     volumes:
       - ./data:/data
-      # Mount your ebooks directory if using local files:
-      # - /path/to/your/ebooks:/books
-
+      # Mount your ebooks directory (needed for cross-format sync if not using Booklore):
+      # - /path/to/your/ebooks:/books:ro
     ports:
       - "4477:4477"
 ```
 
-Uncomment and fill in the sections for your services. Additional integrations (Storyteller, Booklore, Hardcover, etc.) can be configured in the web UI after startup.
+**Volume mounts to consider:**
+
+| Mount | Purpose | When needed |
+|-------|---------|-------------|
+| `./data:/data` | Database, logs, cache | Always |
+| `/path/to/ebooks:/books:ro` | Ebook files (EPUB, etc.) | Cross-format sync without Booklore (Booklore fetches files via API) |
+
+### Optional: Split-port mode (recommended for internet-exposed setups)
+
+If you expose the KOSync sync API to the internet (so KOReader devices can reach it), you should run it on a separate port from the admin dashboard:
+
+```yaml
+    environment:
+      - TZ=America/New_York
+      - KOSYNC_PORT=5858
+    ports:
+      - "4477:4477"   # Admin dashboard (keep internal - no authentication)
+      - "5858:5858"   # KOSync sync API (has authentication)
+```
+
+This way you can put only port 5858 behind a reverse proxy, keeping the dashboard private.
 
 ---
 
@@ -87,8 +92,6 @@ Check if it's running:
 docker compose logs -f
 ```
 
-Look for connection success messages for your configured services.
-
 Press `Ctrl+C` to exit logs.
 
 ---
@@ -101,39 +104,40 @@ You should see the Book Stitch dashboard.
 
 ---
 
-## Step 6: Configure in the Web UI
+## Step 6: Configure Your Services
 
-1. Go to **Settings** to enable and configure your services
-2. Click **"Single Match"** to create your first book mapping
-3. Select an audiobook, ebook, or both depending on your setup
-4. Click **"Create Mapping"**
-
-That's it! The sync will start automatically.
+1. Go to **Settings** and enable the services you use (Audiobookshelf, KOSync, Storyteller, Booklore, Hardcover, etc.)
+2. Enter your server URLs, API keys, and credentials for each service
+3. Click **Save** — the app will connect and verify each service
 
 ---
 
-## Success!
+## Step 7: Create Your First Book Mapping
 
-Your progress should now sync between your configured services.
-The system checks every 5 minutes by default.
+1. Click **"Single Match"** on the dashboard
+2. Select an audiobook, ebook, or both depending on your setup
+3. Click **"Create Mapping"**
+
+That's it! Your mapping is saved and will appear on the dashboard immediately. The background sync picks it up within a few minutes (every 5 minutes by default, configurable in Settings). For audiobook+ebook linked books, an alignment step (Whisper transcription) runs automatically first — this takes additional time depending on book length. You can check transcription progress in the container logs.
 
 ---
 
 ## Setup Paths
 
 ### Audiobook + Ebook (Linked)
-1. Configure Audiobookshelf (ABS_SERVER + ABS_KEY)
-2. Configure KOSync or mount /books volume
-3. Use "Single Match" to pair an audiobook with its ebook
-4. Progress syncs both directions
+1. Enable and configure Audiobookshelf in Settings
+2. Enable and configure KOSync (or another ebook service) in Settings
+3. Mount your `/books` volume if using local ebook files
+4. Use "Single Match" to pair an audiobook with its ebook
+5. Progress syncs both directions
 
 ### Ebook-Only
-1. Configure at least one ebook source (KOSync, Storyteller, or Booklore)
+1. Enable at least two ebook services in Settings (KOSync, Storyteller, Booklore)
 2. Use "Single Match" > "Ebook Only" to import an ebook
 3. Progress syncs between all configured ebook services
 
 ### Audio-Only
-1. Configure Audiobookshelf
+1. Enable Audiobookshelf in Settings
 2. Optionally enable Hardcover for social tracking
 3. Use "Single Match" > "Audio Only" to import an audiobook
 4. Progress syncs to Hardcover (if configured)
@@ -146,25 +150,26 @@ The system checks every 5 minutes by default.
 ```bash
 docker compose logs
 ```
-Look for error messages about API keys or server connections.
+Look for error messages about missing volumes or startup failures.
 
 ### Can't access web UI?
 - Check if port 4477 is available: `docker compose ps`
 - Try http://localhost:4477 or http://YOUR_SERVER_IP:4477
 
 ### Sync not working?
+- Check Settings — are your services showing as connected?
 - Wait 5 minutes (default sync period)
-- Check the dashboard - does it show progress?
-- Make sure you're using the same ebook file in both systems
+- Check the dashboard — does it show progress for your mapped books?
 
 ---
 
 ## What's Next?
 
-Once basic sync is working, you can add more integrations via the Settings page:
-- **Storyteller** for three-way sync
-- **Booklore** for shelf organization
-- **Hardcover** for social reading tracking
+Once basic sync is working, explore the Settings page for:
+- **Sync tuning** — adjust sync intervals, delta thresholds
+- **Instant sync** — real-time sync via Audiobookshelf Socket.IO
+- **Hardcover** — social reading tracking
+- **Telegram** — notifications for sync events
 
 See the full README.md for advanced features.
 
