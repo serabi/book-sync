@@ -692,8 +692,7 @@ class TestCleanupCacheTraversal(unittest.TestCase):
         mock_db = Mock()
         mock_db.get_kosync_document.return_value = mock_doc
 
-        mock_container = Mock()
-        mock_container.data_dir.return_value = Path(TEST_DIR)
+        mock_container = _KosyncMockContainer()
 
         orig_db = kosync_server._database_service
         orig_container = kosync_server._container
