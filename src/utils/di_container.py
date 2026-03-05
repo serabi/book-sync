@@ -12,6 +12,7 @@ from dependency_injector import containers, providers
 
 # Import all the classes we'll be using
 from src.api.api_clients import ABSClient, KoSyncClient
+from src.api.bookfusion_client import BookFusionClient
 from src.api.booklore_client import BookloreClient
 from src.api.cwa_client import CWAClient
 from src.api.hardcover_client import HardcoverClient
@@ -106,7 +107,7 @@ class Container(containers.DeclarativeContainer):
 
     cwa_client = providers.Singleton(CWAClient)
 
-
+    bookfusion_client = providers.Singleton(BookFusionClient)
 
     # Ebook parser
     ebook_parser = providers.Singleton(

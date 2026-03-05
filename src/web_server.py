@@ -342,6 +342,7 @@ def inject_global_vars():
             'HARDCOVER_ENABLED': 'false',
             'TELEGRAM_ENABLED': 'false',
             'SUGGESTIONS_ENABLED': 'false',
+            'BOOKFUSION_ENABLED': 'false',
             'REPROCESS_ON_CLEAR_IF_NO_ALIGNMENT': 'true'
         }
         if key in DEFAULTS: return DEFAULTS[key]

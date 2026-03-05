@@ -4,6 +4,16 @@
 
 All notable changes to PageKeeper will be documented in this file.
 
+## [1.0.7] - 2026-03-05
+
+### Added
+
+- **BookFusion integration** — New BookFusion page (`/bookfusion`) for uploading books and syncing highlights. Upload books from Booklore to BookFusion via the Calibre plugin API (3-step init → S3 → finalize flow). Sync highlights from BookFusion via the Obsidian plugin API with incremental cursor-based pagination.
+- **Dual API key support** — BookFusion uses separate API keys for uploads (Calibre API) and highlights (Obsidian API). Each key has its own settings field and independent test button. The highlights field auto-extracts the token when pasting an `obsidian://` connect link.
+- **Test before save** — BookFusion test buttons send the unsaved key value directly, so you can verify credentials before saving settings.
+- **Highlight viewer** — Highlights are displayed grouped by book, sorted by date, with parsed quote text (stripped of markdown, wiki-links, and Obsidian block IDs). Chapter and date shown beneath each highlight.
+- **Save highlights to journal** — Each book group in the highlights view has a "Save to Journal" button with a book matcher dropdown (auto-selects matching PageKeeper books by title). Saves all highlights as reading journal `note` entries.
+
 ## [1.0.6] - 2026-03-05
 
 ### Added

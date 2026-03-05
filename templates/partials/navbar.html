@@ -65,6 +65,9 @@
 
         <div class="nav-actions">
             <a href="/reading" class="nav-link">Reading</a>
+            {% if get_bool('BOOKFUSION_ENABLED') and (get_val('BOOKFUSION_API_KEY') or get_val('BOOKFUSION_UPLOAD_API_KEY')) %}
+            <a href="/bookfusion" class="nav-link">BookFusion</a>
+            {% endif %}
             <a href="/suggestions" class="nav-link">Suggestions</a>
             <a href="/settings" class="nav-link">Settings</a>
             <a href="/logs" class="nav-link">Logs</a>

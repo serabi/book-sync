@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>BookFusion - PageKeeper</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" type="image/png" href="/static/icon.png">
+    <link rel="apple-touch-icon" href="/static/icon.png">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/variables.css">
+    <link rel="stylesheet" href="/static/css/base.css">
+    <link rel="stylesheet" href="/static/css/layout.css">
+    <link rel="stylesheet" href="/static/css/components.css">
+    <style>
+        .bf-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+        .bf-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+        .bf-header h2 {
+            font-family: var(--font-heading);
+            font-size: 1.5rem;
+            margin: 0;
+        }
+        .bf-header p {
+            color: var(--color-text-muted);
+            margin: 4px 0 0;
+            font-size: 0.9rem;
+        }
+
+        /* Tabs */
+        .bf-tabs {
+            display: flex;
+            gap: 0;
+            border-bottom: 1px solid var(--color-border);
+            margin-bottom: 24px;
+        }
+        .bf-tab {
+            padding: 10px 20px;
+            background: none;
+            border: none;
+            border-bottom: 2px solid transparent;
+            color: var(--color-text-muted);
+            cursor: pointer;
+            font-family: var(--font-body);
+            font-size: 0.95rem;
+            transition: var(--transition);
+        }
+        .bf-tab:hover { color: var(--color-text); }
+        .bf-tab.active {
+            color: var(--color-bookfusion);
+            border-bottom-color: var(--color-bookfusion);
+        }
+        .bf-panel { display: none; }
+        .bf-panel.active { display: block; }
+
+        /* Search */
+        .bf-search {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        .bf-search input {
+            flex: 1;
+            padding: 10px 14px;
+            border: 1px solid var(--color-border-light);
+            border-radius: var(--radius);
+            background: var(--color-surface);
+            color: var(--color-text);
+            font-size: 14px;
+        }
+        .bf-search input:focus {
+            outline: none;
+            border-color: var(--color-bookfusion);
+        }
+
+        /* Book list */
+        .bf-book-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .bf-book-item {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 14px 16px;
+            background: var(--color-bg-raised);
+            border-radius: var(--radius);
+            border: 1px solid var(--color-border-light);
+        }
+        .bf-book-info { flex: 1; min-width: 0; }
+        .bf-book-title {
+            font-weight: 600;
+            font-size: 0.95rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .bf-book-meta {
+            color: var(--color-text-muted);
+            font-size: 0.85rem;
+            margin-top: 2px;
+        }
+        .bf-source-tag {
+            display: inline-block;
+            padding: 1px 6px;
+            border-radius: 3px;
+            background: var(--color-surface-hover);
+            font-size: 0.75rem;
+            color: var(--color-text-muted);
+            margin-left: 4px;
+        }
+        .bf-upload-btn {
+            flex-shrink: 0;
+            padding: 6px 14px;
+            border: none;
+            border-radius: var(--radius-sm);
+            background: var(--color-bookfusion);
+            color: #fff;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: var(--transition);
+        }
+        .bf-upload-btn:hover { opacity: 0.85; }
+        .bf-upload-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .bf-upload-btn.done { background: var(--color-success); }
+        .bf-upload-btn.error { background: var(--color-error); }
+
+        /* Highlights */
+        .bf-sync-bar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        .bf-sync-info {
+            color: var(--color-text-muted);
+            font-size: 0.85rem;
+        }
+        .bf-highlight-group {
+            margin-bottom: 20px;
+        }
+        .bf-group-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 0;
+            cursor: pointer;
+            font-weight: 600;
+            font-family: var(--font-heading);
+            user-select: none;
+        }
+        .bf-group-header .chevron {
+            transition: transform 0.2s;
+            font-size: 0.8rem;
+        }
+        .bf-group-header.collapsed .chevron {
+            transform: rotate(-90deg);
+        }
+        .bf-group-body {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            padding-left: 20px;
+        }
+        .bf-group-body.hidden { display: none; }
+        .bf-highlight {
+            padding: 12px 16px;
+            background: var(--color-bg-raised);
+            border-radius: var(--radius);
+            border-left: 3px solid var(--color-bookfusion);
+        }
+        .bf-highlight-content {
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+        .bf-highlight-chapter {
+            color: var(--color-text-muted);
+            font-size: 0.8rem;
+            margin-top: 6px;
+        }
+        .bf-journal-controls {
+            display: inline-flex;
+            gap: 8px;
+            align-items: center;
+            margin-left: auto;
+            padding-left: 12px;
+        }
+        .bf-book-select {
+            padding: 4px 8px;
+            border: 1px solid var(--color-border-light);
+            border-radius: var(--radius-sm);
+            background: var(--color-surface);
+            color: var(--color-text);
+            font-size: 0.8rem;
+            max-width: 200px;
+        }
+        .bf-empty {
+            text-align: center;
+            padding: 40px;
+            color: var(--color-text-muted);
+        }
+        .bf-count {
+            color: var(--color-text-muted);
+            font-size: 0.85rem;
+            font-weight: 400;
+        }
+    </style>
+</head>
+
+<body>
+    {% include 'partials/navbar.html' %}
+
+    <div class="bf-container">
+        <div class="bf-header">
+            <div>
+                <h2>BookFusion</h2>
+                <p>Upload books from Booklore and sync highlights.</p>
+            </div>
+        </div>
+
+        <div class="bf-tabs">
+            <button class="bf-tab active" onclick="switchBFTab('highlights')">Highlights</button>
+            <button class="bf-tab" onclick="switchBFTab('upload')">Upload Books</button>
+        </div>
+
+        <!-- Upload Panel -->
+        <div class="bf-panel" id="bf-panel-upload">
+            <div class="bf-search">
+                <input type="text" id="bf-search-input" placeholder="Search Booklore books..." oninput="debounceSearch()">
+            </div>
+            <div id="bf-book-list" class="bf-book-list">
+                <div class="bf-empty">Type to search your Booklore library</div>
+            </div>
+        </div>
+
+        <!-- Highlights Panel -->
+        <div class="bf-panel active" id="bf-panel-highlights">
+            <div class="bf-sync-bar">
+                <button class="btn btn-primary" id="bf-sync-btn" onclick="syncHighlights()">Sync Highlights</button>
+                <span class="bf-sync-info" id="bf-sync-info"></span>
+            </div>
+            <div id="bf-highlights-container">
+                <div class="bf-empty">Click "Sync Highlights" to fetch highlights from BookFusion</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    /* ── Helpers ── */
+    function el(tag, cls, text) {
+        const e = document.createElement(tag);
+        if (cls) e.className = cls;
+        if (text) e.textContent = text;
+        return e;
+    }
+
+    function clearChildren(node) {
+        while (node.firstChild) node.removeChild(node.firstChild);
+    }
+
+    /* ── Tab switching ── */
+    function switchBFTab(tab) {
+        document.querySelectorAll('.bf-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.bf-panel').forEach(p => p.classList.remove('active'));
+        document.getElementById('bf-panel-' + tab).classList.add('active');
+        event.target.classList.add('active');
+
+        if (tab === 'highlights') loadHighlights();
+    }
+
+    /* ── Upload Tab ── */
+    let searchTimer;
+    function debounceSearch() {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(searchBooks, 300);
+    }
+
+    function searchBooks() {
+        const q = document.getElementById('bf-search-input').value.trim();
+        const list = document.getElementById('bf-book-list');
+        if (!q) {
+            clearChildren(list);
+            list.appendChild(el('div', 'bf-empty', 'Type to search your Booklore library'));
+            return;
+        }
+        fetch('/api/bookfusion/booklore-books?q=' + encodeURIComponent(q))
+            .then(function(r) { return r.json(); })
+            .then(function(books) {
+                clearChildren(list);
+                if (!books.length) {
+                    list.appendChild(el('div', 'bf-empty', 'No books found'));
+                    return;
+                }
+                books.forEach(function(b) {
+                    var item = el('div', 'bf-book-item');
+
+                    var info = el('div', 'bf-book-info');
+                    info.appendChild(el('div', 'bf-book-title', b.title || b.fileName));
+
+                    var meta = el('div', 'bf-book-meta');
+                    if (b.authors) {
+                        meta.appendChild(document.createTextNode(b.authors + ' \u00B7 '));
+                    }
+                    meta.appendChild(document.createTextNode(b.fileName + ' '));
+                    meta.appendChild(el('span', 'bf-source-tag', b.source));
+                    info.appendChild(meta);
+                    item.appendChild(info);
+
+                    var btn = el('button', 'bf-upload-btn', 'Upload');
+                    btn.addEventListener('click', function() { uploadBook(btn, b); });
+                    item.appendChild(btn);
+
+                    list.appendChild(item);
+                });
+            });
+    }
+
+    function uploadBook(btn, book) {
+        btn.disabled = true;
+        btn.textContent = 'Uploading...';
+
+        fetch('/api/bookfusion/upload', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                book_id: book.id,
+                source_tag: book.source_tag,
+                title: book.title,
+                authors: book.authors,
+                fileName: book.fileName,
+            })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                btn.textContent = 'Done';
+                btn.classList.add('done');
+            } else {
+                btn.textContent = data.error || 'Error';
+                btn.classList.add('error');
+                btn.disabled = false;
+            }
+        })
+        .catch(function() {
+            btn.textContent = 'Error';
+            btn.classList.add('error');
+            btn.disabled = false;
+        });
+    }
+
+    /* ── Render highlight markdown as safe DOM nodes ── */
+    function renderHighlight(container, text) {
+        // Strip block-level markdown and render as readable paragraphs
+        var lines = text.split('\n');
+        var currentP = null;
+
+        lines.forEach(function(line) {
+            // Strip blockquote prefixes
+            line = line.replace(/^>\s*/g, '');
+            // Strip heading markers
+            line = line.replace(/^#{1,6}\s+/, '');
+            // Strip horizontal rules
+            if (/^[-*_]{3,}\s*$/.test(line)) return;
+            // Strip image syntax ![alt](url)
+            line = line.replace(/!\[([^\]]*)\]\([^)]*\)/g, '');
+
+            // Convert inline markdown to text
+            // Bold+italic
+            line = line.replace(/\*\*\*(.+?)\*\*\*/g, '$1');
+            line = line.replace(/___(.+?)___/g, '$1');
+            // Bold
+            line = line.replace(/\*\*(.+?)\*\*/g, '$1');
+            line = line.replace(/__(.+?)__/g, '$1');
+            // Italic
+            line = line.replace(/\*(.+?)\*/g, '$1');
+            line = line.replace(/_(.+?)_/g, '$1');
+            // Inline code
+            line = line.replace(/`(.+?)`/g, '$1');
+            // Links [text](url) → just text
+            line = line.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1');
+            // Obsidian wiki-links [[target|display]] or [[target]]
+            line = line.replace(/\[\[([^|\]]*)\|([^\]]*)\]\]/g, '$2');
+            line = line.replace(/\[\[([^\]]*)\]\]/g, '$1');
+            // Strip Obsidian block IDs ^block-id
+            line = line.replace(/\s*\^[\w-]+\s*$/, '');
+
+            line = line.trim();
+
+            if (!line) {
+                // Empty line = paragraph break
+                currentP = null;
+                return;
+            }
+
+            if (!currentP) {
+                currentP = document.createElement('p');
+                currentP.style.margin = '0 0 0.5em 0';
+                container.appendChild(currentP);
+            } else {
+                currentP.appendChild(document.createElement('br'));
+            }
+            currentP.appendChild(document.createTextNode(line));
+        });
+    }
+
+    /* ── Highlights Tab ── */
+    function syncHighlights() {
+        var btn = document.getElementById('bf-sync-btn');
+        var info = document.getElementById('bf-sync-info');
+        btn.disabled = true;
+        btn.textContent = 'Syncing...';
+        info.textContent = '';
+
+        fetch('/api/bookfusion/sync-highlights', { method: 'POST' })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                btn.disabled = false;
+                btn.textContent = 'Sync Highlights';
+                if (data.success) {
+                    info.textContent = 'Synced ' + data.new_highlights + ' new highlight' + (data.new_highlights !== 1 ? 's' : '');
+                    loadHighlights();
+                } else {
+                    info.textContent = data.error || 'Sync failed';
+                }
+            })
+            .catch(function() {
+                btn.disabled = false;
+                btn.textContent = 'Sync Highlights';
+                info.textContent = 'Sync failed';
+            });
+    }
+
+    var _pkBooks = []; // PageKeeper books for journal matching
+
+    function loadHighlights() {
+        fetch('/api/bookfusion/highlights')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var container = document.getElementById('bf-highlights-container');
+                clearChildren(container);
+
+                _pkBooks = data.books || [];
+                var groups = data.highlights;
+                var bookNames = Object.keys(groups);
+
+                if (!bookNames.length) {
+                    var msg = data.has_synced ? 'No highlights found' : 'Click "Sync Highlights" to fetch highlights from BookFusion';
+                    container.appendChild(el('div', 'bf-empty', msg));
+                    return;
+                }
+
+                bookNames.forEach(function(book) {
+                    var hls = groups[book];
+                    var group = el('div', 'bf-highlight-group');
+
+                    var header = el('div', 'bf-group-header');
+                    header.appendChild(el('span', 'chevron', '\u25BC'));
+                    header.appendChild(document.createTextNode(' ' + book + ' '));
+                    header.appendChild(el('span', 'bf-count', '(' + hls.length + ')'));
+                    header.addEventListener('click', function(e) {
+                        // Don't toggle when clicking the save button/select
+                        if (e.target.closest('.bf-journal-controls')) return;
+                        header.classList.toggle('collapsed');
+                        hlBody.classList.toggle('hidden');
+                    });
+
+                    // Journal save controls
+                    var controls = el('span', 'bf-journal-controls');
+                    var select = document.createElement('select');
+                    select.className = 'bf-book-select';
+                    var defaultOpt = document.createElement('option');
+                    defaultOpt.value = '';
+                    defaultOpt.textContent = 'Match to book\u2026';
+                    select.appendChild(defaultOpt);
+                    _pkBooks.forEach(function(b) {
+                        var opt = document.createElement('option');
+                        opt.value = b.abs_id;
+                        opt.textContent = b.title;
+                        // Auto-select if title is a close match
+                        if (b.title && book.toLowerCase().indexOf(b.title.toLowerCase()) !== -1
+                            || b.title && b.title.toLowerCase().indexOf(book.toLowerCase()) !== -1) {
+                            opt.selected = true;
+                        }
+                        select.appendChild(opt);
+                    });
+                    controls.appendChild(select);
+
+                    var saveBtn = el('button', 'bf-upload-btn', 'Save to Journal');
+                    saveBtn.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        saveToJournal(saveBtn, select.value, hls);
+                    });
+                    controls.appendChild(saveBtn);
+                    header.appendChild(controls);
+                    group.appendChild(header);
+
+                    var hlBody = el('div', 'bf-group-body');
+                    hls.forEach(function(h) {
+                        var hlDiv = el('div', 'bf-highlight');
+
+                        // Show parsed quote instead of raw markdown
+                        var contentDiv = el('div', 'bf-highlight-content');
+                        contentDiv.appendChild(document.createTextNode(h.quote || ''));
+                        hlDiv.appendChild(contentDiv);
+
+                        var metaDiv = el('div', 'bf-highlight-chapter');
+                        var parts = [];
+                        if (h.chapter_heading) parts.push(h.chapter_heading.replace(/^#{1,6}\s*/, ''));
+                        if (h.date) parts.push(h.date);
+                        if (parts.length) metaDiv.textContent = parts.join(' \u00B7 ');
+                        hlDiv.appendChild(metaDiv);
+
+                        hlBody.appendChild(hlDiv);
+                    });
+                    group.appendChild(hlBody);
+
+                    container.appendChild(group);
+                });
+            });
+    }
+
+    function saveToJournal(btn, absId, highlights) {
+        if (!absId) {
+            btn.textContent = 'Select a book first';
+            btn.classList.add('error');
+            setTimeout(function() {
+                btn.textContent = 'Save to Journal';
+                btn.classList.remove('error');
+            }, 2000);
+            return;
+        }
+        btn.disabled = true;
+        btn.textContent = 'Saving...';
+
+        var payload = highlights.map(function(h) {
+            return {
+                quote: h.quote || '',
+                chapter: (h.chapter_heading || '').replace(/^#{1,6}\s*/, '')
+            };
+        });
+
+        fetch('/api/bookfusion/save-journal', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ abs_id: absId, highlights: payload })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                btn.textContent = '\u2713 Saved ' + data.saved;
+                btn.classList.add('done');
+            } else {
+                btn.textContent = data.error || 'Error';
+                btn.classList.add('error');
+                btn.disabled = false;
+            }
+        })
+        .catch(function() {
+            btn.textContent = 'Error';
+            btn.classList.add('error');
+            btn.disabled = false;
+        });
+    }
+    // Load highlights on page open since it's the default tab
+    loadHighlights();
+    </script>
+</body>
+
+</html>

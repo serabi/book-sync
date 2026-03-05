@@ -341,6 +341,31 @@ class BookAlignment(Base):
         self.alignment_map_json = alignment_map_json
 
 
+class BookfusionHighlight(Base):
+    """BookFusion highlight synced via the Obsidian API."""
+    __tablename__ = 'bookfusion_highlights'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    bookfusion_book_id = Column(String(255), nullable=False)
+    highlight_id = Column(String(255), nullable=False, unique=True)
+    book_title = Column(String(500))
+    content = Column(Text, nullable=False)
+    chapter_heading = Column(String(500))
+    fetched_at = Column(DateTime, default=datetime.utcnow)
+
+    def __init__(self, bookfusion_book_id: str, highlight_id: str, content: str,
+                 book_title: str = None, chapter_heading: str = None):
+        self.bookfusion_book_id = bookfusion_book_id
+        self.highlight_id = highlight_id
+        self.content = content
+        self.book_title = book_title
+        self.chapter_heading = chapter_heading
+        self.fetched_at = datetime.utcnow()
+
+    def __repr__(self):
+        return f"<BookfusionHighlight(id={self.id}, book='{self.book_title}')>"
+
+
 class BookloreBook(Base):
     """
     Model for caching Booklore search results, replacing local JSON cache.

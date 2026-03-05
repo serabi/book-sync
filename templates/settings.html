@@ -55,6 +55,11 @@
                     KOSync
                 </button>
 
+                <button type="button" class="sidebar-tab" role="tab" onclick="switchTab('bookfusion')" data-tab="bookfusion">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path d="M9 10l2 2 4-4"/></svg>
+                    BookFusion
+                </button>
+
                 <button type="button" class="sidebar-tab" role="tab" onclick="switchTab('notifications')" data-tab="notifications">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
                     Notifications
@@ -551,6 +556,49 @@
                     </div>
                 </div>
 
+                <!-- ─── BookFusion ─── -->
+                <div class="tab-panel" id="panel-bookfusion">
+                    <div class="panel-header">
+                        <h2>BookFusion</h2>
+                        <p>Push books from Booklore to BookFusion and sync highlights back.</p>
+                    </div>
+
+                    {% set bookfusion_configured = get_val('BOOKFUSION_API_KEY') != '' %}
+                    {% set bookfusion_enabled = get_bool('BOOKFUSION_ENABLED') or (bookfusion_configured and get_val('BOOKFUSION_ENABLED') == '') %}
+                    <div class="sub-section">
+                        <div class="sub-section-header">
+                            <h3><span class="accent-dot" style="background: var(--color-bookfusion);"></span> BookFusion</h3>
+                            <div class="toggle-switch-wrapper">
+                                <span class="toggle-label">Enable</span>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="toggle_bookfusion" name="BOOKFUSION_ENABLED"
+                                        onchange="toggleSection('bookfusion_body', this.checked)" {% if bookfusion_enabled %}checked{% endif %}>
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+                        </div>
+                        <div id="bookfusion_body" class="sub-section-body {% if not bookfusion_enabled %}collapsed{% endif %}">
+                            <div class="form-group full-width">
+                                <label>Highlights API Key</label>
+                                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                                    <input type="password" id="bf_highlights_key" name="BOOKFUSION_API_KEY" placeholder="{{ '(unchanged)' if get_val('BOOKFUSION_API_KEY') else 'Paste obsidian:// link or token' }}" style="flex: 1;"
+                                        oninput="extractBfToken(this)">
+                                    <button type="button" class="btn btn-sm" onclick="testBfKey('bookfusion', 'bf_highlights_key', this)">Test Highlights</button>
+                                </div>
+                                <div class="help-text">BookFusion &rarr; Settings &rarr; <strong>Obsidian</strong> &rarr; copy the connect link. The token is extracted automatically.</div>
+                            </div>
+                            <div class="form-group full-width">
+                                <label>Upload API Key</label>
+                                <div style="display: flex; gap: 0.5rem; align-items: center;">
+                                    <input type="password" id="bf_upload_key" name="BOOKFUSION_UPLOAD_API_KEY" placeholder="{{ '(unchanged)' if get_val('BOOKFUSION_UPLOAD_API_KEY') else '' }}" style="flex: 1;">
+                                    <button type="button" class="btn btn-sm" onclick="testBfKey('bookfusion_upload', 'bf_upload_key', this)">Test Upload</button>
+                                </div>
+                                <div class="help-text">BookFusion &rarr; Settings &rarr; <strong>Calibre</strong> section. Used for book uploads.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- ─── Notifications ─── -->
                 <div class="tab-panel" id="panel-notifications">
                     <div class="panel-header">
@@ -985,6 +1033,53 @@
             btn.textContent = 'Testing...';
             btn.disabled = true;
             fetch('/api/test-connection/' + service)
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data.success) {
+                        btn.textContent = '\u2713 ' + (data.detail || 'Connected');
+                        btn.classList.add('btn-success');
+                    } else {
+                        btn.textContent = '\u2717 ' + (data.detail || 'Failed');
+                        btn.classList.add('btn-error');
+                    }
+                    setTimeout(function() {
+                        btn.textContent = originalText;
+                        btn.disabled = false;
+                        btn.classList.remove('btn-success', 'btn-error');
+                    }, 3000);
+                })
+                .catch(function(err) {
+                    btn.textContent = '\u2717 Error';
+                    btn.classList.add('btn-error');
+                    setTimeout(function() {
+                        btn.textContent = originalText;
+                        btn.disabled = false;
+                        btn.classList.remove('btn-error');
+                    }, 3000);
+                });
+        }
+
+        /* ─── BookFusion: extract token from obsidian:// URI ─── */
+        function extractBfToken(input) {
+            var val = input.value;
+            if (val.indexOf('obsidian://') === 0) {
+                try {
+                    var params = new URLSearchParams(val.split('?')[1] || '');
+                    var token = params.get('token');
+                    if (token) input.value = token;
+                } catch(e) {}
+            }
+        }
+
+        /* ─── BookFusion Key Test (sends unsaved key value) ─── */
+        function testBfKey(service, inputId, btn) {
+            var keyVal = document.getElementById(inputId).value.trim();
+            var url = '/api/test-connection/' + service;
+            if (keyVal) url += '?api_key=' + encodeURIComponent(keyVal);
+            var originalText = btn.textContent;
+            btn.textContent = 'Testing...';
+            btn.disabled = true;
+            fetch(url)
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
                     if (data.success) {

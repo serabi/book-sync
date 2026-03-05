@@ -15,6 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from .models import (
     Base,
     Book,
+    BookfusionHighlight,
     BookloreBook,
     DatabaseManager,
     HardcoverDetails,
@@ -960,6 +961,46 @@ class DatabaseService:
         except Exception as e:
             logger.error(f"Failed to delete Booklore book '{filename}': {e}")
             return False
+
+    # ── BookFusion Highlights ──
+
+    def save_bookfusion_highlights(self, highlights: list[dict]) -> int:
+        """Bulk upsert BookFusion highlights. Returns count of new highlights saved."""
+        saved = 0
+        with self.get_session() as session:
+            for h in highlights:
+                existing = session.query(BookfusionHighlight).filter(
+                    BookfusionHighlight.highlight_id == h['highlight_id']
+                ).first()
+                if existing:
+                    existing.content = h['content']
+                    existing.chapter_heading = h.get('chapter_heading')
+                    existing.book_title = h.get('book_title')
+                else:
+                    session.add(BookfusionHighlight(
+                        bookfusion_book_id=h['bookfusion_book_id'],
+                        highlight_id=h['highlight_id'],
+                        content=h['content'],
+                        book_title=h.get('book_title'),
+                        chapter_heading=h.get('chapter_heading'),
+                    ))
+                    saved += 1
+        return saved
+
+    def get_bookfusion_highlights(self) -> list[BookfusionHighlight]:
+        """Return all BookFusion highlights ordered by book title."""
+        with self.get_session() as session:
+            highlights = session.query(BookfusionHighlight).order_by(
+                BookfusionHighlight.book_title, BookfusionHighlight.id
+            ).all()
+            session.expunge_all()
+            return highlights
+
+    def get_bookfusion_sync_cursor(self) -> str | None:
+        return self.get_setting('BOOKFUSION_SYNC_CURSOR')
+
+    def set_bookfusion_sync_cursor(self, cursor: str):
+        self.set_setting('BOOKFUSION_SYNC_CURSOR', cursor)
 
 
 class DatabaseMigrator:

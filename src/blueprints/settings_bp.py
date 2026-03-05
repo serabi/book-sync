@@ -82,6 +82,7 @@ def settings():
             'REPROCESS_ON_CLEAR_IF_NO_ALIGNMENT',
             'INSTANT_SYNC_ENABLED',
             'ABS_SOCKET_ENABLED',
+            'BOOKFUSION_ENABLED',
         ]
 
         current_settings = database_service.get_all_settings()
@@ -89,7 +90,7 @@ def settings():
         secret_keys = {
             'ABS_KEY', 'STORYTELLER_PASSWORD', 'BOOKLORE_PASSWORD', 'BOOKLORE_2_PASSWORD',
             'CWA_PASSWORD', 'KOSYNC_KEY', 'TELEGRAM_BOT_TOKEN', 'HARDCOVER_TOKEN',
-            'DEEPGRAM_API_KEY',
+            'DEEPGRAM_API_KEY', 'BOOKFUSION_API_KEY', 'BOOKFUSION_UPLOAD_API_KEY',
         }
 
         # 1. Handle Boolean Toggles
@@ -183,6 +184,8 @@ def test_connection(service):
         'cwa': _test_cwa,
         'hardcover': _test_hardcover,
         'telegram': _test_telegram,
+        'bookfusion': _test_bookfusion,
+        'bookfusion_upload': _test_bookfusion_upload,
     }
     tester = testers.get(service)
     if not tester:
@@ -200,7 +203,7 @@ def _redact_secrets(msg: str) -> str:
     secret_keys = [
         'ABS_KEY', 'STORYTELLER_PASSWORD', 'BOOKLORE_PASSWORD', 'BOOKLORE_2_PASSWORD',
         'CWA_PASSWORD', 'KOSYNC_KEY', 'TELEGRAM_BOT_TOKEN', 'HARDCOVER_TOKEN',
-        'DEEPGRAM_API_KEY',
+        'DEEPGRAM_API_KEY', 'BOOKFUSION_API_KEY', 'BOOKFUSION_UPLOAD_API_KEY',
     ]
     for key in secret_keys:
         val = os.environ.get(key, '')
@@ -366,3 +369,17 @@ def _test_telegram() -> tuple[bool, str]:
         bot_name = data.get('result', {}).get('first_name', 'Bot')
         return True, f'Connected ({bot_name})'
     return False, _http_error(resp.status_code)
+
+
+def _test_bookfusion() -> tuple[bool, str]:
+    container = get_container()
+    client = container.bookfusion_client()
+    override = request.args.get('api_key', '').strip()
+    return client.check_connection(api_key_override=override or None)
+
+
+def _test_bookfusion_upload() -> tuple[bool, str]:
+    container = get_container()
+    client = container.bookfusion_client()
+    override = request.args.get('api_key', '').strip()
+    return client.check_upload_connection(api_key_override=override or None)
