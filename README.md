@@ -6,8 +6,6 @@
 
 **Keep your place across every book, every app, every format.**
 
-<img src="static/2026-03-05 - PageKeeper Preview.png" alt="PageKeeper dashboard preview" width="700">
-
 [![License](https://img.shields.io/github/license/serabi/pagekeeper?cacheSeconds=3600)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/serabi/pagekeeper)](https://github.com/serabi/pagekeeper/releases)
 [![Snyk Security](https://snyk.io/test/github/serabi/pagekeeper/badge.svg)](https://snyk.io/test/github/serabi/pagekeeper)
@@ -22,6 +20,10 @@
 PageKeeper is a self-hosted reading companion that tracks what you read and keeps your place across platforms. Whether you listen to an audiobook during your commute on [Audiobookshelf](https://www.audiobookshelf.org/) and pick up the same book on your e-reader before bed, or just want a single place to see your reading progress across services — PageKeeper handles it.
 
 At its core, PageKeeper is a **reading tracker**: it knows which books you're reading, how far along you are, when you started and finished, and keeps a journal of your progress. On top of that, it can **sync your position** between audiobook and ebook platforms by building an alignment map between the audio and the text. Once that map is built, jumping between formats is seamless.
+
+<div align="center">
+<img src="static/2026-03-05 - PageKeeper Preview.png" alt="PageKeeper dashboard preview" width="700">
+</div>
 
 ### Origin story
 
