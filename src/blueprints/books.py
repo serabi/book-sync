@@ -518,13 +518,17 @@ def clear_progress(abs_id):
         logger.warning(f"Cannot clear progress: book not found for '{abs_id}'")
         return redirect(url_for('dashboard.index'))
 
-    try:
-        logger.info(f"Clearing progress for {sanitize_log_data(book.abs_title or abs_id)}")
-        manager.clear_progress(abs_id)
-        logger.info(f"Progress cleared successfully for {sanitize_log_data(book.abs_title or abs_id)}")
-    except Exception as e:
-        logger.error(f"Failed to clear progress for '{abs_id}': {e}")
+    title = sanitize_log_data(book.abs_title or abs_id)
 
+    def _run():
+        try:
+            logger.info(f"Clearing progress for {title}")
+            manager.clear_progress(abs_id)
+            logger.info(f"Progress cleared successfully for {title}")
+        except Exception as e:
+            logger.error(f"Failed to clear progress for '{abs_id}': {e}")
+
+    threading.Thread(target=_run, daemon=True).start()
     return redirect(url_for('dashboard.index'))
 
 
@@ -607,6 +611,11 @@ def mark_complete(abs_id):
         database_service.save_book(book)
         database_service.update_book_reading_fields(abs_id, **reading_updates)
         database_service.add_reading_journal(abs_id, event='finished', percentage=1.0)
+
+    # Push READ status to Booklore instances (auto-sets dateFinished)
+    if book.ebook_filename:
+        from src.services.reading_date_service import _push_booklore_read_status
+        _push_booklore_read_status(book, container, 'READ')
 
     if perform_delete:
         cleanup_mapping_resources(book)
