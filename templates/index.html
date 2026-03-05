@@ -310,7 +310,7 @@
     </div>
     {% endmacro %}
 
-    <title>Book Sync</title>
+    <title>PageKeeper</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="icon" type="image/png" href="/static/icon.png">
     <link rel="apple-touch-icon" href="/static/icon.png">
@@ -654,7 +654,7 @@
                 });
 
                 // Persist choice
-                localStorage.setItem('book_sync_filter', filterValue);
+                localStorage.setItem('pagekeeper_filter', filterValue);
             }
 
             function updateKoSyncHash(event) {
@@ -696,8 +696,8 @@
             let lastSort = null;
 
             // Load saved preferences
-            const savedSort = localStorage.getItem('book_sync_sort') || 'title';
-            const savedSortState = localStorage.getItem('book_sync_sort_state');
+            const savedSort = localStorage.getItem('pagekeeper_sort') || 'title';
+            const savedSortState = localStorage.getItem('pagekeeper_sort_state');
 
             if (savedSort) {
                 sortSelect.value = savedSort;
@@ -787,8 +787,8 @@
                 sortCards(allBooksGrid, sortBy, direction);
 
                 // Save preferences
-                localStorage.setItem('book_sync_sort', sortBy);
-                localStorage.setItem('book_sync_sort_state', JSON.stringify(sortState));
+                localStorage.setItem('pagekeeper_sort', sortBy);
+                localStorage.setItem('pagekeeper_sort_state', JSON.stringify(sortState));
             }
 
             function updateSortIndicator(direction) {
@@ -824,7 +824,7 @@
             // Filter Logic initialization
             if (filterSelect) {
                 filterSelect.addEventListener('change', filterBooks);
-                const savedFilter = localStorage.getItem('book_sync_filter') || 'all';
+                const savedFilter = localStorage.getItem('pagekeeper_filter') || 'all';
                 filterSelect.value = savedFilter;
                 // Apply filter initially
                 filterBooks();
