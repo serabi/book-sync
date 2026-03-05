@@ -557,8 +557,14 @@ def sync_now(abs_id):
     if not book:
         return jsonify({"success": False, "error": "Book not found"}), 404
 
-    threading.Thread(target=manager.sync_cycle, kwargs={'target_abs_id': abs_id}, daemon=True).start()
-    return jsonify({"success": True})
+    if book.status == 'completed':
+        from src.services.reading_date_service import _push_completion_to_clients
+        container = get_container()
+        _push_completion_to_clients(book, container, database_service)
+        return jsonify({"success": True, "reload": True})
+    else:
+        threading.Thread(target=manager.sync_cycle, kwargs={'target_abs_id': abs_id}, daemon=True).start()
+        return jsonify({"success": True})
 
 
 def _pull_started_at(abs_id, container, database_service):

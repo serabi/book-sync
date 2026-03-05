@@ -144,7 +144,7 @@
                             {% endif %}
                         </div>
 
-                        {% if mapping.status == 'active' %}
+                        {% if mapping.status in ['active', 'completed'] %}
                         {# Per-service progress #}
                         <div class="card-menu-divider"></div>
                         <div class="card-menu-services">
@@ -288,6 +288,10 @@
                         <button class="card-menu-item" onclick='resumeBook({{ mapping.abs_id|tojson }}, this)'>Resume Reading</button>
                         {% elif mapping.status == 'failed_retry_later' %}
                         <button class="card-menu-item" onclick='retryTranscription({{ mapping.abs_id|tojson }}, this)'>Retry Transcription</button>
+                        {% elif mapping.status == 'completed' %}
+                        <button class="card-menu-item" onclick='syncNow({{ mapping.abs_id|tojson }}, this)'>Sync status to all services</button>
+                        <button type="button" class="card-menu-item card-menu-warning"
+                            onclick='showConfirmModal("Clear Progress", "Clear all reading progress for this book across all synced platforms?", {{ ("/clear-progress/" ~ mapping.abs_id)|tojson }}, "warning")'>Clear Progress</button>
                         {% else %}
                         <button class="card-menu-item" onclick='syncNow({{ mapping.abs_id|tojson }}, this)'>Sync Now</button>
                         <button class="card-menu-item" onclick='markComplete({{ mapping.abs_id|tojson }}, {{ mapping.abs_title|tojson }})'>Mark Complete</button>
@@ -1071,6 +1075,10 @@
                 }).then(response => response.json())
                     .then(data => {
                         if (data.success) {
+                            if (data.reload) {
+                                window.location.reload();
+                                return;
+                            }
                             btn.textContent = "OK";
                             setTimeout(() => {
                                 btn.textContent = originalText;

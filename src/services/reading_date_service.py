@@ -69,7 +69,7 @@ def _is_finished_by_state(abs_id, database_service):
 def _push_completion_to_clients(book, container, database_service):
     """Push 100% progress to all sync clients and set Booklore read status to READ."""
     from src.db.models import State
-    from src.models import LocatorResult, UpdateProgressRequest
+    from src.sync_clients.sync_client_interface import LocatorResult, UpdateProgressRequest
 
     locator = LocatorResult(percentage=1.0)
     update_req = UpdateProgressRequest(locator_result=locator, txt="Book finished", previous_location=None)
