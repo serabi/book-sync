@@ -916,8 +916,9 @@
                 if (!processingSection) return; // No processing books, stop polling
 
                 fetch('/api/processing-status')
-                    .then(r => r.json())
+                    .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
                     .then(data => {
+                        if (typeof data !== 'object' || data === null) return;
                         const ids = Object.keys(data);
                         if (ids.length === 0) {
                             // All books finished processing — reload to move cards
@@ -941,10 +942,13 @@
                             anyStillProcessing = true;
 
                             if (info.status === 'processing') {
+                                let pctVal = Number(info.job_progress);
+                                if (!isFinite(pctVal)) pctVal = 0;
+                                pctVal = Math.max(0, Math.min(100, pctVal));
                                 const fill = card.querySelector('.progress-bar-fill');
                                 const pct = card.querySelector('.progress-percent');
-                                if (fill) fill.style.width = `${info.job_progress}%`;
-                                if (pct) pct.textContent = `Transcribing... ${Math.round(info.job_progress)}%`;
+                                if (fill) fill.style.width = `${pctVal}%`;
+                                if (pct) pct.textContent = `Transcribing... ${Math.round(pctVal)}%`;
                             }
                         }
 

@@ -461,7 +461,7 @@ class SyncManager:
 
     def queue_suggestion(self, abs_id: str) -> None:
         """Queue suggestion discovery for an unmapped book (called from socket listener)."""
-        if os.environ.get("SUGGESTIONS_ENABLED", "false").lower() != "true":
+        if os.environ.get("SUGGESTIONS_ENABLED", "true").lower() != "true":
             return
 
         # Already mapped?
@@ -567,7 +567,8 @@ class SyncManager:
             title = meta.get('title', '')
             if title:
                 clean = re.sub(r'\s*[\(\[].*?[\)\]]', '', title).strip().lower()
-                abs_by_title.setdefault(clean, []).append(ab)
+                if clean:
+                    abs_by_title.setdefault(clean, []).append(ab)
 
         # Check Storyteller books
         if self.storyteller_client and self.storyteller_client.is_configured():
@@ -646,12 +647,14 @@ class SyncManager:
             return
 
         cover = f"/api/cover-proxy/{abs_id}"
+        # Include source_key as provenance so we know where the suggestion originated
+        matches_with_provenance = [dict(m, source_key=source_key) for m in matches]
         suggestion = PendingSuggestion(
             source_id=abs_id,
             title=best.get('title', title),
             author=best.get('author'),
             cover_url=cover,
-            matches_json=json.dumps(matches),
+            matches_json=json.dumps(matches_with_provenance),
         )
         self.database_service.save_pending_suggestion(suggestion)
         logger.info(f"Reverse suggestion: '{title}' has matching audiobook '{best.get('title')}' in ABS")
@@ -1031,8 +1034,8 @@ class SyncManager:
                 )
                 if raw_transcript:
                     transcript_source = "WHISPER"
-            elif not raw_transcript and transcript_source != "STORYTELLER_NATIVE":
-                # If SMIL worked, it's already done with transcribing phase
+            elif transcript_source in ("SMIL", "STORYTELLER_NATIVE"):
+                # SMIL or Storyteller native handled transcription — mark phase complete
                 update_progress(1.0, 2)
 
             # If Storyteller native handled alignment, skip transcript-based alignment
