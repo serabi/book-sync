@@ -215,7 +215,12 @@ class ABSSocketListener:
         # Check if this is a tracked book in our database
         book = self._db.get_book(library_item_id)
         if not book:
-            logger.debug(f"ABS Socket.IO: Progress event for '{library_item_id[:12]}...' — not a tracked book, ignoring")
+            logger.debug(f"ABS Socket.IO: Progress event for '{library_item_id[:12]}...' — not a tracked book, queuing suggestion discovery")
+            threading.Thread(
+                target=self._sync_manager.queue_suggestion,
+                args=(library_item_id,),
+                daemon=True,
+            ).start()
             return
         if book.status in ('paused', 'dnf') and not book.activity_flag:
             book.activity_flag = True

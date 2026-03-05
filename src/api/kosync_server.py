@@ -742,7 +742,13 @@ def _respond_from_book_states(doc_id, book):
 
     # Also check sibling kosync_documents for device-specific progress
     sibling_docs = _database_service.get_kosync_documents_for_book(book.abs_id)
-    docs_with_progress = [d for d in sibling_docs if d.percentage and float(d.percentage) > 0]
+    # Filter out stale siblings (not updated in >30 days)
+    now_ts = time.time()
+    docs_with_progress = [
+        d for d in sibling_docs
+        if d.percentage and float(d.percentage) > 0
+        and d.timestamp and (now_ts - d.timestamp.timestamp()) < 30 * 86400
+    ]
     if docs_with_progress:
         best_doc = max(docs_with_progress, key=lambda d: float(d.percentage))
         logger.info(f"KOSync: Resolved {doc_id[:8]}... to '{book.abs_title}' via sibling hash {best_doc.document_hash[:8]}... ({float(best_doc.percentage):.2%})")
