@@ -91,6 +91,7 @@ class SyncManager:
         self._sync_lock = threading.Lock()
         self._suggestion_lock = threading.Lock()
         self._suggestion_in_flight: set[str] = set()
+        self._pending_clears: set[str] = set()  # abs_ids awaiting clear during sync
         self._job_thread = None
         self._last_library_sync = 0
 
@@ -1316,6 +1317,12 @@ class SyncManager:
         # Main sync loop - process each active book
         for book in active_books:
             abs_id = book.abs_id
+
+            # Skip books with pending clear — clear_progress will handle them
+            if abs_id in self._pending_clears:
+                logger.debug(f"'{abs_id}' Skipping sync — pending clear progress")
+                continue
+
             logger.info(f"'{abs_id}' Syncing '{sanitize_log_data(book.abs_title or 'Unknown')}'")
             title_snip = sanitize_log_data(book.abs_title or 'Unknown')
 
@@ -1609,9 +1616,44 @@ class SyncManager:
 
         logger.debug("End of sync cycle for active books")
 
+        # Process any pending clears that couldn't acquire the lock earlier
+        if self._pending_clears:
+            pending = list(self._pending_clears)
+            logger.info(f"Processing {len(pending)} deferred clear(s): {pending}")
+            for pending_id in pending:
+                try:
+                    self._reset_external_clients(pending_id)
+                    self._pending_clears.discard(pending_id)
+                except Exception as e:
+                    logger.warning(f"Deferred clear failed for '{pending_id}': {e}")
+
+    def _reset_external_clients(self, abs_id):
+        """Push 0% progress to all external sync clients for a book."""
+        book = self.database_service.get_book(abs_id)
+        if not book:
+            return
+        locator = LocatorResult(percentage=0.0)
+        request = UpdateProgressRequest(locator_result=locator, txt="", previous_location=None)
+        for client_name, client in self.sync_clients.items():
+            if client_name == 'ABS' and book.sync_mode == 'ebook_only':
+                continue
+            try:
+                result = client.update_progress(book, request)
+                if result.success:
+                    logger.info(f"Deferred reset: '{client_name}' -> 0% for '{sanitize_log_data(book.abs_title)}'")
+                else:
+                    logger.warning(f"Deferred reset failed for '{client_name}'")
+            except Exception as e:
+                logger.warning(f"Deferred reset error for '{client_name}': {e}")
+
     def clear_progress(self, abs_id):
         """
         Clear progress data for a specific book and reset all sync clients to 0%.
+
+        Phase 1 (immediate, no lock): clears local DB states and reading dates.
+        Phase 2 (lock required): resets external clients to 0% and handles book status.
+        If the sync lock is busy, Phase 1 still takes effect and 0% states are saved
+        with a recent timestamp so the sync daemon won't overwrite them.
 
         Args:
             abs_id: The book ID to clear progress for
@@ -1622,35 +1664,66 @@ class SyncManager:
         try:
             logger.info(f"Clearing progress for book {sanitize_log_data(abs_id)}...")
 
-            # Acquire lock to prevent race conditions with active sync cycles
-            with self._sync_lock:
-                # Get the book first
-                book = self.database_service.get_book(abs_id)
-                if not book:
-                    raise ValueError(f"Book not found: {abs_id}")
+            book = self.database_service.get_book(abs_id)
+            if not book:
+                raise ValueError(f"Book not found: {abs_id}")
 
-                # Clear all states for this book from database
-                cleared_count = self.database_service.delete_states_for_book(abs_id)
-                logger.info(f"Cleared {cleared_count} state records from database")
+            # Mark book so the sync daemon skips it while we're clearing
+            self._pending_clears.add(abs_id)
 
-                # Delete ALL KOSync document records for this book (primary + siblings)
-                # Without this, sibling hashes retain old progress and the sync daemon
-                # re-syncs from stale KOSync data on the next cycle
-                sibling_docs = self.database_service.get_kosync_documents_for_book(abs_id)
-                for doc in sibling_docs:
-                    self.database_service.delete_kosync_document(doc.document_hash)
-                    logger.info(f"Deleted KOSync document record: {doc.document_hash[:8]}...")
-                if not sibling_docs and book.kosync_doc_id:
-                    # Fallback: delete by primary hash if no siblings found
-                    self.database_service.delete_kosync_document(book.kosync_doc_id)
-                    logger.info(f"Deleted KOSync document record: {book.kosync_doc_id[:8]}...")
+            # ── Phase 1: Immediate DB cleanup (no lock needed) ──
+            cleared_count = self.database_service.delete_states_for_book(abs_id)
+            logger.info(f"Cleared {cleared_count} state records from database")
 
-                # Reset all sync clients to 0% progress
+            # Delete KOSync document records to prevent stale re-sync
+            sibling_docs = self.database_service.get_kosync_documents_for_book(abs_id)
+            for doc in sibling_docs:
+                self.database_service.delete_kosync_document(doc.document_hash)
+                logger.info(f"Deleted KOSync document record: {doc.document_hash[:8]}...")
+            if not sibling_docs and book.kosync_doc_id:
+                self.database_service.delete_kosync_document(book.kosync_doc_id)
+                logger.info(f"Deleted KOSync document record: {book.kosync_doc_id[:8]}...")
+
+            # Save 0% states with a fresh timestamp so the sync daemon sees
+            # "already up to date" and won't pull stale progress from external services
+            now = time.time()
+            for client_name in self.sync_clients:
+                if client_name == 'ABS' and book.sync_mode == 'ebook_only':
+                    continue
+                state = State(
+                    abs_id=abs_id,
+                    client_name=client_name.lower(),
+                    percentage=0.0,
+                    timestamp=now,
+                    last_updated=now
+                )
+                self.database_service.save_state(state)
+
+            # Clear started_at so the book appears as "not started"
+            self.database_service.update_book_reading_fields(abs_id, started_at=None)
+            logger.info("Phase 1 complete: local states cleared, 0% states saved")
+
+            # ── Phase 2: Reset external clients (needs sync lock) ──
+            acquired = self._sync_lock.acquire(timeout=30)
+            if not acquired:
+                logger.warning(f"Sync lock busy — external clients will be reset on next clear attempt. "
+                               f"Local progress already cleared for '{sanitize_log_data(abs_id)}'")
+                # Phase 1 is enough — the 0% states with fresh timestamps will prevent
+                # the sync daemon from pulling stale external progress
+                return {
+                    'book_id': abs_id,
+                    'book_title': book.abs_title,
+                    'database_states_cleared': cleared_count,
+                    'client_reset_results': {},
+                    'successful_resets': 0,
+                    'total_clients': 0,
+                    'note': 'Local DB cleared; external client reset deferred (sync cycle running)',
+                }
+            try:
                 reset_results = {}
                 locator = LocatorResult(percentage=0.0)
                 request = UpdateProgressRequest(locator_result=locator, txt="", previous_location=None)
 
-                now = time.time()
                 for client_name, client in self.sync_clients.items():
                     if client_name == 'ABS' and book.sync_mode == 'ebook_only':
                         logger.debug(f"'{book.abs_title}' Ebook-only mode - skipping ABS progress reset")
@@ -1663,15 +1736,6 @@ class SyncManager:
                         }
                         if result.success:
                             logger.info(f"Reset '{client_name}' to 0%")
-                            # Save 0% state so the sync daemon doesn't re-sync from external
-                            state = State(
-                                abs_id=abs_id,
-                                client_name=client_name.lower(),
-                                percentage=0.0,
-                                timestamp=now,
-                                last_updated=now
-                            )
-                            self.database_service.save_state(state)
                         else:
                             logger.warning(f"Failed to reset '{client_name}'")
                     except Exception as e:
@@ -1690,30 +1754,24 @@ class SyncManager:
                     'total_clients': len(reset_results)
                 }
 
-                # [CHANGED LOGIC] Handle book status update based on alignment presence and user setting
+                # Handle book status update based on alignment presence
                 smart_reset = os.getenv('REPROCESS_ON_CLEAR_IF_NO_ALIGNMENT', 'true').lower() == 'true'
 
                 if smart_reset:
-                    # Check if we already have a valid alignment map in the DB
                     has_alignment = False
                     if self.alignment_service:
                         has_alignment = bool(self.alignment_service._get_alignment(abs_id))
 
                     if has_alignment:
-                        # If we have an alignment, just ensure the book is active.
-                        # DO NOT set to 'pending' - this prevents re-transcription.
                         if book.status != 'active':
                             book.status = 'active'
                             self.database_service.save_book(book)
                         logger.info("   Alignment map exists — Reset progress to 0% without triggering re-transcription")
                     else:
-                        # Only trigger a full re-process if we lack alignment data
                         book.status = 'pending'
                         self.database_service.save_book(book)
                         logger.info("   Book marked as 'pending' to trigger alignment check")
                 else:
-                    # Legacy or explicit "just clear 0" behavior
-                    # If smart reset is disabled, we still want to ensure it's at least active
                     if book.status != 'active':
                         book.status = 'active'
                         self.database_service.save_book(book)
@@ -1724,8 +1782,12 @@ class SyncManager:
                 logger.info(f"   Client resets: {summary['successful_resets']}/{summary['total_clients']} successful")
 
                 return summary
+            finally:
+                self._sync_lock.release()
+                self._pending_clears.discard(abs_id)
 
         except Exception as e:
+            self._pending_clears.discard(abs_id)
             error_msg = f"Error clearing progress for {abs_id}: {e}"
             logger.error(error_msg)
             logger.error(traceback.format_exc())

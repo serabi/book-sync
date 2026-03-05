@@ -203,10 +203,11 @@ class TestClearProgressMethod(unittest.TestCase):
         # Call clear_progress
         result = self.sync_manager.clear_progress('test-book-123')
 
-        # Verify database was cleared then 0% states saved for successful resets
+        # Verify database was cleared then 0% states saved for ALL clients
+        # (Phase 1 saves 0% states upfront, before external resets)
         self.assertEqual(result['database_states_cleared'], 3)
         remaining_states = self.db_service.get_states_for_book('test-book-123')
-        self.assertEqual(len(remaining_states), 2, "Should have 0% state for kosync and abs (storyteller failed)")
+        self.assertEqual(len(remaining_states), 3, "Should have 0% state for all clients (saved in Phase 1)")
         for state in remaining_states:
             self.assertEqual(state.percentage, 0.0)
 
