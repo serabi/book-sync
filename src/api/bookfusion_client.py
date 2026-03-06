@@ -188,7 +188,7 @@ class BookFusionClient:
         if not key:
             return False, 'Upload API key not configured'
         try:
-            resp = requests.get(
+            resp = self.session.get(
                 f'{CALIBRE_API}/uploads?isbn=test',
                 headers=_calibre_headers(key),
                 timeout=15,
@@ -204,7 +204,7 @@ class BookFusionClient:
     def check_exists(self, digest: str) -> dict | None:
         """Check if a book already exists on BookFusion by SHA256 digest."""
         try:
-            resp = requests.get(
+            resp = self.session.get(
                 f'{CALIBRE_API}/uploads/{digest}',
                 headers=_calibre_headers(self.upload_api_key),
                 timeout=15,
@@ -232,7 +232,7 @@ class BookFusionClient:
                 ('filename', filename),
                 ('digest', digest),
             ])
-            init_resp = requests.post(
+            init_resp = self.session.post(
                 f'{CALIBRE_API}/uploads/init',
                 headers={**headers, 'Content-Type': ct},
                 data=body,
@@ -260,7 +260,7 @@ class BookFusionClient:
             s3_fields.append(('file', (filename, file_bytes)))
             s3_body, s3_ct = _build_multipart(s3_fields)
 
-            s3_resp = requests.post(
+            s3_resp = self.session.post(
                 s3_url,
                 headers={'Content-Type': s3_ct},
                 data=s3_body,
@@ -295,7 +295,7 @@ class BookFusionClient:
                 finalize_fields.append(('metadata[author_list][]', author))
 
             body, ct = _build_multipart(finalize_fields)
-            finalize_resp = requests.post(
+            finalize_resp = self.session.post(
                 f'{CALIBRE_API}/uploads/finalize',
                 headers={**headers, 'Content-Type': ct},
                 data=body,
@@ -326,7 +326,7 @@ class BookFusionClient:
         page = 1
         while True:
             try:
-                resp = requests.get(
+                resp = self.session.get(
                     f'{CALIBRE_API}/uploads',
                     headers=_calibre_headers(self.upload_api_key),
                     params={'page': page, 'per_page': 100},

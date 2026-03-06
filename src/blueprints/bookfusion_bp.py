@@ -9,6 +9,7 @@ from collections import defaultdict
 from flask import Blueprint, jsonify, render_template, request
 
 from src.blueprints.helpers import get_booklore_clients, get_container, get_database_service
+from src.db.models import Book
 
 logger = logging.getLogger(__name__)
 
@@ -467,7 +468,6 @@ def add_to_dashboard():
         return jsonify({'success': True, 'abs_id': abs_id, 'already_existed': True})
 
     # Create dashboard book entry
-    from src.db.models import Book
     title = _clean_book_title(bf_book.title or bf_book.filename or 'Unknown')
     book = Book(
         abs_id=abs_id,
