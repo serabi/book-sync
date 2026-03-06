@@ -20,6 +20,7 @@ from src.api.storyteller_api import StorytellerAPIClient
 from src.db.database_service import DatabaseService
 from src.services.abs_service import ABSService
 from src.services.alignment_service import AlignmentService
+from src.services.background_job_service import BackgroundJobService
 from src.services.library_service import LibraryService
 from src.services.migration_service import MigrationService
 from src.services.suggestion_service import SuggestionService
@@ -225,6 +226,22 @@ class Container(containers.DeclarativeContainer):
         ebook_parser=ebook_parser,
     )
 
+    # Background Job Service
+    background_job_service = providers.Singleton(
+        BackgroundJobService,
+        database_service=database_service,
+        abs_client=abs_client,
+        booklore_clients=providers.List(booklore_client, booklore_client_2),
+        ebook_parser=ebook_parser,
+        transcriber=transcriber,
+        alignment_service=alignment_service,
+        library_service=library_service,
+        storyteller_client=storyteller_client,
+        epub_cache_dir=epub_cache_dir,
+        data_dir=data_dir,
+        books_dir=books_dir,
+    )
+
     # Sync clients dictionary for reuse
     sync_clients = providers.Dict(
         ABS=abs_sync_client,
@@ -253,6 +270,7 @@ class Container(containers.DeclarativeContainer):
         library_service=library_service,
         migration_service=migration_service,
         suggestion_service=suggestion_service,
+        background_job_service=background_job_service,
 
         epub_cache_dir=epub_cache_dir,
         data_dir=data_dir,
