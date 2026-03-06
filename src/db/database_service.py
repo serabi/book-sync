@@ -1086,7 +1086,7 @@ class DatabaseService:
     # ── BookFusion Books (Library Catalog) ──
 
     def save_bookfusion_books(self, books: list[dict]) -> int:
-        """Bulk upsert BookFusion books by bookfusion_id. Returns count saved."""
+        """Bulk upsert BookFusion books by bookfusion_id. Returns count of new books saved."""
         saved = 0
         with self.get_session() as session:
             for b in books:

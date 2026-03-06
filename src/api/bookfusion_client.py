@@ -425,7 +425,7 @@ class BookFusionClient:
                     highlight_id = hl.get('id', '')
                     if not highlight_id:
                         continue
-                    content = hl.get('content', '')
+                    content = hl.get('content') or ''
                     highlights_batch.append({
                         'bookfusion_book_id': book_id,
                         'highlight_id': highlight_id,
