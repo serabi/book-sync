@@ -1,6 +1,6 @@
 """add parsed fields to bookfusion_highlights
 
-Revision ID: a7b8c9d0e1f2
+Revision ID: a8b9c0d1e2f3
 Revises: f1a2b3c4d5e6
 Create Date: 2026-03-05
 """
@@ -14,7 +14,7 @@ from sqlalchemy import text
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = 'a7b8c9d0e1f2'
+revision: str = 'a8b9c0d1e2f3'
 down_revision: str | Sequence[str] | None = 'f1a2b3c4d5e6'
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
@@ -38,15 +38,26 @@ def _parse_quote(content: str) -> str | None:
 
 
 def upgrade() -> None:
-    op.add_column('bookfusion_highlights',
-                  sa.Column('highlighted_at', sa.DateTime(), nullable=True))
-    op.add_column('bookfusion_highlights',
-                  sa.Column('quote_text', sa.Text(), nullable=True))
-    op.add_column('bookfusion_highlights',
-                  sa.Column('matched_abs_id', sa.String(500), nullable=True))
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+
+    if 'bookfusion_highlights' not in inspector.get_table_names():
+        return
+
+    existing_cols = {c['name'] for c in inspector.get_columns('bookfusion_highlights')}
+
+    if 'highlighted_at' not in existing_cols:
+        op.add_column('bookfusion_highlights',
+                      sa.Column('highlighted_at', sa.DateTime(), nullable=True))
+    if 'quote_text' not in existing_cols:
+        op.add_column('bookfusion_highlights',
+                      sa.Column('quote_text', sa.Text(), nullable=True))
+    if 'matched_abs_id' not in existing_cols:
+        op.add_column('bookfusion_highlights',
+                      sa.Column('matched_abs_id', sa.String(500), nullable=True))
 
     # Backfill existing rows
-    conn = op.get_bind()
+    conn = bind
     rows = conn.execute(text('SELECT id, content FROM bookfusion_highlights')).fetchall()
     for row in rows:
         hl_id, content = row

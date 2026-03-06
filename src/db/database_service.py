@@ -15,6 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from .models import (
     Base,
     Book,
+    BookfusionBook,
     BookfusionHighlight,
     BookloreBook,
     DatabaseManager,
@@ -1026,6 +1027,15 @@ class DatabaseService:
             ).update({BookfusionHighlight.matched_abs_id: abs_id},
                      synchronize_session=False)
 
+
+    def link_bookfusion_highlights_by_book_id(self, bookfusion_book_id: str, abs_id: str):
+        """Link all highlights for a BookFusion book_id to a dashboard abs_id."""
+        with self.get_session() as session:
+            session.query(BookfusionHighlight).filter(
+                BookfusionHighlight.bookfusion_book_id == bookfusion_book_id
+            ).update({BookfusionHighlight.matched_abs_id: abs_id},
+                     synchronize_session=False)
+
     def get_bookfusion_highlights_for_book(self, abs_id: str) -> list[BookfusionHighlight]:
         """Return BookFusion highlights matched to a specific PageKeeper book."""
         with self.get_session() as session:
@@ -1041,6 +1051,111 @@ class DatabaseService:
 
     def set_bookfusion_sync_cursor(self, cursor: str):
         self.set_setting('BOOKFUSION_SYNC_CURSOR', cursor)
+
+    # ── BookFusion Books (Library Catalog) ──
+
+    def save_bookfusion_books(self, books: list[dict]) -> int:
+        """Bulk upsert BookFusion books by bookfusion_id. Returns count saved."""
+        saved = 0
+        with self.get_session() as session:
+            for b in books:
+                existing = session.query(BookfusionBook).filter(
+                    BookfusionBook.bookfusion_id == b['bookfusion_id']
+                ).first()
+                if existing:
+                    existing.title = b.get('title') or existing.title
+                    existing.authors = b.get('authors') or existing.authors
+                    existing.filename = b.get('filename') or existing.filename
+                    existing.frontmatter = b.get('frontmatter') or existing.frontmatter
+                    existing.tags = b.get('tags') or existing.tags
+                    existing.series = b.get('series') or existing.series
+                    existing.highlight_count = b.get('highlight_count', existing.highlight_count)
+                    existing.last_updated = datetime.utcnow()
+                else:
+                    session.add(BookfusionBook(
+                        bookfusion_id=b['bookfusion_id'],
+                        title=b.get('title'),
+                        authors=b.get('authors'),
+                        filename=b.get('filename'),
+                        frontmatter=b.get('frontmatter'),
+                        tags=b.get('tags'),
+                        series=b.get('series'),
+                        highlight_count=b.get('highlight_count', 0),
+                    ))
+                saved += 1
+        return saved
+
+    def get_bookfusion_books(self) -> list[BookfusionBook]:
+        """Return all BookFusion catalog books ordered by title."""
+        with self.get_session() as session:
+            books = session.query(BookfusionBook).order_by(
+                BookfusionBook.title
+            ).all()
+            session.expunge_all()
+            return books
+
+    def is_bookfusion_linked(self, abs_id: str) -> bool:
+        """Check if a dashboard book has any BookFusion catalog link."""
+        with self.get_session() as session:
+            return session.query(BookfusionBook).filter(
+                BookfusionBook.matched_abs_id == abs_id
+            ).first() is not None
+
+    def set_bookfusion_book_match(self, bookfusion_id: str, abs_id: str | None):
+        """Set or clear the matched_abs_id on a BookFusion catalog book."""
+        with self.get_session() as session:
+            book = session.query(BookfusionBook).filter(
+                BookfusionBook.bookfusion_id == bookfusion_id
+            ).first()
+            if book:
+                book.matched_abs_id = abs_id
+
+    def get_bookfusion_book(self, bookfusion_id: str) -> BookfusionBook | None:
+        """Look up a single BookFusion book by its bookfusion_id."""
+        with self.get_session() as session:
+            book = session.query(BookfusionBook).filter(
+                BookfusionBook.bookfusion_id == bookfusion_id
+            ).first()
+            if book:
+                session.expunge(book)
+            return book
+
+    def get_bookfusion_book_by_abs_id(self, abs_id: str) -> BookfusionBook | None:
+        """Look up a BookFusion book by its matched_abs_id."""
+        with self.get_session() as session:
+            book = session.query(BookfusionBook).filter(
+                BookfusionBook.matched_abs_id == abs_id
+            ).first()
+            if book:
+                session.expunge(book)
+            return book
+
+    def get_bookfusion_linked_abs_ids(self) -> set[str]:
+        """Return all abs_ids that have a BookFusion catalog or highlight link."""
+        with self.get_session() as session:
+            book_ids = {
+                r[0] for r in session.query(BookfusionBook.matched_abs_id).filter(
+                    BookfusionBook.matched_abs_id.isnot(None)
+                ).all()
+            }
+            highlight_ids = {
+                r[0] for r in session.query(BookfusionHighlight.matched_abs_id).filter(
+                    BookfusionHighlight.matched_abs_id.isnot(None)
+                ).distinct().all()
+            }
+            return book_ids | highlight_ids
+
+    def get_bookfusion_highlight_counts(self) -> dict[str, int]:
+        """Return highlight count per matched_abs_id."""
+        from sqlalchemy import func
+        with self.get_session() as session:
+            rows = session.query(
+                BookfusionHighlight.matched_abs_id,
+                func.count(BookfusionHighlight.id)
+            ).filter(
+                BookfusionHighlight.matched_abs_id.isnot(None)
+            ).group_by(BookfusionHighlight.matched_abs_id).all()
+            return {abs_id: count for abs_id, count in rows}
 
 
 class DatabaseMigrator:

@@ -103,6 +103,27 @@ def _parse_frontmatter_title(frontmatter: str | None) -> str:
     return ''
 
 
+def _parse_frontmatter(frontmatter: str | None) -> dict:
+    """Parse YAML frontmatter into a dict with title, authors, tags, series."""
+    result = {'title': '', 'authors': '', 'tags': '', 'series': ''}
+    if not frontmatter:
+        return result
+
+    for line in frontmatter.splitlines():
+        line = line.strip()
+        if line.startswith('title:'):
+            result['title'] = line[len('title:'):].strip().strip('"').strip("'")
+        elif line.startswith('author:') or line.startswith('authors:'):
+            key = 'authors:' if line.startswith('authors:') else 'author:'
+            result['authors'] = line[len(key):].strip().strip('"').strip("'")
+        elif line.startswith('tags:'):
+            result['tags'] = line[len('tags:'):].strip().strip('"').strip("'")
+        elif line.startswith('series:'):
+            result['series'] = line[len('series:'):].strip().strip('"').strip("'")
+
+    return result
+
+
 def _parse_highlight_date(content: str) -> datetime | None:
     """Parse the Date Created timestamp from a BookFusion highlight markdown string."""
     m = re.search(r'\*\*Date Created\*\*:\s*(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})\s*UTC', content)
@@ -303,8 +324,10 @@ class BookFusionClient:
         resp.raise_for_status()
         return resp.json()
 
-    def sync_all_highlights(self, db_service) -> int:
-        """Paginate through all highlights and save to DB. Returns total new count.
+    def sync_all_highlights(self, db_service) -> dict:
+        """Paginate through all highlights and save to DB.
+
+        Returns dict with 'new_highlights' and 'books_saved' counts.
 
         Response structure (from BookFusion Obsidian plugin source):
           { pages: Page[], cursor: str|null, next_sync_cursor: str|null }
@@ -313,6 +336,7 @@ class BookFusionClient:
         """
         cursor = db_service.get_bookfusion_sync_cursor()
         total_new = 0
+        all_books = {}
 
         while True:
             data = self.fetch_highlights(cursor)
@@ -326,7 +350,25 @@ class BookFusionClient:
                     continue
 
                 book_id = page.get('id', '')
-                book_title = _parse_frontmatter_title(page.get('frontmatter')) or page.get('filename', '')
+                raw_frontmatter = page.get('frontmatter')
+                parsed = _parse_frontmatter(raw_frontmatter)
+                book_title = parsed['title'] or page.get('filename', '')
+
+                # Collect book metadata (deduplicate by book_id)
+                hl_count = len(page.get('highlights', []))
+                if book_id not in all_books:
+                    all_books[book_id] = {
+                        'bookfusion_id': book_id,
+                        'title': book_title,
+                        'authors': parsed['authors'],
+                        'filename': page.get('filename', ''),
+                        'frontmatter': raw_frontmatter,
+                        'tags': parsed['tags'],
+                        'series': parsed['series'],
+                        'highlight_count': hl_count,
+                    }
+                else:
+                    all_books[book_id]['highlight_count'] += hl_count
 
                 for hl in page.get('highlights', []):
                     if not isinstance(hl, dict):
@@ -357,4 +399,9 @@ class BookFusionClient:
                     db_service.set_bookfusion_sync_cursor(next_cursor)
                 break
 
-        return total_new
+        # Save book catalog
+        books_saved = 0
+        if all_books:
+            books_saved = db_service.save_bookfusion_books(list(all_books.values()))
+
+        return {'new_highlights': total_new, 'books_saved': books_saved}

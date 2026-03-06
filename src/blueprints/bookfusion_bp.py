@@ -110,10 +110,19 @@ def sync_highlights():
     if not bf_client.highlights_api_key:
         return jsonify({'error': 'BookFusion highlights API key not configured'}), 400
 
+    data = request.get_json(silent=True) or {}
+    if data.get('full_resync'):
+        db_service.set_bookfusion_sync_cursor('')
+
     try:
-        new_count = bf_client.sync_all_highlights(db_service)
+        result = bf_client.sync_all_highlights(db_service)
         matched = _auto_match_highlights(db_service)
-        return jsonify({'success': True, 'new_highlights': new_count, 'auto_matched': matched})
+        return jsonify({
+            'success': True,
+            'new_highlights': result['new_highlights'],
+            'books_saved': result['books_saved'],
+            'auto_matched': matched,
+        })
     except Exception as e:
         logger.error(f"BookFusion highlight sync failed: {e}")
         return jsonify({'error': str(e)}), 500
@@ -273,3 +282,101 @@ def save_highlight_to_journal():
             logger.warning(f"Failed to save journal entry: {e}")
 
     return jsonify({'success': True, 'saved': saved})
+
+
+@bookfusion_bp.route('/api/bookfusion/library')
+def get_library():
+    """Return BookFusion library catalog for the Library tab."""
+    db_service = get_database_service()
+    bf_books = db_service.get_bookfusion_books()
+
+    # Check which books are already on the dashboard (by bf- prefix or highlight match)
+    all_books = db_service.get_all_books()
+    dashboard_ids = {b.abs_id for b in all_books}
+    book_list = [{'abs_id': b.abs_id, 'title': b.abs_title} for b in all_books if b.abs_title]
+
+    result = []
+    for b in bf_books:
+        bf_abs_id = f"bf-{b.bookfusion_id}"
+        # Check: explicit match on catalog book, bf- prefixed on dashboard, or highlight match
+        matched_abs_id = None
+        if b.matched_abs_id and b.matched_abs_id in dashboard_ids:
+            matched_abs_id = b.matched_abs_id
+        elif bf_abs_id in dashboard_ids:
+            matched_abs_id = bf_abs_id
+
+        result.append({
+            'bookfusion_id': b.bookfusion_id,
+            'title': b.title or b.filename or '',
+            'authors': b.authors or '',
+            'filename': b.filename or '',
+            'series': b.series or '',
+            'tags': b.tags or '',
+            'highlight_count': b.highlight_count or 0,
+            'on_dashboard': matched_abs_id is not None,
+            'abs_id': matched_abs_id,
+        })
+
+    return jsonify({'books': result, 'dashboard_books': book_list})
+
+
+@bookfusion_bp.route('/api/bookfusion/add-to-dashboard', methods=['POST'])
+def add_to_dashboard():
+    """Add a BookFusion book to the reading dashboard."""
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+
+    bookfusion_id = data.get('bookfusion_id')
+    if not bookfusion_id:
+        return jsonify({'error': 'bookfusion_id required'}), 400
+
+    db_service = get_database_service()
+    bf_book = db_service.get_bookfusion_book(bookfusion_id)
+    if not bf_book:
+        return jsonify({'error': 'BookFusion book not found in catalog'}), 404
+
+    abs_id = f"bf-{bookfusion_id}"
+
+    # Check if already on dashboard
+    existing = db_service.get_book(abs_id)
+    if existing:
+        return jsonify({'success': True, 'abs_id': abs_id, 'already_existed': True})
+
+    # Create dashboard book entry
+    from src.db.models import Book
+    book = Book(
+        abs_id=abs_id,
+        abs_title=bf_book.title or bf_book.filename or 'Unknown',
+        status='not_started',
+        sync_mode='ebook_only',
+    )
+    db_service.save_book(book)
+
+    # Auto-link catalog book + highlights
+    db_service.set_bookfusion_book_match(bookfusion_id, abs_id)
+    db_service.link_bookfusion_highlights_by_book_id(bookfusion_id, abs_id)
+
+    return jsonify({'success': True, 'abs_id': abs_id})
+
+
+@bookfusion_bp.route('/api/bookfusion/match-to-book', methods=['POST'])
+def match_to_book():
+    """Match a BookFusion catalog book to an existing dashboard book (link highlights)."""
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'No data provided'}), 400
+
+    bookfusion_id = data.get('bookfusion_id')
+    abs_id = data.get('abs_id')  # None/empty to unlink
+
+    if not bookfusion_id:
+        return jsonify({'error': 'bookfusion_id required'}), 400
+
+    db_service = get_database_service()
+
+    # Link the catalog book itself + any highlights
+    db_service.set_bookfusion_book_match(bookfusion_id, abs_id or None)
+    db_service.link_bookfusion_highlights_by_book_id(bookfusion_id, abs_id or None)
+
+    return jsonify({'success': True, 'abs_id': abs_id})

@@ -374,6 +374,43 @@ class BookfusionHighlight(Base):
         return f"<BookfusionHighlight(id={self.id}, book='{self.book_title}')>"
 
 
+class BookfusionBook(Base):
+    """BookFusion library catalog entry synced via the Obsidian API."""
+    __tablename__ = 'bookfusion_books'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    bookfusion_id = Column(String(255), unique=True, nullable=False)
+    title = Column(String(500))
+    authors = Column(String(500))
+    filename = Column(String(500))
+    frontmatter = Column(Text)
+    tags = Column(String(500))
+    series = Column(String(500))
+    highlight_count = Column(Integer, default=0)
+    matched_abs_id = Column(String(255), nullable=True)
+    fetched_at = Column(DateTime, default=datetime.utcnow)
+    last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def __init__(self, bookfusion_id: str, title: str = None, authors: str = None,
+                 filename: str = None, frontmatter: str = None, tags: str = None,
+                 series: str = None, highlight_count: int = 0,
+                 matched_abs_id: str = None):
+        self.bookfusion_id = bookfusion_id
+        self.title = title
+        self.authors = authors
+        self.filename = filename
+        self.frontmatter = frontmatter
+        self.tags = tags
+        self.series = series
+        self.highlight_count = highlight_count
+        self.matched_abs_id = matched_abs_id
+        self.fetched_at = datetime.utcnow()
+        self.last_updated = datetime.utcnow()
+
+    def __repr__(self):
+        return f"<BookfusionBook(id={self.id}, title='{self.title}')>"
+
+
 class BookloreBook(Base):
     """
     Model for caching Booklore search results, replacing local JSON cache.

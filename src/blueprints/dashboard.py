@@ -107,6 +107,21 @@ def index():
     for client_name, client in sync_clients.items():
         integrations[client_name.lower()] = client.is_configured()
 
+    # BookFusion integration status
+    from src.api.bookfusion_client import BookFusionClient
+    bf_client = BookFusionClient()
+    integrations['bookfusion'] = bf_client.is_configured()
+
+    # Bulk-fetch BookFusion link data (avoid N+1)
+    bf_linked_ids = set()
+    bf_highlight_counts = {}
+    if integrations['bookfusion']:
+        try:
+            bf_linked_ids = database_service.get_bookfusion_linked_abs_ids()
+            bf_highlight_counts = database_service.get_bookfusion_highlight_counts()
+        except Exception as e:
+            logger.warning(f"Could not fetch BookFusion link data: {e}")
+
     mappings = []
     total_duration = 0
     total_listened = 0
@@ -266,6 +281,11 @@ def index():
             mapping['hardcover_url'] = f"https://hardcover.app/books/{mapping['hardcover_book_id']}"
         else:
             mapping['hardcover_url'] = None
+
+        # BookFusion link data
+        is_bf_linked = (book.abs_id in bf_linked_ids) or book.abs_id.startswith('bf-')
+        mapping['bookfusion_linked'] = is_bf_linked
+        mapping['bookfusion_highlight_count'] = bf_highlight_counts.get(book.abs_id, 0)
 
         mapping['unified_progress'] = min(max_progress, 100.0)
 

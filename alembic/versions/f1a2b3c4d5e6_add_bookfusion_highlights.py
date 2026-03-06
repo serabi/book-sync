@@ -19,6 +19,11 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    if 'bookfusion_highlights' in inspector.get_table_names():
+        return
+
     op.create_table(
         'bookfusion_highlights',
         sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),

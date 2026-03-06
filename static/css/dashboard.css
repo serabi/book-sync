@@ -596,3 +596,25 @@
   from { opacity: 0; transform: translateY(-10px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* Clickable cover link */
+.book-cover-link {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+}
+.book-cover-link:active .book-cover-inner {
+  opacity: 0.85;
+}
+
+/* BookFusion service badge in card menu */
+.bf-svc-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--color-bookfusion);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 600;
+}

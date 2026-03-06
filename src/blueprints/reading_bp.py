@@ -2,12 +2,14 @@
 
 import logging
 import math
+import time
 from datetime import date, datetime
 from pathlib import Path
 
 from flask import Blueprint, jsonify, render_template, request
 
-from src.blueprints.helpers import get_abs_service, get_database_service
+from src.blueprints.helpers import get_abs_service, get_booklore_clients, get_database_service
+from src.db.models import State
 
 logger = logging.getLogger(__name__)
 
@@ -237,11 +239,86 @@ def reading_detail(abs_id):
     # BookFusion highlights matched to this book
     bf_highlights = database_service.get_bookfusion_highlights_for_book(abs_id)
 
+    has_bookfusion_link = (
+        abs_id.startswith('bf-')
+        or len(bf_highlights) > 0
+        or database_service.is_bookfusion_linked(abs_id)
+    )
+
+    # ── Build enriched metadata from all linked services ──
+    metadata = {}
+
+    # ABS metadata (subtitle, author, narrator, duration, genres, description)
+    sync_mode = getattr(book, 'sync_mode', 'audiobook')
+    if sync_mode != 'ebook_only':
+        try:
+            abs_item = abs_service.get_item_details(abs_id)
+            if abs_item:
+                abs_meta = abs_item.get('media', {}).get('metadata', {})
+                metadata['author'] = abs_meta.get('authorName') or ''
+                metadata['narrator'] = abs_meta.get('narratorName') or ''
+                metadata['subtitle'] = abs_meta.get('subtitle') or ''
+                metadata['description'] = abs_meta.get('description') or ''
+                metadata['genres'] = abs_meta.get('genres') or []
+                duration = abs_item.get('media', {}).get('duration')
+                if duration:
+                    hrs = int(duration // 3600)
+                    mins = int((duration % 3600) // 60)
+                    metadata['duration'] = f"{hrs}h {mins}m" if hrs else f"{mins}m"
+        except Exception:
+            pass
+
+    # Hardcover details (ISBN, ASIN, pages, slug)
+    hardcover = database_service.get_hardcover_details(abs_id)
+    if hardcover:
+        metadata['isbn'] = hardcover.isbn
+        metadata['asin'] = hardcover.asin
+        metadata['pages'] = hardcover.hardcover_pages
+        metadata['hardcover_slug'] = hardcover.hardcover_slug
+        metadata['hardcover_url'] = (
+            f"https://hardcover.app/books/{hardcover.hardcover_slug}"
+            if hardcover.hardcover_slug
+            else None
+        )
+
+    # Booklore metadata (description, publisher, language)
+    if book.ebook_filename:
+        for bl_client in get_booklore_clients():
+            try:
+                if not bl_client.is_configured():
+                    continue
+                bl_book = bl_client.find_book_by_filename(book.ebook_filename, allow_refresh=False)
+                if not bl_book and getattr(book, 'original_ebook_filename', None):
+                    bl_book = bl_client.find_book_by_filename(book.original_ebook_filename, allow_refresh=False)
+                if bl_book:
+                    if not metadata.get('description') and bl_book.get('description'):
+                        metadata['description'] = bl_book['description']
+                    bl_url = f"{bl_client.base_url}/book/{bl_book.get('id')}?tab=view"
+                    if bl_client.source_tag == 'booklore':
+                        metadata['booklore_url'] = bl_url
+                    else:
+                        metadata['booklore_2_url'] = bl_url
+                    break
+            except Exception:
+                continue
+
+    # BookFusion catalog entry (tags, series)
+    bf_book = database_service.get_bookfusion_book_by_abs_id(abs_id)
+    if bf_book:
+        metadata['bf_tags'] = bf_book.tags or ''
+        metadata['bf_series'] = bf_book.series or ''
+
+    # ABS item URL
+    if sync_mode != 'ebook_only':
+        metadata['abs_url'] = abs_service.get_abs_item_url(abs_id)
+
     return render_template(
         'reading_detail.html',
         book=book_data,
         journals=journals,
         bf_highlights=bf_highlights,
+        has_bookfusion_link=has_bookfusion_link,
+        metadata=metadata,
     )
 
 
@@ -268,6 +345,40 @@ def update_rating(abs_id):
         return jsonify({"success": False, "error": "Book not found"}), 404
 
     return jsonify({"success": True, "rating": book.rating})
+
+
+@reading_bp.route('/api/reading/book/<abs_id>/progress', methods=['POST'])
+def update_progress(abs_id):
+    """Manually set reading progress for a book (e.g. BookFusion books without auto-sync)."""
+    database_service = get_database_service()
+    data = request.json or {}
+    percentage = data.get('percentage')
+
+    if percentage is None:
+        return jsonify({"success": False, "error": "percentage is required"}), 400
+
+    try:
+        percentage = float(percentage)
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "error": "Invalid percentage value"}), 400
+
+    if not math.isfinite(percentage) or percentage < 0 or percentage > 1:
+        return jsonify({"success": False, "error": "percentage must be between 0 and 1"}), 400
+
+    book = database_service.get_book(abs_id)
+    if not book:
+        return jsonify({"success": False, "error": "Book not found"}), 404
+
+    state = State(
+        abs_id=abs_id,
+        client_name='manual',
+        percentage=percentage,
+        last_updated=time.time(),
+        timestamp=time.time(),
+    )
+    database_service.save_state(state)
+
+    return jsonify({"success": True, "percentage": percentage})
 
 
 @reading_bp.route('/api/reading/book/<abs_id>/dates', methods=['POST'])

@@ -12,220 +12,7 @@
     <link rel="stylesheet" href="/static/css/base.css">
     <link rel="stylesheet" href="/static/css/layout.css">
     <link rel="stylesheet" href="/static/css/components.css">
-    <style>
-        .bf-container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 24px;
-        }
-        .bf-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 24px;
-            flex-wrap: wrap;
-            gap: 12px;
-        }
-        .bf-header h2 {
-            font-family: var(--font-heading);
-            font-size: 1.5rem;
-            margin: 0;
-        }
-        .bf-header p {
-            color: var(--color-text-muted);
-            margin: 4px 0 0;
-            font-size: 0.9rem;
-        }
-
-        /* Tabs */
-        .bf-tabs {
-            display: flex;
-            gap: 0;
-            border-bottom: 1px solid var(--color-border);
-            margin-bottom: 24px;
-        }
-        .bf-tab {
-            padding: 10px 20px;
-            background: none;
-            border: none;
-            border-bottom: 2px solid transparent;
-            color: var(--color-text-muted);
-            cursor: pointer;
-            font-family: var(--font-body);
-            font-size: 0.95rem;
-            transition: var(--transition);
-        }
-        .bf-tab:hover { color: var(--color-text); }
-        .bf-tab.active {
-            color: var(--color-bookfusion);
-            border-bottom-color: var(--color-bookfusion);
-        }
-        .bf-panel { display: none; }
-        .bf-panel.active { display: block; }
-
-        /* Search */
-        .bf-search {
-            display: flex;
-            gap: 12px;
-            margin-bottom: 20px;
-        }
-        .bf-search input {
-            flex: 1;
-            padding: 10px 14px;
-            border: 1px solid var(--color-border-light);
-            border-radius: var(--radius);
-            background: var(--color-surface);
-            color: var(--color-text);
-            font-size: 14px;
-        }
-        .bf-search input:focus {
-            outline: none;
-            border-color: var(--color-bookfusion);
-        }
-
-        /* Book list */
-        .bf-book-list {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-        .bf-book-item {
-            display: flex;
-            align-items: center;
-            gap: 16px;
-            padding: 14px 16px;
-            background: var(--color-bg-raised);
-            border-radius: var(--radius);
-            border: 1px solid var(--color-border-light);
-        }
-        .bf-book-info { flex: 1; min-width: 0; }
-        .bf-book-title {
-            font-weight: 600;
-            font-size: 0.95rem;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        .bf-book-meta {
-            color: var(--color-text-muted);
-            font-size: 0.85rem;
-            margin-top: 2px;
-        }
-        .bf-source-tag {
-            display: inline-block;
-            padding: 1px 6px;
-            border-radius: 3px;
-            background: var(--color-surface-hover);
-            font-size: 0.75rem;
-            color: var(--color-text-muted);
-            margin-left: 4px;
-        }
-        .bf-upload-btn {
-            flex-shrink: 0;
-            padding: 6px 14px;
-            border: none;
-            border-radius: var(--radius-sm);
-            background: var(--color-bookfusion);
-            color: #fff;
-            cursor: pointer;
-            font-size: 0.85rem;
-            transition: var(--transition);
-        }
-        .bf-upload-btn:hover { opacity: 0.85; }
-        .bf-upload-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .bf-upload-btn.done { background: var(--color-success); }
-        .bf-upload-btn.error { background: var(--color-error); }
-
-        /* Highlights */
-        .bf-sync-bar {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            margin-bottom: 20px;
-        }
-        .bf-sync-info {
-            color: var(--color-text-muted);
-            font-size: 0.85rem;
-        }
-        .bf-highlight-group {
-            margin-bottom: 20px;
-        }
-        .bf-group-header {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 10px 0;
-            cursor: pointer;
-            font-weight: 600;
-            font-family: var(--font-heading);
-            user-select: none;
-        }
-        .bf-group-header .chevron {
-            transition: transform 0.2s;
-            font-size: 0.8rem;
-        }
-        .bf-group-header.collapsed .chevron {
-            transform: rotate(-90deg);
-        }
-        .bf-group-body {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            padding-left: 20px;
-        }
-        .bf-group-body.hidden { display: none; }
-        .bf-highlight {
-            padding: 12px 16px;
-            background: var(--color-bg-raised);
-            border-radius: var(--radius);
-            border-left: 3px solid var(--color-bookfusion);
-        }
-        .bf-highlight-content {
-            font-size: 0.95rem;
-            line-height: 1.5;
-        }
-        .bf-highlight-chapter {
-            color: var(--color-text-muted);
-            font-size: 0.8rem;
-            margin-top: 6px;
-        }
-        .bf-journal-controls {
-            display: inline-flex;
-            gap: 8px;
-            align-items: center;
-            margin-left: auto;
-            padding-left: 12px;
-        }
-        .bf-book-select {
-            padding: 4px 8px;
-            border: 1px solid var(--color-border-light);
-            border-radius: var(--radius-sm);
-            background: var(--color-surface);
-            color: var(--color-text);
-            font-size: 0.8rem;
-            max-width: 200px;
-        }
-        .bf-empty {
-            text-align: center;
-            padding: 40px;
-            color: var(--color-text-muted);
-        }
-        .bf-count {
-            color: var(--color-text-muted);
-            font-size: 0.85rem;
-            font-weight: 400;
-        }
-        .bf-match-badge {
-            display: inline-block;
-            padding: 1px 8px;
-            border-radius: 3px;
-            background: var(--color-success);
-            color: #fff;
-            font-size: 0.75rem;
-            font-weight: 600;
-            margin-left: 4px;
-        }
-    </style>
+    <link rel="stylesheet" href="/static/css/bookfusion.css">
 </head>
 
 <body>
@@ -241,6 +28,7 @@
 
         <div class="bf-tabs">
             <button class="bf-tab active" onclick="switchBFTab('highlights')">Highlights</button>
+            <button class="bf-tab" onclick="switchBFTab('library')">Library</button>
             <button class="bf-tab" onclick="switchBFTab('upload')">Upload Books</button>
         </div>
 
@@ -254,10 +42,21 @@
             </div>
         </div>
 
+        <!-- Library Panel -->
+        <div class="bf-panel" id="bf-panel-library">
+            <div class="bf-search">
+                <input type="text" id="bf-library-search" placeholder="Filter library..." oninput="filterLibrary()">
+            </div>
+            <div id="bf-library-list" class="bf-book-list">
+                <div class="bf-empty">Loading library catalog...</div>
+            </div>
+        </div>
+
         <!-- Highlights Panel -->
         <div class="bf-panel active" id="bf-panel-highlights">
             <div class="bf-sync-bar">
-                <button class="btn btn-primary" id="bf-sync-btn" onclick="syncHighlights()">Sync Highlights</button>
+                <button class="btn btn-primary" id="bf-sync-btn" onclick="syncHighlights(false)">Sync Highlights</button>
+                <button class="btn btn-primary" id="bf-resync-btn" onclick="syncHighlights(true)" style="background: var(--color-text-muted);">Full Re-sync</button>
                 <span class="bf-sync-info" id="bf-sync-info"></span>
             </div>
             <div id="bf-highlights-container">
@@ -287,6 +86,7 @@
         event.target.classList.add('active');
 
         if (tab === 'highlights') loadHighlights();
+        if (tab === 'library') loadLibrary();
     }
 
     /* ── Upload Tab ── */
@@ -425,20 +225,30 @@
     }
 
     /* ── Highlights Tab ── */
-    function syncHighlights() {
+    function syncHighlights(fullResync) {
         var btn = document.getElementById('bf-sync-btn');
+        var resyncBtn = document.getElementById('bf-resync-btn');
         var info = document.getElementById('bf-sync-info');
         btn.disabled = true;
-        btn.textContent = 'Syncing...';
+        resyncBtn.disabled = true;
+        btn.textContent = fullResync ? 'Re-syncing...' : 'Syncing...';
         info.textContent = '';
 
-        fetch('/api/bookfusion/sync-highlights', { method: 'POST' })
+        fetch('/api/bookfusion/sync-highlights', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ full_resync: !!fullResync })
+        })
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 btn.disabled = false;
+                resyncBtn.disabled = false;
                 btn.textContent = 'Sync Highlights';
                 if (data.success) {
-                    info.textContent = 'Synced ' + data.new_highlights + ' new highlight' + (data.new_highlights !== 1 ? 's' : '');
+                    var parts = [];
+                    if (data.new_highlights) parts.push(data.new_highlights + ' new highlight' + (data.new_highlights !== 1 ? 's' : ''));
+                    if (data.books_saved) parts.push(data.books_saved + ' book' + (data.books_saved !== 1 ? 's' : '') + ' cataloged');
+                    info.textContent = parts.length ? 'Synced: ' + parts.join(', ') : 'Up to date';
                     loadHighlights();
                 } else {
                     info.textContent = data.error || 'Sync failed';
@@ -446,6 +256,7 @@
             })
             .catch(function() {
                 btn.disabled = false;
+                resyncBtn.disabled = false;
                 btn.textContent = 'Sync Highlights';
                 info.textContent = 'Sync failed';
             });
@@ -598,6 +409,174 @@
         .then(function(r) { return r.json(); })
         .then(function(data) {
             if (data.success) loadHighlights();
+        });
+    }
+
+    /* ── Library Tab ── */
+    var _libraryData = [];
+    var _dashboardBooks = [];
+
+    function loadLibrary() {
+        var list = document.getElementById('bf-library-list');
+        clearChildren(list);
+        list.appendChild(el('div', 'bf-empty', 'Loading...'));
+
+        fetch('/api/bookfusion/library')
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                _libraryData = data.books || [];
+                _dashboardBooks = data.dashboard_books || [];
+                renderLibrary(_libraryData);
+            })
+            .catch(function() {
+                clearChildren(list);
+                list.appendChild(el('div', 'bf-empty', 'Failed to load library'));
+            });
+    }
+
+    function filterLibrary() {
+        var q = document.getElementById('bf-library-search').value.trim().toLowerCase();
+        if (!q) {
+            renderLibrary(_libraryData);
+            return;
+        }
+        var filtered = _libraryData.filter(function(b) {
+            return (b.title + ' ' + b.authors + ' ' + b.series + ' ' + b.filename).toLowerCase().indexOf(q) !== -1;
+        });
+        renderLibrary(filtered);
+    }
+
+    function renderLibrary(books) {
+        var list = document.getElementById('bf-library-list');
+        clearChildren(list);
+
+        if (!books.length) {
+            list.appendChild(el('div', 'bf-empty', _libraryData.length ? 'No matches' : 'No books in catalog. Run a Full Re-sync to populate.'));
+            return;
+        }
+
+        books.forEach(function(b) {
+            var item = el('div', 'bf-book-item');
+
+            var info = el('div', 'bf-book-info');
+            info.appendChild(el('div', 'bf-book-title', b.title || b.filename));
+
+            var meta = el('div', 'bf-book-meta');
+            if (b.authors) meta.appendChild(document.createTextNode(b.authors));
+            if (b.series) {
+                if (b.authors) meta.appendChild(document.createTextNode(' \u00B7 '));
+                meta.appendChild(document.createTextNode(b.series));
+            }
+            if (b.highlight_count > 0) {
+                meta.appendChild(document.createTextNode(' '));
+                meta.appendChild(el('span', 'bf-hl-count', b.highlight_count + ' highlight' + (b.highlight_count !== 1 ? 's' : '')));
+            }
+            if (b.filename) {
+                meta.appendChild(document.createElement('br'));
+                meta.appendChild(document.createTextNode(b.filename));
+            }
+            info.appendChild(meta);
+            item.appendChild(info);
+
+            var actions = el('div', 'bf-library-actions');
+            if (b.on_dashboard) {
+                var badge = document.createElement('a');
+                badge.className = 'bf-dashboard-badge';
+                badge.textContent = '\u2714 Matched';
+                badge.href = '/reading/book/' + encodeURIComponent(b.abs_id);
+                actions.appendChild(badge);
+            } else {
+                // Match dropdown + confirm button
+                var select = document.createElement('select');
+                select.className = 'bf-book-select';
+                var defaultOpt = document.createElement('option');
+                defaultOpt.value = '';
+                defaultOpt.textContent = 'Match to book\u2026';
+                select.appendChild(defaultOpt);
+                _dashboardBooks.forEach(function(db) {
+                    var opt = document.createElement('option');
+                    opt.value = db.abs_id;
+                    opt.textContent = db.title;
+                    select.appendChild(opt);
+                });
+                actions.appendChild(select);
+
+                var linkBtn = el('button', 'bf-upload-btn bf-link-btn', 'Link');
+                linkBtn.addEventListener('click', function() {
+                    if (select.value) {
+                        matchToBook(linkBtn, select, b);
+                    }
+                });
+                actions.appendChild(linkBtn);
+
+                // Add as new book button
+                var btn = el('button', 'bf-upload-btn', 'Add New');
+                btn.addEventListener('click', function() { addToDashboard(btn, b); });
+                actions.appendChild(btn);
+            }
+            item.appendChild(actions);
+
+            list.appendChild(item);
+        });
+    }
+
+    function matchToBook(btn, select, book) {
+        var absId = select.value;
+        btn.disabled = true;
+        select.disabled = true;
+        btn.textContent = 'Linking...';
+
+        fetch('/api/bookfusion/match-to-book', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ bookfusion_id: book.bookfusion_id, abs_id: absId })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                btn.textContent = '\u2714 Linked';
+                btn.classList.add('done');
+                book.on_dashboard = true;
+                book.abs_id = absId;
+            } else {
+                btn.textContent = 'Link';
+                btn.disabled = false;
+                select.disabled = false;
+            }
+        })
+        .catch(function() {
+            btn.textContent = 'Link';
+            btn.disabled = false;
+            select.disabled = false;
+        });
+    }
+
+    function addToDashboard(btn, book) {
+        btn.disabled = true;
+        btn.textContent = 'Adding...';
+
+        fetch('/api/bookfusion/add-to-dashboard', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ bookfusion_id: book.bookfusion_id })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                btn.textContent = '\u2714 Added';
+                btn.classList.add('done');
+                book.on_dashboard = true;
+                book.abs_id = data.abs_id;
+            } else {
+                btn.textContent = data.error || 'Error';
+                btn.classList.add('error');
+                btn.disabled = false;
+            }
+        })
+        .catch(function() {
+            btn.textContent = 'Error';
+            btn.classList.add('error');
+            btn.disabled = false;
         });
     }
 
