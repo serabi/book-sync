@@ -54,7 +54,7 @@ class ReadingRepository(BaseRepository):
         return self._get_one(ReadingGoal, ReadingGoal.year == year)
 
     def save_reading_goal(self, year, target_books):
-        if target_books is None or not isinstance(target_books, int):
+        if target_books is None or isinstance(target_books, bool) or not isinstance(target_books, int):
             raise ValueError("target_books must be a non-negative integer")
         if target_books < 0:
             raise ValueError("target_books must be a non-negative integer")
@@ -75,6 +75,12 @@ class ReadingRepository(BaseRepository):
                 return goal
 
     def get_reading_stats(self, year):
+        """Return reading statistics.
+
+        ``books_finished`` is scoped to the given year.
+        ``currently_reading`` and ``total_tracked`` are intentionally global
+        (not year-scoped) because active/tracked books span across years.
+        """
         with self.get_session() as session:
             books_finished = session.query(Book).filter(
                 extract('year', Book.finished_at) == year

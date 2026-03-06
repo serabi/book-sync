@@ -39,6 +39,7 @@ def upgrade() -> None:
             op.drop_index(index_def['name'], table_name='booklore_books')
 
     # Ensure a regular (non-unique) filename index exists for lookups.
+    inspector.clear_cache()
     refreshed = sa.inspect(bind)
     has_non_unique_filename_index = any(
         _is_filename_only_index(index_def) and not index_def.get('unique')

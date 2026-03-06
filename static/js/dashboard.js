@@ -225,7 +225,7 @@ function initDashboard() {
             .then(data => {
                 if (!data || !data.mappings) return;
                 data.mappings.forEach(book => {
-                    const card = document.querySelector(`.book-card[data-abs-id="${book.abs_id}"]`);
+                    const card = document.querySelector(`.book-card[data-abs-id="${CSS.escape(book.abs_id)}"]`);
                     if (!card) return;
 
                     const progressPercent = card.querySelector('.progress-percent');
@@ -265,7 +265,7 @@ function initDashboard() {
                     }
                 });
             })
-            .catch(() => { })
+            .catch(err => { console.error('Failed to refresh dashboard:', err); })
             .finally(() => setTimeout(refreshDashboard, 30000));
     }
 
@@ -294,8 +294,18 @@ function initDashboard() {
                 if (typeof data !== 'object' || data === null) return;
                 const ids = Object.keys(data);
                 if (ids.length === 0) {
-                    if (emptyReloadAttempts++ < 3) {
-                        location.reload();
+                    const hasProcessingCards = processingSection.querySelector('.book-card') !== null;
+                    if (!hasProcessingCards) {
+                        emptyReloadAttempts = 0;
+                        setTimeout(pollProcessingStatus, 5000);
+                        return;
+                    }
+
+                    if (emptyReloadAttempts < 3) {
+                        emptyReloadAttempts += 1;
+                        setTimeout(() => location.reload(), 1000);
+                    } else {
+                        setTimeout(pollProcessingStatus, 5000);
                     }
                     return;
                 }
@@ -305,7 +315,7 @@ function initDashboard() {
                 let shouldReload = false;
                 for (const absId of ids) {
                     const info = data[absId];
-                    const card = processingSection.querySelector(`.book-card[data-abs-id="${absId}"]`);
+                    const card = processingSection.querySelector(`.book-card[data-abs-id="${CSS.escape(absId)}"]`);
                     if (!card) continue;
 
                     const cardStatus = card.dataset.status;
@@ -538,7 +548,8 @@ function markComplete(absId, title) {
         return;
     }
     window._mcAbsId = absId;
-    document.getElementById('delete-mapping-modal').style.display = 'flex';
+    const modal = document.getElementById('delete-mapping-modal');
+    if (modal) modal.style.display = 'flex';
 }
 
 function closeDeleteMappingModal() {
@@ -556,7 +567,7 @@ function _dmExecuteFetch(absId, shouldDelete) {
         .then(data => {
             if (data.success) {
                 if (shouldDelete) {
-                    const cardElement = document.querySelector('.book-card[data-abs-id="' + absId + '"]');
+                    const cardElement = document.querySelector('.book-card[data-abs-id="' + CSS.escape(absId) + '"]');
                     if (cardElement) {
                         cardElement.remove();
                     } else {

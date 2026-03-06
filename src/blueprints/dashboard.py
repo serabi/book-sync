@@ -268,6 +268,7 @@ def index():
                         mapping['booklore_id'] = bl_book.get('id')
                         mapping['booklore_source_tag'] = bl_client.source_tag
                         mapping['booklore_url'] = url
+                        break
                 except Exception:
                     logger.debug(f"Booklore lookup failed for '{getattr(bl_client, 'source_tag', '?')}', skipping")
                     continue

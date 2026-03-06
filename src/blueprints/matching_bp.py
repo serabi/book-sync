@@ -5,7 +5,7 @@ import logging
 import os
 from pathlib import Path
 
-from flask import Blueprint, redirect, render_template, request, session, url_for
+from flask import Blueprint, flash, redirect, render_template, request, session, url_for
 
 from src.blueprints.helpers import (
     audiobook_matches_search,
@@ -190,10 +190,14 @@ def match():
                 logger.info(f"Successfully merged {link_book_id} into {abs_id}")
             except Exception as e:
                 logger.error(f"Failed to merge book data: {e}")
+                raise
             abs_service.add_to_collection(abs_id, ABS_COLLECTION_NAME)
             hardcover_sync_client = container.sync_clients().get('Hardcover')
             if hardcover_sync_client and hardcover_sync_client.is_configured():
                 hardcover_sync_client._automatch_hardcover(new_book)
+            database_service.dismiss_suggestion(abs_id)
+            if new_book.kosync_doc_id:
+                database_service.dismiss_suggestion(new_book.kosync_doc_id)
             return redirect(url_for('dashboard.index'))
 
         # --- Standard flow (requires audiobook) ---
@@ -388,6 +392,7 @@ def batch_match():
             session.modified = True
             return redirect(url_for('matching.batch_match'))
         elif action == 'process_queue':
+            failed_items = []
             for item in session.get('queue', []):
                 # Handle audio-only queue items
                 if item.get('audio_only'):
@@ -423,6 +428,7 @@ def batch_match():
 
                 if not kosync_doc_id:
                     logger.warning(f"Could not compute KOSync ID for {sanitize_log_data(ebook_filename)}, skipping")
+                    failed_items.append(item.get('ebook_display_name') or ebook_filename)
                     continue
 
                 # Hash Preservation
@@ -489,6 +495,9 @@ def batch_match():
                 except Exception as e:
                     logger.warning(f"Failed to check/dismiss device hash: {e}")
 
+            if failed_items:
+                names = ', '.join(failed_items)
+                flash(f"Could not compute KOSync ID for: {names}", 'warning')
             session['queue'] = []
             session.modified = True
             return redirect(url_for('dashboard.index'))

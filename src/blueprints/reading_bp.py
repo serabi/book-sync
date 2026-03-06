@@ -272,8 +272,8 @@ def reading_detail(abs_id):
                     hrs = int(duration // 3600)
                     mins = int((duration % 3600) // 60)
                     metadata['duration'] = f"{hrs}h {mins}m" if hrs else f"{mins}m"
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("abs_service.get_item_details failed for abs_id=%s: %s", abs_id, e, exc_info=True)
 
     # Fallback duration from stored book data (in case ABS API call failed or was skipped)
     if not metadata.get('duration') and book.duration and book.duration > 0:
@@ -310,7 +310,10 @@ def reading_detail(abs_id):
                     bl_url = f"{bl_client.base_url}/book/{bl_book.get('id')}?tab=view"
                     metadata['booklore_url'] = bl_url
                     break
-            except Exception:
+            except Exception as e:
+                logger.debug("Booklore lookup failed for ebook_filename=%s, original=%s, client=%s: %s",
+                             book.ebook_filename, getattr(book, 'original_ebook_filename', None),
+                             bl_client.base_url, e)
                 continue
 
     # BookFusion catalog entry (tags, series)
@@ -468,10 +471,10 @@ def add_journal(abs_id):
         return jsonify({"success": False, "error": "Book not found"}), 404
 
     # Get current progress for the journal entry
-    all_states = database_service.get_all_states()
+    book_states = database_service.get_states_for_book(abs_id)
     max_pct = 0
-    for state in all_states:
-        if state.abs_id == abs_id and state.percentage:
+    for state in book_states:
+        if state.percentage:
             max_pct = max(max_pct, state.percentage)
 
     journal = database_service.add_reading_journal(

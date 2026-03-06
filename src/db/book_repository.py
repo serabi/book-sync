@@ -89,7 +89,6 @@ class BookRepository(BaseRepository):
                         HardcoverDetails.abs_id == old_abs_id).delete(synchronize_session=False)
                 except ProgrammingError as e:
                     logger.warning(f"Table missing during migration cleanup for '{old_abs_id}': {e}")
-                    session.rollback()
 
                 logger.info(f"Migrated data from '{old_abs_id}' to '{new_abs_id}'")
             except Exception as e:

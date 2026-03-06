@@ -154,7 +154,8 @@ class DatabaseService:
                     BookfusionBook.title.like('%.md')
                 ).all()
                 for b in dirty:
-                    b.title = b.title[:-3].strip()
+                    stripped = b.title[:-3].strip()
+                    b.title = stripped if stripped else b.title
                 if dirty:
                     logger.info(f"Cleaned {len(dirty)} BookFusion .md titles")
         except Exception as e:

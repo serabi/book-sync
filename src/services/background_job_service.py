@@ -235,13 +235,13 @@ class BackgroundJobService:
 
             # Priority 2: SMIL extraction
             if not transcript_source and hasattr(self.transcriber, 'transcribe_from_smil'):
-                  raw_transcript = self.transcriber.transcribe_from_smil(
-                      abs_id, epub_path, chapters,
-                      full_book_text=book_text,
-                       progress_callback=lambda p: update_progress(p, 2)
-                  )
-                  if raw_transcript:
-                      transcript_source = "SMIL"
+                raw_transcript = self.transcriber.transcribe_from_smil(
+                    abs_id, epub_path, chapters,
+                    full_book_text=book_text,
+                    progress_callback=lambda p: update_progress(p, 2)
+                )
+                if raw_transcript:
+                    transcript_source = "SMIL"
 
             # Priority 3: Whisper transcription
             if not raw_transcript and transcript_source != "STORYTELLER_NATIVE":
@@ -293,6 +293,8 @@ class BackgroundJobService:
                 job.last_error = None
                 job.progress = 1.0
                 self.database_service.save_job(job)
+            else:
+                logger.warning(f"Job record not found for completed book: {abs_id}")
 
 
             logger.info(f"Completed: {sanitize_log_data(abs_title)}")

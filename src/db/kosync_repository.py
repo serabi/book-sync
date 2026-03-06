@@ -69,6 +69,8 @@ class KoSyncRepository(BaseRepository):
         return self._get_all(KosyncDocument, KosyncDocument.linked_abs_id == abs_id)
 
     def get_kosync_doc_by_filename(self, filename):
+        if filename is None:
+            return None
         return self._get_one(KosyncDocument, KosyncDocument.filename == filename)
 
     def get_kosync_doc_by_booklore_id(self, booklore_id):
@@ -81,5 +83,6 @@ class KoSyncRepository(BaseRepository):
             return False
         with self.get_session() as session:
             return session.query(KosyncDocument).filter(
-                KosyncDocument.document_hash == doc_hash
+                KosyncDocument.document_hash == doc_hash,
+                KosyncDocument.linked_abs_id.isnot(None),
             ).first() is not None

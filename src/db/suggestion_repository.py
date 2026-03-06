@@ -68,5 +68,6 @@ class SuggestionRepository(BaseRepository):
             return False
         with self.get_session() as session:
             return session.query(KosyncDocument).filter(
-                KosyncDocument.document_hash == doc_hash
+                KosyncDocument.document_hash == doc_hash,
+                KosyncDocument.linked_abs_id.isnot(None),
             ).count() > 0

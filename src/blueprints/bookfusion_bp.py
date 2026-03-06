@@ -289,7 +289,7 @@ def get_highlights():
 
     grouped = {}
     for hl in highlights:
-        key = hl.bookfusion_book_id or _clean_book_title(hl.book_title or 'Unknown Book')
+        key = (hl.bookfusion_book_id, hl.matched_abs_id, _clean_book_title(hl.book_title or 'Unknown Book'))
         if key not in grouped:
             grouped[key] = {
                 'highlights': [],

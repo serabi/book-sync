@@ -166,7 +166,7 @@ else 0 %}
                         <div class="service-item cursor-pointer"
                             title="Update KoReader Hash (Current: {{ mapping.kosync_doc_id }})"
                             data-abs-id="{{ mapping.abs_id }}" data-title="{{ mapping.abs_title|escape }}"
-                            data-hash="{{ mapping.kosync_doc_id }}" onclick="updateKoSyncHash(event)">
+                            data-hash="{{ mapping.kosync_doc_id|escape }}" onclick="updateKoSyncHash(event)">
                             <img src="/static/koreader-logo.svg" alt="KO" class="service-icon">
                             <span class="service-name">KoSync</span>
                             {% if mapping.states.kosync is defined %}

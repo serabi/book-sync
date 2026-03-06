@@ -212,6 +212,7 @@ class IntegrationRepository(BaseRepository):
                         tags=b.get('tags'),
                         series=b.get('series'),
                         highlight_count=b.get('highlight_count', 0),
+                        last_updated=datetime.now(timezone.utc),
                     ))
                     saved += 1
         return saved

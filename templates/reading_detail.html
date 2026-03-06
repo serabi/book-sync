@@ -36,7 +36,7 @@
         {# ── Hero section with blurred background ── #}
         <div class="r-detail-hero">
             {% if book.cover_url %}
-            <div class="r-hero-bg" style="background-image: url('{{ book.cover_url | urlencode }}')"></div>
+            <div class="r-hero-bg" style="background-image: url('{{ book.cover_url }}')"></div>
             {% endif %}
             <div class="r-hero-content">
                 <div class="r-hero-cover">
@@ -258,10 +258,10 @@
             <div class="r-highlights-body" id="highlights-body">
                 {% for hl in bf_highlights %}
                 <div class="r-highlight-card">
-                    <blockquote class="r-highlight-quote">{{ hl.quote_text or hl.content }}</blockquote>
+                    <blockquote class="r-highlight-quote">{{ (hl.quote_text or hl.content) | sanitize_html }}</blockquote>
                     <div class="r-highlight-meta">
                         {% if hl.chapter_heading %}
-                        <span class="r-highlight-chapter">{{ hl.chapter_heading | replace('# ', '') }}</span>
+                        <span class="r-highlight-chapter">{{ hl.chapter_heading | replace('# ', '') | e }}</span>
                         {% endif %}
                         {% if hl.highlighted_at %}
                         <span class="r-highlight-date">{{ hl.highlighted_at.strftime('%b %d, %Y') }}</span>
@@ -290,7 +290,10 @@
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ percentage: pct / 100 })
             })
-            .then(function(r) { return r.json(); })
+            .then(function(r) {
+                if (!r.ok) throw new Error('Request failed');
+                return r.json();
+            })
             .then(function(data) {
                 if (data.success) {
                     var fill = document.getElementById('progress-bar-fill');
@@ -312,6 +315,10 @@
                         pctBadge.textContent = Math.round(pct) + '% complete';
                     }
                 }
+            })
+            .catch(function(err) {
+                console.error('Failed to update progress:', err);
+                alert('Failed to save progress. Please try again.');
             });
         }
         (function() {
