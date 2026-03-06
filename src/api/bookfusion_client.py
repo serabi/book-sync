@@ -395,6 +395,8 @@ class BookFusionClient:
                     continue
 
                 book_id = str(page.get('id', '')).strip()
+                if not book_id:
+                    continue
                 raw_frontmatter = page.get('frontmatter')
                 parsed = _parse_frontmatter(raw_frontmatter)
                 book_title = parsed['title'] or page.get('filename', '')
@@ -420,10 +422,13 @@ class BookFusionClient:
                 for hl in page.get('highlights', []):
                     if not isinstance(hl, dict):
                         continue
+                    highlight_id = hl.get('id', '')
+                    if not highlight_id:
+                        continue
                     content = hl.get('content', '')
                     highlights_batch.append({
                         'bookfusion_book_id': book_id,
-                        'highlight_id': hl.get('id', ''),
+                        'highlight_id': highlight_id,
                         'content': content,
                         'chapter_heading': hl.get('chapter_heading'),
                         'book_title': book_title,

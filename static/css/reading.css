@@ -1095,6 +1095,12 @@
   margin-bottom: 16px;
 }
 
+.r-highlights-head:focus-visible,
+.r-meta-toggle:focus-visible {
+  outline: 2px solid var(--color-primary-border);
+  outline-offset: 2px;
+}
+
 .r-highlights-head h2 {
   font-family: var(--font-heading);
   font-size: 1.25rem;
@@ -1146,6 +1152,7 @@
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
+  overflow-wrap: anywhere;
   margin-top: 8px;
   font-size: 0.8rem;
   color: var(--color-text-muted);

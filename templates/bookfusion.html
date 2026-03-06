@@ -27,9 +27,9 @@
         </div>
 
         <div class="bf-tabs">
-            <button class="bf-tab active" onclick="switchBFTab('highlights')">Highlights</button>
-            <button class="bf-tab" onclick="switchBFTab('library')">Library</button>
-            <button class="bf-tab" onclick="switchBFTab('upload')">Upload Books</button>
+            <button class="bf-tab active" data-tab="highlights" onclick="switchBFTab('highlights')">Highlights</button>
+            <button class="bf-tab" data-tab="library" onclick="switchBFTab('library')">Library</button>
+            <button class="bf-tab" data-tab="upload" onclick="switchBFTab('upload')">Upload Books</button>
         </div>
 
         <!-- Upload Panel -->
@@ -85,7 +85,7 @@
         document.getElementById('bf-panel-' + tab).classList.add('active');
         // Mark the matching tab button active (works both from onclick and programmatic calls)
         document.querySelectorAll('.bf-tab').forEach(t => {
-            if (t.textContent.trim().toLowerCase() === tab) t.classList.add('active');
+            if (t.dataset.tab === tab) t.classList.add('active');
         });
 
         if (tab === 'highlights') loadHighlights();

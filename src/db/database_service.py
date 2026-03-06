@@ -995,10 +995,14 @@ class DatabaseService:
         """Bulk upsert BookFusion highlights. Returns count of new highlights saved."""
         saved = 0
         with self.get_session() as session:
+            all_ids = [h['highlight_id'] for h in highlights if h.get('highlight_id')]
+            existing_rows = session.query(BookfusionHighlight).filter(
+                BookfusionHighlight.highlight_id.in_(all_ids)
+            ).all() if all_ids else []
+            lookup = {row.highlight_id: row for row in existing_rows}
+
             for h in highlights:
-                existing = session.query(BookfusionHighlight).filter(
-                    BookfusionHighlight.highlight_id == h['highlight_id']
-                ).first()
+                existing = lookup.get(h['highlight_id'])
                 if existing:
                     existing.content = h['content']
                     existing.chapter_heading = h.get('chapter_heading')
@@ -1056,11 +1060,7 @@ class DatabaseService:
 
     def link_bookfusion_highlights_by_book_id(self, bookfusion_book_id: str, abs_id: str):
         """Link all highlights for a BookFusion book_id to a dashboard abs_id."""
-        with self.get_session() as session:
-            session.query(BookfusionHighlight).filter(
-                BookfusionHighlight.bookfusion_book_id == bookfusion_book_id
-            ).update({BookfusionHighlight.matched_abs_id: abs_id},
-                     synchronize_session=False)
+        self.link_bookfusion_book(bookfusion_book_id, abs_id)
 
     def get_bookfusion_highlights_for_book(self, abs_id: str) -> list[BookfusionHighlight]:
         """Return BookFusion highlights matched to a specific PageKeeper book."""

@@ -26,6 +26,10 @@ class MockContainer:
         self.mock_database_service.get_all_settings.return_value = {}  # Default empty settings
         self.mock_ebook_parser = Mock()
         self.mock_sync_clients = Mock()
+        self.mock_bookfusion_client = Mock()
+        self.mock_bookfusion_client.is_configured.return_value = False
+        self.mock_bookfusion_client.highlights_api_key = ''
+        self.mock_bookfusion_client.upload_api_key = ''
 
         # Configure the sync manager to return our mock clients
         self.mock_sync_manager.abs_client = self.mock_abs_client
@@ -54,7 +58,7 @@ class MockContainer:
         return self.mock_database_service
 
     def bookfusion_client(self):
-        return Mock(is_configured=Mock(return_value=False))
+        return self.mock_bookfusion_client
 
     def sync_clients(self):
         """Return mock sync clients for integrations."""
