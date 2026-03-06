@@ -24,6 +24,8 @@ from src.utils.path_utils import sanitize_filename
 
 logger = logging.getLogger(__name__)
 
+ABS_COLLECTION_NAME = os.environ.get("ABS_COLLECTION_NAME", "Synced with KOReader")
+
 matching_bp = Blueprint('matching', __name__)
 
 
@@ -52,8 +54,6 @@ def match():
     container = get_container()
     manager = get_manager()
     database_service = get_database_service()
-
-    ABS_COLLECTION_NAME = os.environ.get("ABS_COLLECTION_NAME", "Synced with KOReader")
 
     if request.method == 'POST':
         action = request.form.get('action', '')

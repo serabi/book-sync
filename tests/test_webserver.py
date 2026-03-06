@@ -60,14 +60,6 @@ class MockContainer:
     def bookfusion_client(self):
         return self.mock_bookfusion_client
 
-    def sync_clients(self):
-        """Return mock sync clients for integrations."""
-        return {
-            'ABS': Mock(is_configured=Mock(return_value=True)),
-            'KoSync': Mock(is_configured=Mock(return_value=True)),
-            'Storyteller': Mock(is_configured=Mock(return_value=False))
-        }
-
     def data_dir(self):
         return Path(tempfile.gettempdir()) / 'test_data'
 
