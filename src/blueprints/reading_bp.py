@@ -73,7 +73,7 @@ def _build_book_reading_data(book, database_service, abs_service, states_by_book
 
     # Booklore cover fallback
     if not cover_url and bl_meta:
-        bl_id = bl_meta.raw_metadata_dict.get('id')
+        bl_id = (bl_meta.raw_metadata_dict or {}).get('id')
         if bl_id:
             cover_url = f"/api/cover-proxy/booklore/{bl_meta.source or 'booklore'}/{bl_id}"
 
@@ -439,9 +439,15 @@ def update_dates(abs_id):
     if not updates:
         return jsonify({"success": False, "error": "No date fields provided"}), 400
 
-    if updates.get('started_at') and updates.get('finished_at'):
-        if updates['started_at'] > updates['finished_at']:
-            return jsonify({"success": False, "error": "started_at cannot be after finished_at"}), 400
+    # Cross-validate against existing DB values when only one date is provided
+    book = database_service.get_book(abs_id)
+    if not book:
+        return jsonify({"success": False, "error": "Book not found"}), 404
+
+    effective_started = updates.get('started_at') or (book.started_at if 'started_at' not in updates else None)
+    effective_finished = updates.get('finished_at') or (book.finished_at if 'finished_at' not in updates else None)
+    if effective_started and effective_finished and effective_started > effective_finished:
+        return jsonify({"success": False, "error": "started_at cannot be after finished_at"}), 400
 
     book = database_service.update_book_reading_fields(abs_id, **updates)
     if not book:

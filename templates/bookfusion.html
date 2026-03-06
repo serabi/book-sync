@@ -108,7 +108,10 @@
             return;
         }
         fetch('/api/bookfusion/booklore-books?q=' + encodeURIComponent(q))
-            .then(function(r) { return r.json(); })
+            .then(function(r) {
+                if (!r.ok) throw new Error('Search failed');
+                return r.json();
+            })
             .then(function(books) {
                 clearChildren(list);
                 if (!books.length) {
@@ -136,6 +139,10 @@
 
                     list.appendChild(item);
                 });
+            })
+            .catch(function() {
+                clearChildren(list);
+                list.appendChild(el('div', 'bf-empty', 'Search failed'));
             });
     }
 
@@ -269,7 +276,10 @@
 
     function loadHighlights() {
         fetch('/api/bookfusion/highlights')
-            .then(function(r) { return r.json(); })
+            .then(function(r) {
+                if (!r.ok) throw new Error('Failed to load highlights');
+                return r.json();
+            })
             .then(function(data) {
                 var container = document.getElementById('bf-highlights-container');
                 clearChildren(container);
@@ -358,6 +368,11 @@
 
                     container.appendChild(group);
                 });
+            })
+            .catch(function() {
+                var container = document.getElementById('bf-highlights-container');
+                clearChildren(container);
+                container.appendChild(el('div', 'bf-empty', 'Failed to load highlights'));
             });
     }
 

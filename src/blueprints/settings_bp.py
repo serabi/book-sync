@@ -372,13 +372,12 @@ def _test_telegram() -> tuple[bool, str]:
 
 
 def _get_api_key_override() -> str | None:
-    """Read api_key from POST JSON body (preferred) or GET query param (legacy fallback)."""
+    """Read api_key from POST JSON body only (not query params, to avoid credential leakage)."""
     if request.method == 'POST' and request.is_json:
         key = (request.json or {}).get('api_key', '').strip()
         if key:
             return key
-    key = request.args.get('api_key', '').strip()
-    return key or None
+    return None
 
 
 def _test_bookfusion() -> tuple[bool, str]:

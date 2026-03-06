@@ -247,13 +247,21 @@ function initReadingPage(currentYear) {
     goalSave.addEventListener('click', () => {
       const target = parseInt(goalInput?.value, 10);
       if (!target || target < 1) return;
+      goalSave.disabled = true;
       fetch(`/api/reading/goal/${currentYear}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ target_books: target }),
       })
-        .then(r => r.json())
-        .then(data => { if (data.success) window.location.reload(); });
+        .then(r => {
+          if (!r.ok) throw new Error('Failed to save goal');
+          return r.json();
+        })
+        .then(data => {
+          if (data.success) window.location.reload();
+          else goalSave.disabled = false;
+        })
+        .catch(() => { goalSave.disabled = false; });
     });
   }
 }
@@ -300,7 +308,18 @@ function initReadingDetail() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
-      });
+      })
+        .then(r => r.json())
+        .then(data => {
+          if (!data.success) {
+            input.style.outline = '2px solid var(--color-danger, red)';
+            setTimeout(() => { input.style.outline = ''; }, 2000);
+          }
+        })
+        .catch(() => {
+          input.style.outline = '2px solid var(--color-danger, red)';
+          setTimeout(() => { input.style.outline = ''; }, 2000);
+        });
     });
   }
   bindDate('started_at', 'started-at');
@@ -328,15 +347,16 @@ function initReadingDetail() {
           if (!data.success) return;
           textarea.value = '';
 
-          const empty = timeline.querySelector('.r-journal-empty');
-          if (empty) empty.remove();
-
-          timeline.prepend(buildJournalNode(data.journal));
+          if (timeline) {
+            const empty = timeline.querySelector('.r-journal-empty');
+            if (empty) empty.remove();
+            timeline.prepend(buildJournalNode(data.journal));
+          }
         });
     });
 
     // Delete (event delegation)
-    timeline.addEventListener('click', e => {
+    if (timeline) timeline.addEventListener('click', e => {
       const btn = e.target.closest('.r-tl-delete');
       if (!btn) return;
       fetch(`/api/reading/journal/${btn.dataset.journalId}`, { method: 'DELETE' })

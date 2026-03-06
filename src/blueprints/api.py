@@ -242,7 +242,7 @@ def api_booklore_search():
                     'source_tag': client.source_tag,
                 })
         except Exception:
-            logger.warning("Booklore search failed for source_tag=%s", client.source_tag)
+            logger.warning("Booklore search failed for source_tag=%s", client.source_tag, exc_info=True)
 
     return jsonify(results)
 

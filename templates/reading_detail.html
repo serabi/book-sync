@@ -206,7 +206,7 @@
                 {% if metadata.description %}
                 <div class="r-meta-description">
                     <span class="r-meta-label">Description</span>
-                    <div class="r-meta-desc-text">{{ metadata.description | truncate(600) | sanitize_html }}</div>
+                    <div class="r-meta-desc-text">{{ metadata.description | sanitize_html | truncate(600) }}</div>
                 </div>
                 {% endif %}
             </div>
@@ -324,6 +324,7 @@
                 if (!toggleEl) return;
                 function doToggle() {
                     var body = document.getElementById(bodyId);
+                    if (!body) return;
                     body.classList.toggle('hidden');
                     toggleEl.querySelector('.' + chevronClass).classList.toggle('collapsed');
                     toggleEl.setAttribute('aria-expanded',
