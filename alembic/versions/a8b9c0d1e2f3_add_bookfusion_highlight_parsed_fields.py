@@ -7,7 +7,7 @@ Create Date: 2026-03-05
 
 import re
 from collections.abc import Sequence
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import sqlalchemy as sa
 from sqlalchemy import text
@@ -25,7 +25,7 @@ def _parse_date(content: str) -> datetime | None:
     m = re.search(r'\*\*Date Created\*\*:\s*(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})\s*UTC', content)
     if not m:
         return None
-    return datetime.strptime(m.group(1), '%Y-%m-%d %H:%M:%S').replace(tzinfo=timezone.utc)
+    return datetime.strptime(m.group(1), '%Y-%m-%d %H:%M:%S').replace(tzinfo=UTC)
 
 
 def _parse_quote(content: str) -> str | None:
