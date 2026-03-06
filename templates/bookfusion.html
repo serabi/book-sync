@@ -35,7 +35,7 @@
         <!-- Upload Panel -->
         <div class="bf-panel" id="bf-panel-upload">
             <div class="bf-search">
-                <input type="text" id="bf-search-input" placeholder="Search Booklore books..." oninput="debounceSearch()">
+                <input type="text" id="bf-search-input" class="input-compact" placeholder="Search Booklore books..." oninput="debounceSearch()">
             </div>
             <div id="bf-book-list" class="bf-book-list">
                 <div class="bf-empty">Type to search your Booklore library</div>
@@ -45,7 +45,7 @@
         <!-- Library Panel -->
         <div class="bf-panel" id="bf-panel-library">
             <div class="bf-search">
-                <input type="text" id="bf-library-search" placeholder="Filter library..." oninput="filterLibrary()">
+                <input type="text" id="bf-library-search" class="input-compact" placeholder="Filter library..." oninput="filterLibrary()">
             </div>
             <div id="bf-library-list" class="bf-book-list">
                 <div class="bf-empty">Loading library catalog...</div>
@@ -95,7 +95,7 @@
 
         return `
             <div class="bf-combobox" data-on-change="${onChangeFnName}" ${extraAttrs}>
-                <input type="text" class="bf-combobox-input" placeholder="${escapeHtml(placeholder)}" 
+                <input type="text" class="bf-combobox-input input-inline" placeholder="${escapeHtml(placeholder)}" 
                     value="${initialValue}" data-selected-value="${initialDataValue}"
                     onfocus="this.parentElement.classList.add('open')" 
                     onblur="setTimeout(() => this.parentElement.classList.remove('open'), 200)"

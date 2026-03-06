@@ -191,11 +191,6 @@
 .r-sort-select {
   padding: 7px 10px;
   font-size: 13px;
-  background: var(--color-bg-input);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  color: var(--color-text);
-  font-family: var(--font-body);
   cursor: pointer;
   transition: border-color var(--transition);
 }
@@ -707,13 +702,8 @@
 
 .r-manual-pct-input {
   width: 60px;
-  padding: 4px 6px;
   background: rgba(0, 0, 0, 0.25);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: var(--radius-sm);
-  color: var(--color-text);
-  font-family: var(--font-body);
-  font-size: 12px;
+  border-color: rgba(255, 255, 255, 0.08);
   text-align: center;
 }
 
@@ -794,13 +784,8 @@
 }
 
 .r-date-field input[type="date"] {
-  padding: 6px 8px;
   background: rgba(0, 0, 0, 0.25);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: var(--radius-sm);
-  color: var(--color-text);
-  font-family: var(--font-body);
-  font-size: 12px;
+  border-color: rgba(255, 255, 255, 0.08);
   transition: border-color var(--transition);
 }
 

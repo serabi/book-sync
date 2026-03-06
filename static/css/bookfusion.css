@@ -64,12 +64,8 @@
 }
 .bf-search input {
     flex: 1;
-    padding: 10px 14px;
-    border: 1px solid var(--color-border-light);
-    border-radius: var(--radius);
+    border-color: var(--color-border-light);
     background: var(--color-surface);
-    color: var(--color-text);
-    font-size: 14px;
 }
 .bf-search input:focus {
     border-color: var(--color-bookfusion);
@@ -201,12 +197,7 @@
     padding-left: 12px;
 }
 .bf-book-select {
-    padding: 4px 8px;
-    border: 1px solid var(--color-border-light);
-    border-radius: var(--radius-sm);
     background: var(--color-surface);
-    color: var(--color-text);
-    font-size: 0.8rem;
     max-width: 200px;
 }
 .bf-book-select:focus-visible {
@@ -223,12 +214,7 @@
 }
 .bf-combobox-input {
     width: 100%;
-    padding: 4px 8px;
-    border: 1px solid var(--color-border-light);
-    border-radius: var(--radius-sm);
     background: var(--color-surface);
-    color: var(--color-text);
-    font-size: 0.8rem;
     box-sizing: border-box;
 }
 .bf-combobox-input:focus {
@@ -329,7 +315,7 @@
     flex-shrink: 0;
 }
 .bf-link-btn {
-    background: var(--color-primary-hover);
+    background: var(--color-success);
 }
 .bf-unlink-btn {
     background: var(--color-surface-hover);

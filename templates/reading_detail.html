@@ -108,7 +108,7 @@
                         <div class="r-manual-progress" id="manual-progress">
                             <input type="number" id="manual-pct-input" min="0" max="100" step="1"
                                    value="{{ '%.0f' | format(book.unified_progress) }}"
-                                   placeholder="0" class="r-manual-pct-input">
+                                   placeholder="0" class="r-manual-pct-input input-inline">
                             <span class="r-manual-pct-label">%</span>
                             <button class="btn btn-primary btn-sm" onclick="setManualProgress()">Set</button>
                         </div>
@@ -128,11 +128,11 @@
                     <div class="r-detail-dates">
                         <label class="r-date-field">
                             <span class="r-date-label">Started</span>
-                            <input type="date" id="started-at" value="{{ book.started_at or '' }}" data-abs-id="{{ book.abs_id }}">
+                            <input type="date" id="started-at" class="input-inline" value="{{ book.started_at or '' }}" data-abs-id="{{ book.abs_id }}">
                         </label>
                         <label class="r-date-field">
                             <span class="r-date-label">Finished</span>
-                            <input type="date" id="finished-at" value="{{ book.finished_at or '' }}" data-abs-id="{{ book.abs_id }}">
+                            <input type="date" id="finished-at" class="input-inline" value="{{ book.finished_at or '' }}" data-abs-id="{{ book.abs_id }}">
                         </label>
                     </div>
                 </div>

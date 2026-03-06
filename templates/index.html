@@ -53,7 +53,7 @@
                                     <a href="/match?search={{ suggestion.title|urlencode }}"
                                         class="btn btn-sm btn-primary btn-review">Review</a>
                                     <button onclick='dismissSuggestion(event, {{ suggestion.source_id|tojson }})'
-                                        class="btn-dismiss">Dismiss</button>
+                                        class="btn btn-xs btn-ghost btn-dismiss">Dismiss</button>
                                 </div>
                             </div>
                         </div>
@@ -288,7 +288,7 @@
                     <div id="hc-manual" style="display:none;">
                         <p>Enter Hardcover URL or book ID:</p>
                         <input type="text" id="hc-input" placeholder="https://hardcover.app/books/...">
-                        <button onclick="resolveManualInput()">Search</button>
+                        <button class="btn btn-md btn-accent" onclick="resolveManualInput()">Search</button>
                     </div>
                     <div id="hc-error" style="display:none;">
                         <p id="hc-error-msg" class="hc-text-error"></p>
@@ -297,8 +297,8 @@
                     </div>
                 </div>
                 <div class="hc-modal-footer">
-                    <button class="hc-btn-cancel" onclick="closeHardcoverModal()">Cancel</button>
-                    <button id="hc-link-btn" class="hc-btn-link" onclick="linkSelectedEdition()" disabled>Link
+                    <button class="btn btn-md btn-secondary hc-btn-cancel" onclick="closeHardcoverModal()">Cancel</button>
+                    <button id="hc-link-btn" class="btn btn-md btn-accent hc-btn-link" onclick="linkSelectedEdition()" disabled>Link
                         Book</button>
                 </div>
             </div>
@@ -389,8 +389,8 @@
                     </p>
                 </div>
                 <div class="hc-modal-footer">
-                    <button class="hc-btn-cancel" onclick="closeDeleteMappingModal()">Cancel</button>
-                    <button class="hc-btn-link" onclick="_dmNoKeepMapping()">No, Keep Mapping</button>
+                    <button class="btn btn-md btn-secondary hc-btn-cancel" onclick="closeDeleteMappingModal()">Cancel</button>
+                    <button class="btn btn-md btn-accent hc-btn-link" onclick="_dmNoKeepMapping()">No, Keep Mapping</button>
                     <button onclick="_dmYesDelete()" class="btn btn-danger">Yes, Delete</button>
                 </div>
             </div>

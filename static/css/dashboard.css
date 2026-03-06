@@ -216,41 +216,7 @@
 }
 
 .hc-modal-footer button {
-  padding: 0.6rem 1.25rem;
-  border-radius: var(--radius);
-  border: none;
-  cursor: pointer;
-  font-size: 0.875rem;
-  font-weight: 600;
   transition: all var(--transition-bounce);
-}
-
-.hc-btn-cancel {
-  background: var(--color-surface);
-  color: var(--color-text-muted);
-  border: 1px solid var(--color-border-light) !important;
-}
-
-.hc-btn-cancel:hover {
-  background: var(--color-surface-hover);
-  color: var(--color-text);
-}
-
-.hc-btn-link {
-  background: var(--gradient-primary);
-  color: #fff;
-  box-shadow: 0 2px 12px var(--color-primary-glow);
-}
-
-.hc-btn-link:hover:not(:disabled) {
-  box-shadow: 0 4px 20px rgba(124, 58, 237, 0.45);
-  transform: translateY(-1px);
-}
-
-.hc-btn-link:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-  box-shadow: none;
 }
 
 /* HC book info */
@@ -408,20 +374,7 @@
 }
 
 #hc-manual button {
-  background: var(--gradient-primary);
-  color: #fff;
-  border: none;
-  padding: 0.6rem 1.25rem;
-  border-radius: var(--radius);
-  cursor: pointer;
-  font-size: 0.875rem;
-  font-weight: 600;
   transition: all var(--transition-bounce);
-}
-
-#hc-manual button:hover {
-  box-shadow: 0 4px 16px var(--color-primary-glow);
-  transform: translateY(-1px);
 }
 
 .hc-text-muted {
@@ -653,24 +606,7 @@
 }
 
 .btn-review {
-  padding: 4px 10px;
-  font-size: 0.8rem;
   text-decoration: none;
-}
-
-.btn-dismiss {
-  padding: 4px 10px;
-  font-size: 0.8rem;
-  background: rgba(255, 255, 255, 0.1);
-  border: none;
-  cursor: pointer;
-  color: #fff;
-  border-radius: var(--radius);
-  transition: background 0.2s;
-}
-
-.btn-dismiss:hover {
-  background: rgba(255, 255, 255, 0.2);
 }
 
 

@@ -198,13 +198,6 @@
 
 .form-group input:not([type="checkbox"]):not([type="hidden"]),
 .form-group select {
-  padding: 10px 14px;
-  background: var(--color-bg-input);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  color: var(--color-text);
-  font-size: 14px;
-  font-family: var(--font-body);
   width: 100%;
   transition: border-color var(--transition-smooth), box-shadow var(--transition-smooth);
 }
