@@ -28,7 +28,11 @@ async function searchStoryteller() {
     if (!query) return;
 
     const resultsDiv = document.getElementById('st-results');
-    resultsDiv.innerHTML = '<div class="st-loading">Searching...</div>';
+    resultsDiv.textContent = '';
+    const searchingDiv = document.createElement('div');
+    searchingDiv.className = 'st-loading';
+    searchingDiv.textContent = 'Searching...';
+    resultsDiv.appendChild(searchingDiv);
 
     try {
         const response = await fetch(`/api/storyteller/search?q=${encodeURIComponent(query)}`);
@@ -68,7 +72,7 @@ async function searchStoryteller() {
             titleDiv.textContent = book.title;
             const authorDiv = document.createElement('div');
             authorDiv.className = 'st-card-author';
-            authorDiv.textContent = book.authors.join(', ');
+            authorDiv.textContent = (book.authors || []).join(', ');
             info.appendChild(titleDiv);
             info.appendChild(authorDiv);
 
@@ -95,7 +99,11 @@ async function linkStoryteller(uuid) {
     if (!currentAbsId) return;
 
     const resultsDiv = document.getElementById('st-results');
-    resultsDiv.innerHTML = '<div class="st-loading">Linking and downloading...</div>';
+    resultsDiv.textContent = '';
+    const loadingDiv = document.createElement('div');
+    loadingDiv.className = 'st-loading';
+    loadingDiv.textContent = 'Linking and downloading...';
+    resultsDiv.appendChild(loadingDiv);
 
     try {
         const response = await fetch(`/api/storyteller/link/${currentAbsId}`, {
@@ -113,7 +121,11 @@ async function linkStoryteller(uuid) {
             throw new Error(err.error || 'Failed to link');
         }
     } catch (e) {
-        resultsDiv.innerHTML = `<div class="st-error">Link Failed: ${e.message}</div>`;
+        resultsDiv.textContent = '';
+        const errDiv = document.createElement('div');
+        errDiv.className = 'st-error';
+        errDiv.textContent = 'Link Failed: ' + e.message;
+        resultsDiv.appendChild(errDiv);
     }
 }
 
