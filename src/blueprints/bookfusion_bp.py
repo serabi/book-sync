@@ -289,15 +289,16 @@ def get_highlights():
 
     grouped = {}
     for hl in highlights:
-        book = _clean_book_title(hl.book_title or 'Unknown Book')
-        if book not in grouped:
-            grouped[book] = {
+        key = hl.bookfusion_book_id or _clean_book_title(hl.book_title or 'Unknown Book')
+        if key not in grouped:
+            grouped[key] = {
                 'highlights': [],
                 'matched_abs_id': hl.matched_abs_id,
                 'bookfusion_book_id': hl.bookfusion_book_id,
+                'display_title': _clean_book_title(hl.book_title or 'Unknown Book'),
             }
         date_str = hl.highlighted_at.strftime('%Y-%m-%d %H:%M:%S') if hl.highlighted_at else None
-        grouped[book]['highlights'].append({
+        grouped[key]['highlights'].append({
             'id': hl.id,
             'quote': hl.quote_text or hl.content,
             'date': date_str,
@@ -306,8 +307,18 @@ def get_highlights():
         })
 
     # Sort highlights within each book by date
-    for book in grouped:
-        grouped[book]['highlights'].sort(key=lambda h: h['date'] or '', reverse=True)
+    for key in grouped:
+        grouped[key]['highlights'].sort(key=lambda h: h['date'] or '', reverse=True)
+
+    # Re-key by display title for the frontend (API contract uses title as key)
+    display = {}
+    for _key, group in grouped.items():
+        title = group.pop('display_title')
+        # Disambiguate if two different books share the same cleaned title
+        display_key = title
+        if display_key in display:
+            display_key = f"{title} ({group['bookfusion_book_id']})"
+        display[display_key] = group
 
     cursor = db_service.get_bookfusion_sync_cursor()
 
@@ -315,7 +326,7 @@ def get_highlights():
     books = db_service.get_all_books()
     book_list = [{'abs_id': b.abs_id, 'title': b.abs_title} for b in books if b.abs_title]
 
-    return jsonify({'highlights': grouped, 'has_synced': cursor is not None, 'books': book_list})
+    return jsonify({'highlights': display, 'has_synced': cursor is not None, 'books': book_list})
 
 
 @bookfusion_bp.route('/api/bookfusion/link-highlight', methods=['POST'])
@@ -510,6 +521,9 @@ def match_to_book():
         return jsonify({'error': 'bookfusion_id required'}), 400
 
     db_service = get_database_service()
+
+    if abs_id and not db_service.get_book(abs_id):
+        return jsonify({'error': 'Book not found'}), 404
 
     # Link ALL catalog books + highlights in the group
     for bid in bookfusion_ids:

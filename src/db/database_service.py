@@ -1001,8 +1001,13 @@ class DatabaseService:
             ).all() if all_ids else []
             lookup = {row.highlight_id: row for row in existing_rows}
 
+            seen_in_batch = set()
             for h in highlights:
-                existing = lookup.get(h['highlight_id'])
+                highlight_id = h.get('highlight_id')
+                if not highlight_id or highlight_id in seen_in_batch:
+                    continue
+                seen_in_batch.add(highlight_id)
+                existing = lookup.get(highlight_id)
                 if existing:
                     existing.content = h['content']
                     existing.chapter_heading = h.get('chapter_heading')
