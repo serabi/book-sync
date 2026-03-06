@@ -595,6 +595,11 @@
                                 </div>
                                 <div class="help-text">BookFusion &rarr; Settings &rarr; <strong>Calibre</strong> section. Used for book uploads.</div>
                             </div>
+                            <div class="help-text" style="margin-top: 0.75rem; border-top: 1px solid var(--color-border); padding-top: 0.75rem;">
+                                When linking BookFusion books to the dashboard, PageKeeper will attempt to set
+                                reading dates automatically. If Hardcover is configured, actual reading dates are
+                                pulled from there. Otherwise, dates are estimated from highlight timestamps.
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -739,6 +744,10 @@
                                 <input type="text" name="HARDCOVER_WEB_URL" value="{{ get_val('HARDCOVER_WEB_URL') }}"
                                     placeholder="https://hardcover.app">
                                 <div class="help-text">Browser-reachable URL shown as a shortcut in the top navbar.</div>
+                            </div>
+                            <div class="help-text" style="margin-top: 0.5rem;">
+                                When enabled, Hardcover reading dates are used to populate your reading log
+                                automatically &mdash; including when linking books from BookFusion.
                             </div>
                         </div>
                     </div>
