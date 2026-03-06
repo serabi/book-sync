@@ -100,6 +100,8 @@ class ProgressResetService:
             if not acquired:
                 logger.warning(f"Sync lock busy — external clients will be reset on next clear attempt. "
                                f"Local progress already cleared for '{sanitize_log_data(abs_id)}'")
+                with self._pending_clears_lock:
+                    self._pending_clears.discard(abs_id)
                 # Phase 1 is enough — the 0% states with fresh timestamps will prevent
                 # the sync daemon from pulling stale external progress
                 return {

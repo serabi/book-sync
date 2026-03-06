@@ -58,11 +58,9 @@ class SuggestionRepository(BaseRepository):
         """Delete suggestions whose source_id is not in the books table."""
         from sqlalchemy import not_
         with self.get_session() as session:
-            stale_query = session.query(PendingSuggestion).filter(
+            count = session.query(PendingSuggestion).filter(
                 not_(PendingSuggestion.source_id.in_(session.query(Book.abs_id)))
-            )
-            count = stale_query.count()
-            stale_query.delete(synchronize_session=False)
+            ).delete(synchronize_session=False)
             return count
 
     def is_hash_linked_to_device(self, doc_hash):

@@ -1,5 +1,7 @@
 """Repository for reading tracker: journals, goals, and reading fields."""
 
+from sqlalchemy import extract
+
 from .base_repository import BaseRepository
 from .models import Book, ReadingGoal, ReadingJournal
 
@@ -52,8 +54,10 @@ class ReadingRepository(BaseRepository):
         return self._get_one(ReadingGoal, ReadingGoal.year == year)
 
     def save_reading_goal(self, year, target_books):
+        if target_books is None or not isinstance(target_books, int):
+            raise ValueError("target_books must be a non-negative integer")
         if target_books < 0:
-            raise ValueError("target_books must be >= 0")
+            raise ValueError("target_books must be a non-negative integer")
         with self.get_session() as session:
             existing = session.query(ReadingGoal).filter(ReadingGoal.year == year).first()
             if existing:
@@ -73,7 +77,7 @@ class ReadingRepository(BaseRepository):
     def get_reading_stats(self, year):
         with self.get_session() as session:
             books_finished = session.query(Book).filter(
-                Book.finished_at.like(f"{year}-%")
+                extract('year', Book.finished_at) == year
             ).count()
             currently_reading = session.query(Book).filter(Book.status == 'active').count()
             total_tracked = session.query(Book).filter(

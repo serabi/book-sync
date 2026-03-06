@@ -1,7 +1,7 @@
 """Repository for integration entities: Hardcover, Booklore, BookFusion."""
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
@@ -71,7 +71,8 @@ class IntegrationRepository(BaseRepository):
                 except IntegrityError:
                     session.rollback()
                     existing = session.query(BookloreBook).filter(
-                        BookloreBook.filename == booklore_book.filename
+                        BookloreBook.filename == booklore_book.filename,
+                        BookloreBook.source == booklore_book.source
                     ).first()
                     if existing:
                         for attr in ['title', 'authors', 'raw_metadata', 'source']:
@@ -200,11 +201,11 @@ class IntegrationRepository(BaseRepository):
                     existing.tags = b.get('tags') or existing.tags
                     existing.series = b.get('series') or existing.series
                     existing.highlight_count = b.get('highlight_count', existing.highlight_count)
-                    existing.last_updated = datetime.utcnow()
+                    existing.last_updated = datetime.now(timezone.utc)
                 else:
                     session.add(BookfusionBook(
                         bookfusion_id=b['bookfusion_id'],
-                        title=title or b.get('title'),
+                        title=title,
                         authors=b.get('authors'),
                         filename=b.get('filename'),
                         frontmatter=b.get('frontmatter'),

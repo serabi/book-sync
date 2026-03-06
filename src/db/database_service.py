@@ -90,10 +90,9 @@ class DatabaseService:
                 command.stamp(alembic_cfg, "head")
             else:
                 # Normal migration path
-                conn = engine.connect()
-                context = MigrationContext.configure(conn)
-                current_rev = context.get_current_revision()
-                conn.close()
+                with engine.connect() as conn:
+                    context = MigrationContext.configure(conn)
+                    current_rev = context.get_current_revision()
 
                 if current_rev is None and not tables:
                     # Fresh database — will be created by create_all, then stamp
@@ -124,8 +123,16 @@ class DatabaseService:
                         if col.default is not None:
                             default_val = col.default.arg
                             if callable(default_val):
-                                default_val = default_val(None)
-                            if isinstance(default_val, str):
+                                try:
+                                    default_val = default_val()
+                                except TypeError:
+                                    try:
+                                        default_val = default_val(None)
+                                    except Exception:
+                                        default_val = None
+                            if isinstance(default_val, bool):
+                                default_clause = f" DEFAULT {'TRUE' if default_val else 'FALSE'}"
+                            elif isinstance(default_val, str):
                                 default_clause = f" DEFAULT '{default_val}'"
                             elif isinstance(default_val, (int, float)):
                                 default_clause = f" DEFAULT {default_val}"
@@ -439,7 +446,7 @@ class DatabaseMigrator:
 
         # Migrate mappings/books
         if self.json_db_path.exists():
-            with open(self.json_db_path, 'r') as f:
+            with open(self.json_db_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
 
             mappings = data.get('mappings', [])
@@ -450,7 +457,7 @@ class DatabaseMigrator:
 
         # Migrate states
         if self.json_state_path.exists():
-            with open(self.json_state_path, 'r') as f:
+            with open(self.json_state_path, 'r', encoding='utf-8') as f:
                 state_data = json.load(f)
             self._migrate_states(state_data)
 

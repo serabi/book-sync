@@ -1,6 +1,6 @@
 """Repository for KoSync document operations."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from .base_repository import BaseRepository
 from .models import KosyncDocument
@@ -13,7 +13,7 @@ class KoSyncRepository(BaseRepository):
 
     def save_kosync_document(self, doc):
         with self.get_session() as session:
-            doc.last_updated = datetime.utcnow()
+            doc.last_updated = datetime.now(timezone.utc)
             merged = session.merge(doc)
             session.flush()
             session.refresh(merged)
@@ -44,7 +44,7 @@ class KoSyncRepository(BaseRepository):
             ).first()
             if doc:
                 doc.linked_abs_id = abs_id
-                doc.last_updated = datetime.utcnow()
+                doc.last_updated = datetime.now(timezone.utc)
                 return True
             return False
 
@@ -55,7 +55,7 @@ class KoSyncRepository(BaseRepository):
             ).first()
             if doc:
                 doc.linked_abs_id = None
-                doc.last_updated = datetime.utcnow()
+                doc.last_updated = datetime.now(timezone.utc)
                 return True
             return False
 
@@ -72,6 +72,8 @@ class KoSyncRepository(BaseRepository):
         return self._get_one(KosyncDocument, KosyncDocument.filename == filename)
 
     def get_kosync_doc_by_booklore_id(self, booklore_id):
+        if booklore_id is None:
+            return None
         return self._get_one(KosyncDocument, KosyncDocument.booklore_id == str(booklore_id))
 
     def is_hash_linked_to_device(self, doc_hash):
@@ -80,4 +82,4 @@ class KoSyncRepository(BaseRepository):
         with self.get_session() as session:
             return session.query(KosyncDocument).filter(
                 KosyncDocument.document_hash == doc_hash
-            ).count() > 0
+            ).first() is not None

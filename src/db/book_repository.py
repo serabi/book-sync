@@ -3,6 +3,7 @@
 import logging
 
 from sqlalchemy import func
+from sqlalchemy.exc import ProgrammingError
 
 from .base_repository import BaseRepository
 from .models import (
@@ -86,8 +87,9 @@ class BookRepository(BaseRepository):
                         BookAlignment.abs_id == old_abs_id).delete(synchronize_session=False)
                     session.query(HardcoverDetails).filter(
                         HardcoverDetails.abs_id == old_abs_id).delete(synchronize_session=False)
-                except Exception:
-                    pass
+                except ProgrammingError as e:
+                    logger.warning(f"Table missing during migration cleanup for '{old_abs_id}': {e}")
+                    session.rollback()
 
                 logger.info(f"Migrated data from '{old_abs_id}' to '{new_abs_id}'")
             except Exception as e:
@@ -148,6 +150,8 @@ class BookRepository(BaseRepository):
                 for key, value in kwargs.items():
                     if hasattr(job, key):
                         setattr(job, key, value)
+                    else:
+                        logger.warning(f"update_latest_job: unknown attribute '{key}' for job {job.id}")
                 session.flush()
                 session.refresh(job)
                 session.expunge(job)
@@ -164,9 +168,13 @@ class BookRepository(BaseRepository):
 
     def get_books_with_recent_activity(self, limit=10):
         with self.get_session() as session:
-            books = session.query(Book).join(State).order_by(
-                State.last_updated.desc()
-            ).limit(limit).all()
+            latest = session.query(
+                State.abs_id,
+                func.max(State.last_updated).label('max_updated')
+            ).group_by(State.abs_id).subquery()
+            books = session.query(Book).join(
+                latest, Book.abs_id == latest.c.abs_id
+            ).order_by(latest.c.max_updated.desc()).limit(limit).all()
             for book in books:
                 session.expunge(book)
             return books

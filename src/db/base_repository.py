@@ -3,6 +3,8 @@
 import logging
 from contextlib import contextmanager
 
+from sqlalchemy.exc import IntegrityError
+
 logger = logging.getLogger(__name__)
 
 
@@ -78,8 +80,21 @@ class BaseRepository:
                 session.expunge(existing)
                 return existing
             else:
-                session.add(obj)
-                session.flush()
+                try:
+                    session.add(obj)
+                    session.flush()
+                except IntegrityError:
+                    session.rollback()
+                    existing = session.query(model).filter(*lookup_filters).first()
+                    if existing:
+                        for attr in update_attrs:
+                            if hasattr(obj, attr):
+                                setattr(existing, attr, getattr(obj, attr))
+                        session.flush()
+                        session.refresh(existing)
+                        session.expunge(existing)
+                        return existing
+                    raise
                 session.refresh(obj)
                 session.expunge(obj)
                 return obj
