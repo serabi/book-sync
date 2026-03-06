@@ -53,6 +53,9 @@ class MockContainer:
     def database_service(self):
         return self.mock_database_service
 
+    def bookfusion_client(self):
+        return Mock(is_configured=Mock(return_value=False))
+
     def sync_clients(self):
         """Return mock sync clients for integrations."""
         return {

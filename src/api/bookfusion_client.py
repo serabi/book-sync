@@ -84,7 +84,7 @@ def _calibre_digest(file_bytes: bytes) -> str:
     The plugin hashes: file_size_as_bytes + null byte + file_content (in 64k blocks).
     """
     h = hashlib.sha256()
-    h.update(bytes(len(file_bytes)))
+    h.update(str(len(file_bytes)).encode())
     h.update(b'\0')
     offset = 0
     while offset < len(file_bytes):
@@ -394,7 +394,7 @@ class BookFusionClient:
                 if page.get('type') != 'book':
                     continue
 
-                book_id = page.get('id', '')
+                book_id = str(page.get('id', '')).strip()
                 raw_frontmatter = page.get('frontmatter')
                 parsed = _parse_frontmatter(raw_frontmatter)
                 book_title = parsed['title'] or page.get('filename', '')
@@ -456,7 +456,7 @@ class BookFusionClient:
         try:
             library = self.fetch_library()
             for item in library:
-                bid = str(item.get('id', ''))
+                bid = str(item.get('id', '')).strip()
                 if not bid or bid in all_books:
                     continue
                 title = item.get('title', '') or item.get('filename', '')

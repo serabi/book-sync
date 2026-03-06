@@ -182,8 +182,9 @@ def _auto_match_highlights(db_service) -> int:
                         abs_id = book_map[norm_pk]
 
         if abs_id:
-            raw_title = highlights[0].book_title
-            db_service.link_bookfusion_book(raw_title, abs_id)
+            bf_ids = {hl.bookfusion_book_id for hl in highlights if hl.bookfusion_book_id}
+            for bf_id in bf_ids:
+                db_service.link_bookfusion_book(bf_id, abs_id)
             matched_count += len(highlights)
 
     return matched_count
@@ -215,7 +216,11 @@ def _estimate_reading_dates(db_service, abs_id: str, bookfusion_ids: list[str], 
             hc_details = db_service.get_hardcover_details(abs_id)
             user_book = None
             if hc_details and hc_details.hardcover_book_id:
-                user_book = hc_client.find_user_book(int(hc_details.hardcover_book_id))
+                try:
+                    user_book = hc_client.find_user_book(int(hc_details.hardcover_book_id))
+                except (ValueError, TypeError):
+                    logger.debug("Invalid hardcover_book_id: %s", hc_details.hardcover_book_id)
+                    user_book = None
             elif title:
                 search_result = hc_client.search_by_title_author(title)
                 if search_result:
@@ -283,7 +288,11 @@ def get_highlights():
     for hl in highlights:
         book = _clean_book_title(hl.book_title or 'Unknown Book')
         if book not in grouped:
-            grouped[book] = {'highlights': [], 'matched_abs_id': hl.matched_abs_id}
+            grouped[book] = {
+                'highlights': [],
+                'matched_abs_id': hl.matched_abs_id,
+                'bookfusion_book_id': hl.bookfusion_book_id,
+            }
         date_str = hl.highlighted_at.strftime('%Y-%m-%d %H:%M:%S') if hl.highlighted_at else None
         grouped[book]['highlights'].append({
             'id': hl.id,
@@ -313,14 +322,14 @@ def link_highlight():
     if not data:
         return jsonify({'error': 'No data provided'}), 400
 
-    book_title = data.get('book_title')
+    bookfusion_book_id = data.get('bookfusion_book_id')
     abs_id = data.get('abs_id')  # None or empty to unlink
 
-    if not book_title:
-        return jsonify({'error': 'book_title required'}), 400
+    if not bookfusion_book_id:
+        return jsonify({'error': 'bookfusion_book_id required'}), 400
 
     db_service = get_database_service()
-    db_service.link_bookfusion_book(book_title, abs_id or None)
+    db_service.link_bookfusion_book(bookfusion_book_id, abs_id or None)
     return jsonify({'success': True})
 
 

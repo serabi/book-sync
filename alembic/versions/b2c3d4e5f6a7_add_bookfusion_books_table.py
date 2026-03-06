@@ -1,7 +1,7 @@
 """add bookfusion_books table
 
 Revision ID: b2c3d4e5f6a7
-Revises: a7b8c9d0e1f2
+Revises: a8b9c0d1e2f3
 Create Date: 2026-03-05
 """
 from collections.abc import Sequence

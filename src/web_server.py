@@ -457,17 +457,23 @@ def _log_security_warnings():
         logger.info("Tip: Set KOSYNC_PUBLIC_URL in settings if you expose KOSync through a reverse proxy")
 
 
-_SAFE_TAGS = re.compile(
+_UNSAFE_TAGS = re.compile(
     r'<(?!/?(p|br|b|i|em|strong|ul|ol|li)\b)[^>]+>',
+    re.IGNORECASE,
+)
+_STRIP_ATTRS = re.compile(
+    r'<(/?(?:p|br|b|i|em|strong|ul|ol|li))\b[^>]*>',
     re.IGNORECASE,
 )
 
 
 def _sanitize_html(value):
-    """Allow only safe formatting tags, strip everything else, return as Markup."""
+    """Allow only safe formatting tags (without attributes), strip everything else."""
     if not value:
         return ''
-    cleaned = _SAFE_TAGS.sub('', str(value))
+    cleaned = _UNSAFE_TAGS.sub('', str(value))
+    # Strip attributes from safe tags to prevent onclick/onerror XSS
+    cleaned = _STRIP_ATTRS.sub(r'<\1>', cleaned)
     return Markup(cleaned)
 
 

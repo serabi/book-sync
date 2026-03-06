@@ -108,8 +108,7 @@ def index():
         integrations[client_name.lower()] = client.is_configured()
 
     # BookFusion integration status
-    from src.api.bookfusion_client import BookFusionClient
-    bf_client = BookFusionClient()
+    bf_client = container.bookfusion_client()
     integrations['bookfusion'] = bf_client.is_configured()
 
     # Bulk-fetch BookFusion link data (avoid N+1)

@@ -1145,6 +1145,7 @@
 .r-highlight-meta {
   display: flex;
   gap: 12px;
+  flex-wrap: wrap;
   margin-top: 8px;
   font-size: 0.8rem;
   color: var(--color-text-muted);

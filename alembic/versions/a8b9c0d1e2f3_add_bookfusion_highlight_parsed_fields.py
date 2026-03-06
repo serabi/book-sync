@@ -6,7 +6,7 @@ Create Date: 2026-03-05
 """
 
 import re
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 import sqlalchemy as sa
 from sqlalchemy import text
@@ -75,6 +75,15 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_column('bookfusion_highlights', 'matched_abs_id')
-    op.drop_column('bookfusion_highlights', 'quote_text')
-    op.drop_column('bookfusion_highlights', 'highlighted_at')
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    if 'bookfusion_highlights' not in inspector.get_table_names():
+        return
+
+    existing_cols = {c['name'] for c in inspector.get_columns('bookfusion_highlights')}
+    if 'matched_abs_id' in existing_cols:
+        op.drop_column('bookfusion_highlights', 'matched_abs_id')
+    if 'quote_text' in existing_cols:
+        op.drop_column('bookfusion_highlights', 'quote_text')
+    if 'highlighted_at' in existing_cols:
+        op.drop_column('bookfusion_highlights', 'highlighted_at')

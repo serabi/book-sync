@@ -288,6 +288,7 @@ function initDashboard() {
     setTimeout(refreshDashboard, 30000);
 
     // --- Processing status polling ---
+    let emptyReloadAttempts = 0;
     function pollProcessingStatus() {
         const processingSection = document.getElementById('processing-section');
         if (!processingSection) return;
@@ -298,9 +299,12 @@ function initDashboard() {
                 if (typeof data !== 'object' || data === null) return;
                 const ids = Object.keys(data);
                 if (ids.length === 0) {
-                    location.reload();
+                    if (emptyReloadAttempts++ < 3) {
+                        location.reload();
+                    }
                     return;
                 }
+                emptyReloadAttempts = 0;
 
                 let anyStillProcessing = false;
                 let shouldReload = false;

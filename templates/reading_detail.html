@@ -148,7 +148,7 @@
         {% set has_meta = metadata.narrator or metadata.duration or metadata.genres or metadata.isbn or metadata.pages or metadata.description or metadata.bf_tags or metadata.bf_series %}
         {% if has_meta %}
         <div class="r-meta-panel">
-            <div class="r-meta-toggle" id="meta-toggle">
+            <div class="r-meta-toggle" id="meta-toggle" role="button" tabindex="0" aria-expanded="true">
                 <h2>About This Book</h2>
                 <span class="r-meta-chevron">&#9660;</span>
             </div>
@@ -256,7 +256,7 @@
         {# ── Highlights ── #}
         {% if bf_highlights %}
         <div class="r-highlights">
-            <div class="r-highlights-head" id="highlights-toggle">
+            <div class="r-highlights-head" id="highlights-toggle" role="button" tabindex="0" aria-expanded="true">
                 <h2>Highlights <span class="r-highlights-count">({{ bf_highlights|length }})</span></h2>
                 <span class="r-highlights-chevron">&#9660;</span>
             </div>
@@ -320,22 +320,25 @@
             });
         }
         (function() {
-            var toggle = document.getElementById('highlights-toggle');
-            if (toggle) {
-                toggle.addEventListener('click', function() {
-                    var body = document.getElementById('highlights-body');
+            function setupToggle(toggleEl, bodyId, chevronClass) {
+                if (!toggleEl) return;
+                function doToggle() {
+                    var body = document.getElementById(bodyId);
                     body.classList.toggle('hidden');
-                    toggle.querySelector('.r-highlights-chevron').classList.toggle('collapsed');
+                    toggleEl.querySelector('.' + chevronClass).classList.toggle('collapsed');
+                    toggleEl.setAttribute('aria-expanded',
+                        !body.classList.contains('hidden'));
+                }
+                toggleEl.addEventListener('click', doToggle);
+                toggleEl.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        doToggle();
+                    }
                 });
             }
-            var metaToggle = document.getElementById('meta-toggle');
-            if (metaToggle) {
-                metaToggle.addEventListener('click', function() {
-                    var body = document.getElementById('meta-body');
-                    body.classList.toggle('hidden');
-                    metaToggle.querySelector('.r-meta-chevron').classList.toggle('collapsed');
-                });
-            }
+            setupToggle(document.getElementById('highlights-toggle'), 'highlights-body', 'r-highlights-chevron');
+            setupToggle(document.getElementById('meta-toggle'), 'meta-body', 'r-meta-chevron');
         })();
     </script>
 </body>

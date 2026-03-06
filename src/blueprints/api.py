@@ -241,8 +241,8 @@ def api_booklore_search():
                     'source': label,
                     'source_tag': client.source_tag,
                 })
-        except Exception as e:
-            logger.warning(f"Booklore search failed: {e}")
+        except Exception:
+            logger.warning("Booklore search failed for source_tag=%s", client.source_tag)
 
     return jsonify(results)
 
@@ -255,11 +255,12 @@ def api_booklore_link(abs_id):
     if not book:
         return jsonify({"error": "Book not found"}), 404
 
-    data = request.get_json()
-    if not data:
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
         return jsonify({"error": "No data provided"}), 400
 
-    filename = data.get('filename', '').strip()
+    filename_raw = data.get('filename', '')
+    filename = filename_raw.strip() if isinstance(filename_raw, str) else ''
 
     if not filename:
         logger.info(f"Unlinking Booklore for '{book.abs_title}'")

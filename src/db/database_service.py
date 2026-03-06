@@ -1045,11 +1045,11 @@ class DatabaseService:
             if hl:
                 hl.matched_abs_id = abs_id
 
-    def link_bookfusion_book(self, book_title: str, abs_id: str | None):
-        """Link or unlink all BookFusion highlights for a book title."""
+    def link_bookfusion_book(self, bookfusion_book_id: str, abs_id: str | None):
+        """Link or unlink all BookFusion highlights for a specific BookFusion book."""
         with self.get_session() as session:
             session.query(BookfusionHighlight).filter(
-                BookfusionHighlight.book_title == book_title
+                BookfusionHighlight.bookfusion_book_id == bookfusion_book_id
             ).update({BookfusionHighlight.matched_abs_id: abs_id},
                      synchronize_session=False)
 
