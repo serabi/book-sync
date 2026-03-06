@@ -311,6 +311,45 @@ class BookFusionClient:
             logger.error(f"BookFusion finalize error: {e}")
             return None
 
+    # ── Library catalog (Calibre API) ──
+
+    def fetch_library(self) -> list[dict]:
+        """Fetch all books in the user's BookFusion library via the Calibre API.
+
+        Returns a list of book dicts with at minimum 'id' and 'title'.
+        Paginates through all pages if the API supports it.
+        """
+        if not self.upload_api_key:
+            return []
+
+        all_books = []
+        page = 1
+        while True:
+            try:
+                resp = requests.get(
+                    f'{CALIBRE_API}/uploads',
+                    headers=_calibre_headers(self.upload_api_key),
+                    params={'page': page, 'per_page': 100},
+                    timeout=30,
+                )
+                if resp.status_code != 200:
+                    logger.warning(f"BookFusion library fetch failed: HTTP {resp.status_code}")
+                    break
+                data = resp.json()
+                books = data if isinstance(data, list) else data.get('books', data.get('uploads', []))
+                if not books:
+                    break
+                all_books.extend(books)
+                # Stop if we got fewer than a full page (no more pages)
+                if len(books) < 100:
+                    break
+                page += 1
+            except requests.RequestException as e:
+                logger.error(f"BookFusion library fetch error: {e}")
+                break
+
+        return all_books
+
     # ── Highlights (Obsidian API, X-Token) ──
 
     def fetch_highlights(self, cursor: str | None = None) -> dict:
@@ -337,10 +376,16 @@ class BookFusionClient:
         cursor = db_service.get_bookfusion_sync_cursor()
         total_new = 0
         all_books = {}
+        seen_cursors = set()
+        last_next_sync_cursor = None
 
         while True:
             data = self.fetch_highlights(cursor)
             pages = data.get('pages', [])
+
+            # Track next_sync_cursor from each response (save the last one)
+            if data.get('next_sync_cursor'):
+                last_next_sync_cursor = data['next_sync_cursor']
 
             highlights_batch = []
             for page in pages:
@@ -387,17 +432,47 @@ class BookFusionClient:
             if highlights_batch:
                 total_new += db_service.save_bookfusion_highlights(highlights_batch)
 
-            next_cursor = data.get('next_sync_cursor')
-            if not next_cursor or next_cursor == cursor:
-                if next_cursor:
-                    db_service.set_bookfusion_sync_cursor(next_cursor)
+            # Pagination: data.cursor is the next-page cursor (like the Obsidian plugin)
+            next_page = data.get('cursor')
+            if next_page is None:
+                break
+            if next_page == cursor:
+                logger.warning("BookFusion sync: next cursor same as current, stopping")
+                break
+            if next_page in seen_cursors:
+                logger.warning("BookFusion sync: pagination loop detected, stopping")
                 break
 
-            cursor = data.get('cursor')
-            if not cursor:
-                if next_cursor:
-                    db_service.set_bookfusion_sync_cursor(next_cursor)
-                break
+            seen_cursors.add(next_page)
+            cursor = next_page
+
+        # Save the sync cursor for future incremental syncs
+        if last_next_sync_cursor:
+            db_service.set_bookfusion_sync_cursor(last_next_sync_cursor)
+
+        # Merge full library catalog (books without highlights too)
+        try:
+            library = self.fetch_library()
+            for item in library:
+                bid = str(item.get('id', ''))
+                if not bid or bid in all_books:
+                    continue
+                title = item.get('title', '') or item.get('filename', '')
+                authors = item.get('author', '') or item.get('authors', '')
+                if isinstance(authors, list):
+                    authors = ', '.join(authors)
+                all_books[bid] = {
+                    'bookfusion_id': bid,
+                    'title': title,
+                    'authors': authors,
+                    'filename': item.get('filename', ''),
+                    'frontmatter': None,
+                    'tags': '',
+                    'series': '',
+                    'highlight_count': 0,
+                }
+        except Exception as e:
+            logger.warning(f"Could not fetch full BookFusion library: {e}")
 
         # Save book catalog
         books_saved = 0

@@ -268,12 +268,19 @@ def reading_detail(abs_id):
         except Exception:
             pass
 
+    # Fallback duration from stored book data (in case ABS API call failed or was skipped)
+    if not metadata.get('duration') and book.duration and book.duration > 0:
+        hrs = int(book.duration // 3600)
+        mins = int((book.duration % 3600) // 60)
+        metadata['duration'] = f"{hrs}h {mins}m" if hrs else f"{mins}m"
+
     # Hardcover details (ISBN, ASIN, pages, slug)
     hardcover = database_service.get_hardcover_details(abs_id)
     if hardcover:
         metadata['isbn'] = hardcover.isbn
         metadata['asin'] = hardcover.asin
-        metadata['pages'] = hardcover.hardcover_pages
+        if hardcover.hardcover_pages and hardcover.hardcover_pages > 0:
+            metadata['pages'] = hardcover.hardcover_pages
         metadata['hardcover_slug'] = hardcover.hardcover_slug
         metadata['hardcover_url'] = (
             f"https://hardcover.app/books/{hardcover.hardcover_slug}"
@@ -369,6 +376,13 @@ def update_progress(abs_id):
     if not book:
         return jsonify({"success": False, "error": "Book not found"}), 404
 
+    # Mark book as active if it hasn't been started yet
+    if percentage > 0 and book.status not in ('active', 'paused', 'dnf', 'completed'):
+        book.status = 'active'
+        if not book.started_at:
+            book.started_at = date.today().isoformat()
+        database_service.save_book(book)
+
     state = State(
         abs_id=abs_id,
         client_name='manual',
@@ -377,6 +391,23 @@ def update_progress(abs_id):
         timestamp=time.time(),
     )
     database_service.save_state(state)
+
+    # Trigger sync to propagate progress to other linked services
+    try:
+        from src.blueprints.helpers import get_container
+        from src.sync_clients.sync_client_interface import LocatorResult, UpdateProgressRequest
+        container = get_container()
+        sync_clients = container.sync_clients()
+        locator = LocatorResult(percentage=percentage)
+        req = UpdateProgressRequest(locator_result=locator)
+        for client_name, client in sync_clients.items():
+            if client.is_configured():
+                try:
+                    client.update_progress(book, req)
+                except Exception as e:
+                    logger.debug(f"Progress sync to {client_name} failed: {e}")
+    except Exception as e:
+        logger.debug(f"Could not propagate progress: {e}")
 
     return jsonify({"success": True, "percentage": percentage})
 

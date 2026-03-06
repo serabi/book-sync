@@ -426,7 +426,14 @@
             .then(function(data) {
                 _libraryData = data.books || [];
                 _dashboardBooks = data.dashboard_books || [];
-                renderLibrary(_libraryData);
+                // Pre-fill search from URL ?q= parameter
+                var urlQ = new URLSearchParams(window.location.search).get('q');
+                if (urlQ) {
+                    document.getElementById('bf-library-search').value = urlQ;
+                    filterLibrary();
+                } else {
+                    renderLibrary(_libraryData);
+                }
             })
             .catch(function() {
                 clearChildren(list);
@@ -580,8 +587,13 @@
         });
     }
 
-    // Load highlights on page open since it's the default tab
-    loadHighlights();
+    // Check URL for tab parameter, default to highlights
+    var urlTab = new URLSearchParams(window.location.search).get('tab');
+    if (urlTab && document.getElementById('bf-panel-' + urlTab)) {
+        switchBFTab(urlTab);
+    } else {
+        loadHighlights();
+    }
     </script>
 </body>
 

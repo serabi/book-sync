@@ -97,8 +97,8 @@
                         {% endif %}
                     </div>
 
-                    {# Progress bar for non-completed books #}
-                    {% if book.status != 'completed' %}
+                    {# Progress bar and manual input #}
+                    {% if book.status != 'completed' or has_bookfusion_link or (book.book_type == 'ebook-only') %}
                     <div class="r-detail-progress" id="progress-section">
                         {% if book.unified_progress > 0 %}
                         <div class="progress-bar">
@@ -206,7 +206,7 @@
                 {% if metadata.description %}
                 <div class="r-meta-description">
                     <span class="r-meta-label">Description</span>
-                    <p class="r-meta-desc-text">{{ metadata.description | truncate(600) }}</p>
+                    <div class="r-meta-desc-text">{{ metadata.description | truncate(600) | sanitize_html }}</div>
                 </div>
                 {% endif %}
             </div>

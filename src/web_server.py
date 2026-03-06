@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 import secrets
 import sys
 import threading
@@ -9,6 +10,7 @@ from pathlib import Path
 import schedule
 from dependency_injector import providers
 from flask import Flask
+from markupsafe import Markup
 
 from src.api.hardcover_routes import hardcover_bp, init_hardcover_routes
 from src.api.kosync_server import init_kosync_server, kosync_admin_bp, kosync_sync_bp
@@ -455,6 +457,20 @@ def _log_security_warnings():
         logger.info("Tip: Set KOSYNC_PUBLIC_URL in settings if you expose KOSync through a reverse proxy")
 
 
+_SAFE_TAGS = re.compile(
+    r'<(?!/?(p|br|b|i|em|strong|ul|ol|li)\b)[^>]+>',
+    re.IGNORECASE,
+)
+
+
+def _sanitize_html(value):
+    """Allow only safe formatting tags, strip everything else, return as Markup."""
+    if not value:
+        return ''
+    cleaned = _SAFE_TAGS.sub('', str(value))
+    return Markup(cleaned)
+
+
 # --- Application Factory ---
 def create_app(test_container=None):
     STATIC_DIR = os.environ.get('STATIC_DIR', '/app/static')
@@ -468,6 +484,7 @@ def create_app(test_container=None):
     # Register context processors, jinja globals
     app.context_processor(inject_global_vars)
     app.jinja_env.globals['safe_folder_name'] = safe_folder_name
+    app.jinja_env.filters['sanitize_html'] = _sanitize_html
 
     # Register all application blueprints
     register_blueprints(app)
