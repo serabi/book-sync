@@ -49,7 +49,7 @@
                     <h1 class="r-detail-title">{{ book.abs_title }}</h1>
 
                     <div class="r-detail-badges">
-                        <span class="status-badge status-{{ book.status }}">{{ book.status }}</span>
+                        <span class="status-badge status-{{ book.status }}">{{ book.status|replace('_', ' ')|title }}</span>
                         {% if book.unified_progress > 0 and book.status != 'completed' %}
                         <span class="r-detail-pct">{{ '%.0f' | format(book.unified_progress) }}% complete</span>
                         {% endif %}

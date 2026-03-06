@@ -288,6 +288,7 @@
                         <button class="card-menu-item" onclick='resumeBook({{ mapping.abs_id|tojson }}, this)'>Resume Reading</button>
                         {% elif mapping.status == 'not_started' %}
                         <button class="card-menu-item" onclick='resumeBook({{ mapping.abs_id|tojson }}, this)'>Start Reading</button>
+                        <button class="card-menu-item" onclick='pauseBook({{ mapping.abs_id|tojson }}, this)'>Pause</button>
                         <button class="card-menu-item" onclick='dnfBook({{ mapping.abs_id|tojson }}, {{ mapping.abs_title|tojson }})'>Mark DNF</button>
                         <button class="card-menu-item" onclick='markComplete({{ mapping.abs_id|tojson }}, {{ mapping.abs_title|tojson }})'>Mark Complete</button>
                         {% elif mapping.status == 'failed_retry_later' %}

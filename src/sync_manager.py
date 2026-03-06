@@ -92,6 +92,7 @@ class SyncManager:
         self._suggestion_lock = threading.Lock()
         self._suggestion_in_flight: set[str] = set()
         self._pending_clears: set[str] = set()  # abs_ids awaiting clear during sync
+        self._pending_clears_lock = threading.Lock()
         self._job_thread = None
         self._last_library_sync = 0
 
@@ -1319,7 +1320,9 @@ class SyncManager:
             abs_id = book.abs_id
 
             # Skip books with pending clear — clear_progress will handle them
-            if abs_id in self._pending_clears:
+            with self._pending_clears_lock:
+                skip = abs_id in self._pending_clears
+            if skip:
                 logger.debug(f"'{abs_id}' Skipping sync — pending clear progress")
                 continue
 
@@ -1617,13 +1620,15 @@ class SyncManager:
         logger.debug("End of sync cycle for active books")
 
         # Process any pending clears that couldn't acquire the lock earlier
-        if self._pending_clears:
+        with self._pending_clears_lock:
             pending = list(self._pending_clears)
+        if pending:
             logger.info(f"Processing {len(pending)} deferred clear(s): {pending}")
             for pending_id in pending:
                 try:
                     self._reset_external_clients(pending_id)
-                    self._pending_clears.discard(pending_id)
+                    with self._pending_clears_lock:
+                        self._pending_clears.discard(pending_id)
                 except Exception as e:
                     logger.warning(f"Deferred clear failed for '{pending_id}': {e}")
 
@@ -1669,7 +1674,8 @@ class SyncManager:
                 raise ValueError(f"Book not found: {abs_id}")
 
             # Mark book so the sync daemon skips it while we're clearing
-            self._pending_clears.add(abs_id)
+            with self._pending_clears_lock:
+                self._pending_clears.add(abs_id)
 
             # ── Phase 1: Immediate DB cleanup (no lock needed) ──
             cleared_count = self.database_service.delete_states_for_book(abs_id)
@@ -1784,10 +1790,12 @@ class SyncManager:
                 return summary
             finally:
                 self._sync_lock.release()
-                self._pending_clears.discard(abs_id)
+                with self._pending_clears_lock:
+                    self._pending_clears.discard(abs_id)
 
         except Exception as e:
-            self._pending_clears.discard(abs_id)
+            with self._pending_clears_lock:
+                self._pending_clears.discard(abs_id)
             error_msg = f"Error clearing progress for {abs_id}: {e}"
             logger.error(error_msg)
             logger.error(traceback.format_exc())

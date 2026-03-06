@@ -255,6 +255,8 @@ def update_rating(abs_id):
             rating = float(rating)
         except (TypeError, ValueError):
             return jsonify({"success": False, "error": "Invalid rating value"}), 400
+        if rating < 0 or rating > 5:
+            return jsonify({"success": False, "error": "Rating must be between 0 and 5"}), 400
 
     book = database_service.update_book_reading_fields(abs_id, rating=rating)
     if not book:
@@ -282,6 +284,10 @@ def update_dates(abs_id):
 
     if not updates:
         return jsonify({"success": False, "error": "No date fields provided"}), 400
+
+    if updates.get('started_at') and updates.get('finished_at'):
+        if updates['started_at'] > updates['finished_at']:
+            return jsonify({"success": False, "error": "started_at cannot be after finished_at"}), 400
 
     book = database_service.update_book_reading_fields(abs_id, **updates)
     if not book:
@@ -365,6 +371,9 @@ def set_goal(year):
         target = int(target)
     except (TypeError, ValueError):
         return jsonify({"success": False, "error": "target_books must be an integer"}), 400
+
+    if target < 1:
+        return jsonify({"success": False, "error": "target_books must be at least 1"}), 400
 
     goal = database_service.save_reading_goal(year, target)
     return jsonify({"success": True, "year": goal.year, "target_books": goal.target_books})
