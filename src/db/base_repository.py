@@ -5,6 +5,8 @@ from contextlib import contextmanager
 
 from sqlalchemy.exc import IntegrityError
 
+from src.utils.logging_utils import sanitize_log_data
+
 logger = logging.getLogger(__name__)
 
 
@@ -23,7 +25,7 @@ class BaseRepository:
             session.commit()
         except Exception as e:
             session.rollback()
-            logger.error(f"Database error: {e}")
+            logger.error("Database error: %s", sanitize_log_data(e))
             raise
         finally:
             session.close()

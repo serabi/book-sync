@@ -14,6 +14,8 @@ from sqlalchemy import text
 
 from alembic import op
 
+BATCH_SIZE = 500
+
 # revision identifiers, used by Alembic.
 revision: str = 'a8b9c0d1e2f3'
 down_revision: str | Sequence[str] | None = 'f1a2b3c4d5e6'
@@ -61,20 +63,30 @@ def upgrade() -> None:
 
     # Backfill existing rows
     conn = bind
-    rows = conn.execute(text('SELECT id, content FROM bookfusion_highlights')).fetchall()
-    for row in rows:
-        hl_id, content = row
-        highlighted_at = _parse_date(content or '')
-        quote = _parse_quote(content or '')
-        params = {'id': hl_id, 'quote': quote}
-        set_parts = ['quote_text = :quote']
-        if highlighted_at:
-            params['date'] = highlighted_at
-            set_parts.append('highlighted_at = :date')
-        conn.execute(
-            text(f"UPDATE bookfusion_highlights SET {', '.join(set_parts)} WHERE id = :id"),
-            params,
-        )
+    offset = 0
+    while True:
+        rows = conn.execute(
+            text('SELECT id, content FROM bookfusion_highlights LIMIT :limit OFFSET :offset'),
+            {'limit': BATCH_SIZE, 'offset': offset},
+        ).fetchall()
+        if not rows:
+            break
+
+        for row in rows:
+            hl_id, content = row
+            highlighted_at = _parse_date(content or '')
+            quote = _parse_quote(content or '')
+            params = {'id': hl_id, 'quote': quote}
+            set_parts = ['quote_text = :quote']
+            if highlighted_at:
+                params['date'] = highlighted_at
+                set_parts.append('highlighted_at = :date')
+            conn.execute(
+                text(f"UPDATE bookfusion_highlights SET {', '.join(set_parts)} WHERE id = :id"),
+                params,
+            )
+
+        offset += BATCH_SIZE
 
 
 def downgrade() -> None:

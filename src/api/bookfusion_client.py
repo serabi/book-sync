@@ -327,9 +327,13 @@ class BookFusionClient:
         if not self.upload_api_key:
             return []
 
+        max_pages = 200
         all_books = []
         page = 1
         while True:
+            if page > max_pages:
+                logger.warning("BookFusion library fetch stopped after %s pages", max_pages)
+                break
             try:
                 resp = self.session.get(
                     f'{CALIBRE_API}/uploads',

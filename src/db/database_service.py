@@ -389,14 +389,14 @@ class DatabaseService:
     def get_booklore_book(self, filename):
         return self._integrations.get_booklore_book(filename)
 
-    def get_all_booklore_books(self, source=None):
-        return self._integrations.get_all_booklore_books(source)
+    def get_all_booklore_books(self):
+        return self._integrations.get_all_booklore_books()
 
     def save_booklore_book(self, booklore_book):
         return self._integrations.save_booklore_book(booklore_book)
 
-    def delete_booklore_book(self, filename, source=None):
-        return self._integrations.delete_booklore_book(filename, source)
+    def delete_booklore_book(self, filename):
+        return self._integrations.delete_booklore_book(filename)
 
     # ── Integrations: BookFusion (delegates to IntegrationRepository) ──
 

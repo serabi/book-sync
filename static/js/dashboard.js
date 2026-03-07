@@ -501,7 +501,7 @@ function dnfBook(absId, title) {
         return;
     }
 
-    fetch('/api/dnf/' + absId, {
+    fetch('/api/dnf/' + encodeURIComponent(absId), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
     }).then(response => response.json())
@@ -522,7 +522,7 @@ function retryTranscription(absId, btn) {
     const originalText = btn.textContent;
     btn.textContent = "...";
 
-    fetch('/api/retry-transcription/' + absId, {
+    fetch('/api/retry-transcription/' + encodeURIComponent(absId), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
     }).then(response => response.json())
@@ -552,7 +552,6 @@ function markComplete(absId, title) {
     if (!confirm('Are you sure you want to mark "' + title + '" as complete? This will set progress to 100% on all synced platforms.')) {
         return;
     }
-    window._mcAbsId = absId;
     window._mcAbsId = absId;
     const modal = document.getElementById('delete-mapping-modal');
     if (modal) modal.style.display = 'flex';

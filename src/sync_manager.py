@@ -64,7 +64,6 @@ class SyncManager:
         # Use dependency injection
         self.abs_client = abs_client
         self.booklore_client = booklore_client
-        self._booklore_clients = [booklore_client] if booklore_client else []
         self.hardcover_client = hardcover_client
         self.transcriber = transcriber
         self.ebook_parser = ebook_parser
@@ -94,7 +93,7 @@ class SyncManager:
             self.suggestion_service = SuggestionService(
                 database_service=database_service,
                 abs_client=abs_client,
-                booklore_clients=self._booklore_clients,
+                booklore_client=booklore_client,
                 storyteller_client=storyteller_client,
                 library_service=library_service,
                 books_dir=books_dir,
@@ -107,7 +106,7 @@ class SyncManager:
             self.background_job_service = BackgroundJobService(
                 database_service=database_service,
                 abs_client=abs_client,
-                booklore_clients=self._booklore_clients,
+                booklore_client=booklore_client,
                 ebook_parser=ebook_parser,
                 transcriber=transcriber,
                 alignment_service=alignment_service,
@@ -422,7 +421,7 @@ class SyncManager:
     def _get_local_epub(self, ebook_filename):
         """Get local path to EPUB file, downloading from Booklore if necessary."""
         return get_local_epub(
-            ebook_filename, self.books_dir, self.epub_cache_dir, self._booklore_clients
+            ebook_filename, self.books_dir, self.epub_cache_dir, self.booklore_client
         )
 
     # ── Suggestion delegation (implementation in SuggestionService) ──
@@ -590,6 +589,7 @@ class SyncManager:
 
         active_books, bulk_states_per_client = self._prepare_sync_books(target_abs_id)
         if not active_books:
+            self._process_deferred_clears()
             return
 
         # Main sync loop - process each active book
@@ -627,10 +627,13 @@ class SyncManager:
         if not target_abs_id and active_books:
             logger.debug(f"Sync cycle starting - {len(active_books)} active book(s)")
             for client_name, client in self.sync_clients.items():
-                bulk_data = client.fetch_bulk_state()
-                if bulk_data:
-                    bulk_states_per_client[client_name] = bulk_data
-                    logger.debug(f"Pre-fetched bulk state for {client_name}")
+                try:
+                    bulk_data = client.fetch_bulk_state()
+                    if bulk_data:
+                        bulk_states_per_client[client_name] = bulk_data
+                        logger.debug(f"Pre-fetched bulk state for {client_name}")
+                except Exception as e:
+                    logger.warning(f"Failed to pre-fetch bulk state for {client_name}: {e}")
 
             # Check for suggestions
             if 'ABS' in bulk_states_per_client:
@@ -841,13 +844,16 @@ class SyncManager:
 
         # Update all other clients and store results
         results: dict[str, SyncResult] = {}
-        for client_name, client in self.sync_clients.items():
+        for client_name, client_state in config.items():
             if client_name == leader:
                 continue
             if client_name == 'ABS' and hasattr(book, 'sync_mode') and book.sync_mode == 'ebook_only':
                 continue
+            client = self.sync_clients.get(client_name)
+            if client is None:
+                continue
             try:
-                request = UpdateProgressRequest(locator, txt, previous_location=config.get(client_name).previous_pct if config.get(client_name) else None)
+                request = UpdateProgressRequest(locator, txt, previous_location=client_state.previous_pct)
                 result = client.update_progress(book, request)
                 results[client_name] = result
             except Exception as e:
@@ -873,6 +879,11 @@ class SyncManager:
             if result.success:
                 state_data = result.updated_state if result.updated_state else {'pct': result.location}
                 logger.info(f"'{abs_id}' '{title_snip}' Updated state data for '{client_name}': {state_data}")
+                try:
+                    from src.services.write_tracker import record_write
+                    record_write(client_name, abs_id, state_data)
+                except ImportError:
+                    pass
                 client_state_model = State(
                     abs_id=book.abs_id,
                     client_name=client_name.lower(),

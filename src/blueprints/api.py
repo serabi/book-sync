@@ -8,7 +8,7 @@ import logging
 
 from flask import Blueprint, current_app, jsonify, request
 
-from src.blueprints.helpers import get_booklore_clients, get_container, get_database_service
+from src.blueprints.helpers import get_booklore_client, get_container, get_database_service
 from src.db.models import Book
 
 logger = logging.getLogger(__name__)
@@ -292,27 +292,26 @@ def api_booklore_search():
     if not query:
         return jsonify([])
 
-    results = []
-    for client in get_booklore_clients():
-        if not client.is_configured():
-            continue
-        try:
-            config_key = f"{client.config_prefix}_LABEL"
-            label = current_app.config.get(config_key, "Booklore")
-            books = client.search_books(query)
-            for b in (books or []):
-                results.append({
-                    'id': b.get('id'),
-                    'title': b.get('title', ''),
-                    'authors': b.get('authors', ''),
-                    'fileName': b.get('fileName', ''),
-                    'source': label,
-                    'source_tag': client.source_tag,
-                })
-        except Exception:
-            logger.warning("Booklore search failed for source_tag=%s", client.source_tag, exc_info=True)
+    client = get_booklore_client()
+    if not client.is_configured():
+        return jsonify([])
 
-    return jsonify(results)
+    try:
+        label = current_app.config.get("BOOKLORE_LABEL", "Booklore")
+        results = []
+        books = client.search_books(query)
+        for b in (books or []):
+            results.append({
+                'id': b.get('id'),
+                'title': b.get('title', ''),
+                'authors': b.get('authors', ''),
+                'fileName': b.get('fileName', ''),
+                'source': label,
+            })
+        return jsonify(results)
+    except Exception:
+        logger.warning("Booklore search failed", exc_info=True)
+        return jsonify([])
 
 
 @api_bp.route('/api/booklore/link/<abs_id>', methods=['POST'])

@@ -17,7 +17,7 @@ class BackgroundJobService:
     def __init__(self,
                  database_service,
                  abs_client,
-                 booklore_clients: list,
+                 booklore_client,
                  ebook_parser,
                  transcriber,
                  alignment_service,
@@ -28,7 +28,7 @@ class BackgroundJobService:
                  books_dir):
         self.database_service = database_service
         self.abs_client = abs_client
-        self._booklore_clients = booklore_clients
+        self.booklore_client = booklore_client
         self.ebook_parser = ebook_parser
         self.transcriber = transcriber
         self.alignment_service = alignment_service
@@ -58,7 +58,7 @@ class BackgroundJobService:
             for book in candidates:
                 has_alignment = False
                 if self.alignment_service:
-                    has_alignment = bool(self.alignment_service._get_alignment(book.abs_id))
+                    has_alignment = self.alignment_service.has_alignment(book.abs_id)
 
                 if has_alignment:
                     if book.status != 'active':
@@ -182,11 +182,14 @@ class BackgroundJobService:
 
             epub_path = None
             if self.library_service and item_details:
-                epub_path = self.library_service.acquire_ebook(item_details)
+                try:
+                    epub_path = self.library_service.acquire_ebook(item_details)
+                except Exception as e:
+                    logger.warning(f"Failed to acquire ebook from library service for '{sanitize_log_data(ebook_filename)}': {e}")
 
             if not epub_path:
                 epub_path = get_local_epub(
-                    ebook_filename, self.books_dir, self.epub_cache_dir, self._booklore_clients
+                    ebook_filename, self.books_dir, self.epub_cache_dir, self.booklore_client
                 )
 
             update_progress(1.0, 1)
@@ -239,11 +242,16 @@ class BackgroundJobService:
 
             # Priority 2: SMIL extraction
             if not transcript_source and hasattr(self.transcriber, 'transcribe_from_smil'):
-                raw_transcript = self.transcriber.transcribe_from_smil(
-                    abs_id, epub_path, chapters,
-                    full_book_text=book_text,
-                    progress_callback=lambda p: update_progress(p, 2)
-                )
+                try:
+                    raw_transcript = self.transcriber.transcribe_from_smil(
+                        abs_id, epub_path, chapters,
+                        full_book_text=book_text,
+                        progress_callback=lambda p: update_progress(p, 2)
+                    )
+                except Exception as e:
+                    raw_transcript = None
+                    transcript_source = None
+                    logger.warning(f"SMIL extraction failed for '{book.abs_title}': {e}")
                 if raw_transcript:
                     transcript_source = "SMIL"
 

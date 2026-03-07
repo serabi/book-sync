@@ -32,7 +32,7 @@ def test_clear_progress_optimization():
     # CASE A: Smart Reset Enabled (Default), Alignment EXISTS
     print("\n[CASE A] Smart Reset enabled, Alignment EXISTS")
     with patch.dict(os.environ, {"REPROCESS_ON_CLEAR_IF_NO_ALIGNMENT": "true"}):
-        alignment_service._get_alignment.return_value = [{"some": "map"}]
+        alignment_service.has_alignment.return_value = True
         sync_manager.clear_progress("test_book")
 
         print(f"DEBUG: Book status: {book.status}")
@@ -43,7 +43,7 @@ def test_clear_progress_optimization():
     print("\n[CASE B] Smart Reset enabled, Alignment MISSING")
     book.status = "active"
     db_service.save_book.reset_mock()
-    alignment_service._get_alignment.return_value = None
+    alignment_service.has_alignment.return_value = False
 
     with patch.dict(os.environ, {"REPROCESS_ON_CLEAR_IF_NO_ALIGNMENT": "true"}):
         sync_manager.clear_progress("test_book")
@@ -56,6 +56,7 @@ def test_clear_progress_optimization():
     print("\n[CASE C] Smart Reset DISABLED")
     book.status = "active"
     db_service.save_book.reset_mock()
+    alignment_service.has_alignment.return_value = False
 
     with patch.dict(os.environ, {"REPROCESS_ON_CLEAR_IF_NO_ALIGNMENT": "false"}):
         sync_manager.clear_progress("test_book")

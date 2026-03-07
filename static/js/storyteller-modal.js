@@ -36,6 +36,17 @@ async function searchStoryteller() {
 
     try {
         const response = await fetch(`/api/storyteller/search?q=${encodeURIComponent(query)}`);
+        if (!response.ok) {
+            let message = `Search failed (${response.status})`;
+            try {
+                const err = await response.json();
+                message = err.error || message;
+            } catch (_err) {
+                const text = await response.text();
+                if (text) message = text;
+            }
+            throw new Error(message);
+        }
         const books = await response.json();
 
         resultsDiv.innerHTML = '';
@@ -44,13 +55,24 @@ async function searchStoryteller() {
         const noneCard = document.createElement('div');
         noneCard.className = 'st-result-card st-none-option';
         noneCard.style.border = '1px dashed #666';
-        noneCard.innerHTML = `
-            <div class="st-card-info">
-                <div class="st-card-title">None - Do not link</div>
-                <div class="st-card-author" style="font-style: italic; color: #888;">Unlink current Storyteller book</div>
-            </div>
-            <button class="action-btn secondary" onclick="linkStoryteller('none')">Unlink</button>
-        `;
+        const noneInfo = document.createElement('div');
+        noneInfo.className = 'st-card-info';
+        const noneTitle = document.createElement('div');
+        noneTitle.className = 'st-card-title';
+        noneTitle.textContent = 'None - Do not link';
+        const noneDesc = document.createElement('div');
+        noneDesc.className = 'st-card-author';
+        noneDesc.style.fontStyle = 'italic';
+        noneDesc.style.color = '#888';
+        noneDesc.textContent = 'Unlink current Storyteller book';
+        noneInfo.appendChild(noneTitle);
+        noneInfo.appendChild(noneDesc);
+        const unlinkBtn = document.createElement('button');
+        unlinkBtn.className = 'action-btn secondary';
+        unlinkBtn.textContent = 'Unlink';
+        unlinkBtn.addEventListener('click', () => linkStoryteller('none'));
+        noneCard.appendChild(noneInfo);
+        noneCard.appendChild(unlinkBtn);
         resultsDiv.appendChild(noneCard);
 
         if (books.length === 0) {

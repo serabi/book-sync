@@ -153,7 +153,7 @@ class ProgressResetService:
             logger.info("   Reset progress to 0% (Smart re-process disabled)")
             return
 
-        has_alignment = bool(self.alignment_service and self.alignment_service._get_alignment(abs_id))
+        has_alignment = bool(self.alignment_service and self.alignment_service.has_alignment(abs_id))
         if has_alignment:
             logger.info(f"   Alignment map exists for '{sanitize_log_data(abs_id)}' — no re-transcription needed")
         else:

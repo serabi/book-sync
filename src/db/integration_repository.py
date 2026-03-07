@@ -45,17 +45,12 @@ class IntegrationRepository(BaseRepository):
     def get_booklore_book(self, filename):
         return self._get_one(BookloreBook, BookloreBook.filename == filename)
 
-    def get_all_booklore_books(self, source=None):
-        if source:
-            return self._get_all(BookloreBook, BookloreBook.source == source)
+    def get_all_booklore_books(self):
         return self._get_all(BookloreBook)
 
     def save_booklore_book(self, booklore_book):
         with self.get_session() as session:
-            existing = session.query(BookloreBook).filter(
-                BookloreBook.filename == booklore_book.filename,
-                BookloreBook.source == booklore_book.source
-            ).first()
+            existing = session.query(BookloreBook).filter(BookloreBook.filename == booklore_book.filename).first()
 
             if existing:
                 for attr in ['title', 'authors', 'raw_metadata']:
@@ -71,10 +66,7 @@ class IntegrationRepository(BaseRepository):
                     session.flush()
                 except IntegrityError:
                     session.rollback()
-                    existing = session.query(BookloreBook).filter(
-                        BookloreBook.filename == booklore_book.filename,
-                        BookloreBook.source == booklore_book.source
-                    ).first()
+                    existing = session.query(BookloreBook).filter(BookloreBook.filename == booklore_book.filename).first()
                     if existing:
                         for attr in ['title', 'authors', 'raw_metadata']:
                             if hasattr(booklore_book, attr):
@@ -88,16 +80,10 @@ class IntegrationRepository(BaseRepository):
                 session.expunge(booklore_book)
                 return booklore_book
 
-    def delete_booklore_book(self, filename, source=None):
-        if not source:
-            logger.warning(f"delete_booklore_book called without source for '{filename}', skipping")
-            return False
+    def delete_booklore_book(self, filename):
         try:
             with self.get_session() as session:
-                deleted = session.query(BookloreBook).filter(
-                    BookloreBook.filename == filename,
-                    BookloreBook.source == source
-                ).delete(synchronize_session=False)
+                deleted = session.query(BookloreBook).filter(BookloreBook.filename == filename).delete(synchronize_session=False)
                 return deleted > 0
         except SQLAlchemyError as e:
             logger.error(f"Failed to delete Booklore book '{filename}': {e}")

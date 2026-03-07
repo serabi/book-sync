@@ -5,7 +5,9 @@
 
 var coverPickerState = {
     absId: null,
-    currentTitle: ''
+    currentTitle: '',
+    currentQuery: '',
+    currentRequestId: 0
 };
 
 async function readJsonResponse(resp) {
@@ -41,6 +43,9 @@ function openCoverPicker(absId, currentTitle) {
 
 function closeCoverPicker() {
     document.getElementById('cover-picker-modal').style.display = 'none';
+    coverPickerState.absId = null;
+    coverPickerState.currentQuery = '';
+    coverPickerState.currentRequestId += 1;
     document.getElementById('cp-results').replaceChildren();
     document.getElementById('cp-search-input').value = '';
     document.getElementById('cp-custom-url').value = '';
@@ -75,9 +80,19 @@ async function searchCovers(query) {
     resultsEl.replaceChildren();
     statusEl.textContent = 'Searching...';
 
+    coverPickerState.currentQuery = query;
+    var requestId = ++coverPickerState.currentRequestId;
+    var requestAbsId = coverPickerState.absId;
+
     try {
         var resp = await fetch('/api/hardcover/cover-search?query=' + encodeURIComponent(query));
         var data = await readJsonResponse(resp);
+
+        if (requestId !== coverPickerState.currentRequestId
+            || requestAbsId !== coverPickerState.absId
+            || query !== coverPickerState.currentQuery) {
+            return;
+        }
 
         if (!resp.ok) {
             statusEl.textContent = (data && data.error) || 'Search failed. Please try again.';
@@ -99,7 +114,16 @@ async function searchCovers(query) {
         results.forEach(function(book) {
             var card = document.createElement('div');
             card.className = 'cp-result-card';
+            card.tabIndex = 0;
+            card.setAttribute('role', 'button');
+            card.setAttribute('aria-label', 'Select Hardcover cover for ' + (book.title || 'this book'));
             card.onclick = function() { selectHardcoverCover(book); };
+            card.addEventListener('keydown', function(event) {
+                if (event.key === 'Enter' || event.key === ' ' || event.key === 'Spacebar') {
+                    event.preventDefault();
+                    selectHardcoverCover(book);
+                }
+            });
 
             var imgDiv = document.createElement('div');
             imgDiv.className = 'cp-result-img';
@@ -133,6 +157,9 @@ async function searchCovers(query) {
             resultsEl.appendChild(card);
         });
     } catch (err) {
+        if (requestId !== coverPickerState.currentRequestId || requestAbsId !== coverPickerState.absId) {
+            return;
+        }
         statusEl.textContent = 'Search failed. Please try again.';
     }
 }
@@ -149,6 +176,8 @@ async function selectHardcoverCover(book) {
         return;
     }
 
+    var requestAbsId = coverPickerState.absId;
+
     try {
         var resp = await fetch('/api/book/' + encodeURIComponent(coverPickerState.absId) + '/cover', {
             method: 'POST',
@@ -162,6 +191,9 @@ async function selectHardcoverCover(book) {
         });
 
         var data = await readJsonResponse(resp);
+        if (requestAbsId !== coverPickerState.absId) {
+            return;
+        }
         if (!resp.ok) {
             document.getElementById('cp-status').textContent = (data && data.error) || 'Failed to set cover.';
             return;
@@ -182,6 +214,8 @@ async function submitCustomCoverUrl() {
     var url = document.getElementById('cp-custom-url').value.trim();
     if (!url) return;
 
+    var requestAbsId = coverPickerState.absId;
+
     try {
         var resp = await fetch('/api/book/' + encodeURIComponent(coverPickerState.absId) + '/cover', {
             method: 'POST',
@@ -190,6 +224,9 @@ async function submitCustomCoverUrl() {
         });
 
         var data = await readJsonResponse(resp);
+        if (requestAbsId !== coverPickerState.absId) {
+            return;
+        }
         if (!resp.ok) {
             document.getElementById('cp-status').textContent = (data && data.error) || 'Failed to set cover.';
             return;
@@ -207,12 +244,17 @@ async function submitCustomCoverUrl() {
 }
 
 async function removeCover() {
+    var requestAbsId = coverPickerState.absId;
+
     try {
         var resp = await fetch('/api/book/' + encodeURIComponent(coverPickerState.absId) + '/cover', {
             method: 'DELETE'
         });
 
         var data = await readJsonResponse(resp);
+        if (requestAbsId !== coverPickerState.absId) {
+            return;
+        }
         if (!resp.ok) {
             document.getElementById('cp-status').textContent = (data && data.error) || 'Failed to remove cover.';
             return;

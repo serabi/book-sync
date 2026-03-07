@@ -424,13 +424,9 @@ class BookloreBook(Base):
     Model for caching Booklore search results, replacing local JSON cache.
     """
     __tablename__ = 'booklore_books'
-    __table_args__ = (
-        sa.UniqueConstraint('filename', 'source', name='uq_booklore_books_filename_source'),
-    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    filename = Column(String(500), index=True, nullable=False)
-    source = Column(String(50), default='booklore')
+    filename = Column(String(500), nullable=False, unique=True)
     title = Column(String(500))
     authors = Column(String(500))
     raw_metadata = Column(Text)  # JSON blob of full booklore response
@@ -445,12 +441,11 @@ class BookloreBook(Base):
             return {}
 
     def __init__(self, filename: str, title: str | None = None, authors: str | None = None,
-                 raw_metadata: str | None = None, source: str = 'booklore'):
+                 raw_metadata: str | None = None):
         self.filename = filename
         self.title = title
         self.authors = authors
         self.raw_metadata = raw_metadata
-        self.source = source
 
 
 # Database configuration

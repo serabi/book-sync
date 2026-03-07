@@ -78,6 +78,7 @@ class SuggestionRepository(BaseRepository):
         from sqlalchemy import not_
         with self.get_session() as session:
             count = session.query(PendingSuggestion).filter(
+                PendingSuggestion.source == 'abs',
                 not_(PendingSuggestion.source_id.in_(session.query(Book.abs_id)))
             ).delete(synchronize_session=False)
             return count

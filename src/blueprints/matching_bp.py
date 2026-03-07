@@ -27,6 +27,22 @@ logger = logging.getLogger(__name__)
 matching_bp = Blueprint('matching', __name__)
 
 
+def _copy_book_merge_metadata(existing_book, overrides=None):
+    metadata = {
+        'storyteller_uuid': getattr(existing_book, 'storyteller_uuid', None),
+        'original_ebook_filename': getattr(existing_book, 'original_ebook_filename', None),
+        'abs_ebook_item_id': getattr(existing_book, 'abs_ebook_item_id', None),
+        'custom_cover_url': getattr(existing_book, 'custom_cover_url', None),
+        'started_at': getattr(existing_book, 'started_at', None),
+        'finished_at': getattr(existing_book, 'finished_at', None),
+        'rating': getattr(existing_book, 'rating', None),
+        'read_count': getattr(existing_book, 'read_count', 1),
+    }
+    if overrides:
+        metadata.update({key: value for key, value in overrides.items() if value is not None})
+    return metadata
+
+
 def _serialize_suggestion(s):
     matches = []
     for m in s.matches:
@@ -247,17 +263,20 @@ def match():
                 status='active',
                 duration=manager.get_duration(selected_ab),
                 sync_mode='audiobook',
-                storyteller_uuid=book.storyteller_uuid,
-                original_ebook_filename=book.original_ebook_filename,
+                **_copy_book_merge_metadata(book, {
+                    'storyteller_uuid': book.storyteller_uuid,
+                    'original_ebook_filename': book.original_ebook_filename,
+                }),
             )
             database_service.save_book(new_book)
             try:
                 database_service.migrate_book_data(link_book_id, abs_id)
                 database_service.delete_book(link_book_id)
+                abs_service.add_to_collection(abs_id, current_app.config['ABS_COLLECTION_NAME'])
                 logger.info(f"Successfully merged {link_book_id} into {abs_id}")
             except Exception as e:
                 logger.error(f"Failed to merge book data: {e}")
-            abs_service.add_to_collection(abs_id, current_app.config['ABS_COLLECTION_NAME'])
+                raise
             hardcover_sync_client = container.sync_clients().get('Hardcover')
             if hardcover_sync_client and hardcover_sync_client.is_configured():
                 hardcover_sync_client.automatch_hardcover(new_book)
@@ -307,8 +326,18 @@ def match():
 
             if not original_ebook_filename:
                 original_ebook_filename = existing_book.original_ebook_filename or existing_book.ebook_filename
+            merge_metadata = _copy_book_merge_metadata(existing_book, {
+                'abs_ebook_item_id': abs_ebook_item_id,
+                'original_ebook_filename': original_ebook_filename,
+                'storyteller_uuid': storyteller_uuid or existing_book.storyteller_uuid,
+            })
         else:
             abs_ebook_item_id = None
+            merge_metadata = {
+                'storyteller_uuid': storyteller_uuid,
+                'original_ebook_filename': original_ebook_filename,
+                'abs_ebook_item_id': abs_ebook_item_id,
+            }
 
         book = Book(
             abs_id=abs_id,
@@ -318,9 +347,7 @@ def match():
             transcript_file=None,
             status="pending",
             duration=manager.get_duration(selected_ab),
-            storyteller_uuid=storyteller_uuid,
-            original_ebook_filename=original_ebook_filename,
-            abs_ebook_item_id=abs_ebook_item_id
+            **merge_metadata,
         )
 
         database_service.save_book(book)
@@ -330,16 +357,19 @@ def match():
             try:
                 database_service.migrate_book_data(migration_source_id, abs_id)
                 database_service.delete_book(migration_source_id)
+                abs_service.add_to_collection(abs_id, current_app.config['ABS_COLLECTION_NAME'])
                 logger.info(f"Successfully merged {migration_source_id} into {abs_id}")
             except Exception as e:
                 logger.error(f"Failed to merge book data: {e}")
+                raise
 
         # Trigger Hardcover Automatch
         hardcover_sync_client = container.sync_clients().get('Hardcover')
         if hardcover_sync_client and hardcover_sync_client.is_configured():
             hardcover_sync_client.automatch_hardcover(book)
 
-        abs_service.add_to_collection(abs_id, current_app.config['ABS_COLLECTION_NAME'])
+        if not migration_source_id:
+            abs_service.add_to_collection(abs_id, current_app.config['ABS_COLLECTION_NAME'])
         if bl_match_client:
             shelf_filename = original_ebook_filename or ebook_filename
             try:
@@ -514,6 +544,17 @@ def batch_match():
                     abs_ebook_item_id = existing_book.abs_ebook_item_id or existing_book.abs_id
                     if not original_ebook_filename:
                         original_ebook_filename = existing_book.original_ebook_filename or existing_book.ebook_filename
+                    merge_metadata = _copy_book_merge_metadata(existing_book, {
+                        'abs_ebook_item_id': abs_ebook_item_id,
+                        'original_ebook_filename': original_ebook_filename,
+                        'storyteller_uuid': storyteller_uuid or existing_book.storyteller_uuid,
+                    })
+                else:
+                    merge_metadata = {
+                        'storyteller_uuid': storyteller_uuid or None,
+                        'original_ebook_filename': original_ebook_filename,
+                        'abs_ebook_item_id': abs_ebook_item_id,
+                    }
 
                 book = Book(
                     abs_id=item['abs_id'],
@@ -523,9 +564,7 @@ def batch_match():
                     transcript_file=None,
                     status="pending",
                     duration=duration,
-                    storyteller_uuid=storyteller_uuid or None,
-                    original_ebook_filename=original_ebook_filename,
-                    abs_ebook_item_id=abs_ebook_item_id
+                    **merge_metadata,
                 )
 
                 database_service.save_book(book)
@@ -535,16 +574,19 @@ def batch_match():
                     try:
                         database_service.migrate_book_data(migration_source_id, item['abs_id'])
                         database_service.delete_book(migration_source_id)
+                        abs_service.add_to_collection(item['abs_id'], current_app.config['ABS_COLLECTION_NAME'])
                         logger.info(f"Successfully merged {migration_source_id} into {item['abs_id']}")
                     except Exception as e:
                         logger.error(f"Failed to merge book data: {e}")
+                        raise
 
                 # Trigger Hardcover Automatch
                 hardcover_sync_client = container.sync_clients().get('Hardcover')
                 if hardcover_sync_client and hardcover_sync_client.is_configured():
                     hardcover_sync_client.automatch_hardcover(book)
 
-                abs_service.add_to_collection(item['abs_id'], current_app.config['ABS_COLLECTION_NAME'])
+                if not migration_source_id:
+                    abs_service.add_to_collection(item['abs_id'], current_app.config['ABS_COLLECTION_NAME'])
                 if bl_match_client:
                     shelf_filename = original_ebook_filename or ebook_filename
                     try:

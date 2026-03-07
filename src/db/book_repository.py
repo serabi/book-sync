@@ -8,6 +8,7 @@ from sqlalchemy.exc import ProgrammingError
 from .base_repository import BaseRepository
 from .models import (
     Book,
+    BookfusionBook,
     HardcoverDetails,
     Job,
     KosyncDocument,
@@ -52,7 +53,8 @@ class BookRepository(BaseRepository):
             book,
             ['abs_title', 'ebook_filename', 'original_ebook_filename', 'kosync_doc_id',
              'transcript_file', 'status', 'duration', 'sync_mode', 'storyteller_uuid',
-             'abs_ebook_item_id', 'activity_flag'],
+                             'abs_ebook_item_id', 'activity_flag', 'custom_cover_url',
+               'started_at', 'finished_at', 'rating', 'read_count'],
         )
 
     def delete_book(self, abs_id):
@@ -96,14 +98,22 @@ class BookRepository(BaseRepository):
                 from .models import BookAlignment
                 try:
                     session.query(BookAlignment).filter(
-                        BookAlignment.abs_id == old_abs_id).delete(synchronize_session=False)
+                        BookAlignment.abs_id == old_abs_id
+                    ).update({BookAlignment.abs_id: new_abs_id}, synchronize_session=False)
                 except ProgrammingError as e:
                     logger.warning(f"BookAlignment table missing during migration cleanup for '{old_abs_id}': {e}")
                 try:
                     session.query(HardcoverDetails).filter(
-                        HardcoverDetails.abs_id == old_abs_id).delete(synchronize_session=False)
+                        HardcoverDetails.abs_id == old_abs_id
+                    ).update({HardcoverDetails.abs_id: new_abs_id}, synchronize_session=False)
                 except ProgrammingError as e:
                     logger.warning(f"HardcoverDetails table missing during migration cleanup for '{old_abs_id}': {e}")
+                try:
+                    session.query(BookfusionBook).filter(
+                        BookfusionBook.matched_abs_id == old_abs_id
+                    ).update({BookfusionBook.matched_abs_id: new_abs_id}, synchronize_session=False)
+                except ProgrammingError as e:
+                    logger.warning(f"BookFusion table missing during migration cleanup for '{old_abs_id}': {e}")
 
                 logger.info(f"Migrated data from '{old_abs_id}' to '{new_abs_id}'")
             except Exception as e:

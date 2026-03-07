@@ -92,6 +92,8 @@ class ReadingRepository(BaseRepository):
         with self.get_session() as session:
             journal_query = session.query(ReadingJournal).filter(
                 ReadingJournal.event.in_(('note', 'highlight')),
+                ReadingJournal.entry.is_not(None),
+                (ReadingJournal.entry.startswith(BOOKFUSION_IMPORT_PREFIX) | ReadingJournal.entry.startswith('📖')),
             )
             if abs_id:
                 journal_query = journal_query.filter(ReadingJournal.abs_id == abs_id)
@@ -114,7 +116,8 @@ class ReadingRepository(BaseRepository):
                 )
                 if not key[1]:
                     continue
-                highlight_map.setdefault(key, []).append(hl.highlighted_at)
+                if hl.highlighted_at is not None:
+                    highlight_map.setdefault(key, []).append(hl.highlighted_at)
 
             for dates in highlight_map.values():
                 dates.sort(reverse=True)

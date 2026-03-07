@@ -10,7 +10,7 @@ from flask import Blueprint, abort, jsonify, render_template, request
 
 from src.blueprints.helpers import (
     get_abs_service,
-    get_booklore_clients,
+    get_booklore_client,
     get_container,
     get_database_service,
     get_service_web_url,
@@ -99,7 +99,7 @@ def _build_book_reading_data(book, database_service, abs_service, states_by_book
     if not cover_url and bl_meta:
         bl_id = (bl_meta.raw_metadata_dict or {}).get('id')
         if bl_id:
-            cover_url = f"/api/cover-proxy/booklore/{bl_meta.source or 'booklore'}/{bl_id}"
+            cover_url = f"/api/cover-proxy/booklore/{bl_id}"
 
     # Hardcover cover fallback
     if not cover_url:
@@ -405,10 +405,9 @@ def reading_detail(abs_id):
 
     # Booklore metadata (description, publisher, language)
     if book.ebook_filename:
-        for bl_client in get_booklore_clients():
-            try:
-                if not bl_client.is_configured():
-                    continue
+        bl_client = get_booklore_client()
+        try:
+            if bl_client.is_configured():
                 bl_book = bl_client.find_book_by_filename(book.ebook_filename, allow_refresh=False)
                 if not bl_book and getattr(book, 'original_ebook_filename', None):
                     bl_book = bl_client.find_book_by_filename(book.original_ebook_filename, allow_refresh=False)
@@ -418,12 +417,10 @@ def reading_detail(abs_id):
                     bl_base = get_service_web_url('BOOKLORE') or bl_client.base_url
                     bl_url = f"{bl_base}/book/{bl_book.get('id')}?tab=view"
                     metadata['booklore_url'] = bl_url
-                    break
-            except Exception as e:
-                logger.debug("Booklore lookup failed for ebook_filename=%s, original=%s, client=%s: %s",
-                             book.ebook_filename, getattr(book, 'original_ebook_filename', None),
-                             bl_client.base_url, e)
-                continue
+        except Exception as e:
+            logger.debug("Booklore lookup failed for ebook_filename=%s, original=%s, client=%s: %s",
+                         book.ebook_filename, getattr(book, 'original_ebook_filename', None),
+                         bl_client.base_url, e)
 
     # BookFusion catalog entry (tags, series)
     bf_book = database_service.get_bookfusion_book_by_abs_id(abs_id)
@@ -459,7 +456,7 @@ def reading_detail(abs_id):
         'storyteller': container.storyteller_client().is_configured(),
         'hardcover': container.hardcover_client().is_configured(),
         'bookfusion': container.bookfusion_client().is_configured(),
-        'booklore': any(bl.is_configured() for bl in get_booklore_clients()),
+        'booklore': get_booklore_client().is_configured(),
     }
 
     return render_template(

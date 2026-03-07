@@ -1,7 +1,7 @@
 """add bookfusion_books hidden column
 
 Revision ID: a1b2c3d4e5f6
-Revises: f1a2b3c4d5e6
+Revises: c9d0e1f2a3b4
 Create Date: 2026-03-06
 """
 

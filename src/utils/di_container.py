@@ -94,8 +94,6 @@ class Container(containers.DeclarativeContainer):
     booklore_client = providers.Singleton(
         BookloreClient,
         database_service=database_service,
-        config_prefix="BOOKLORE",
-        source_tag="booklore"
     )
 
     hardcover_client = providers.Singleton(HardcoverClient)
@@ -204,7 +202,7 @@ class Container(containers.DeclarativeContainer):
         SuggestionService,
         database_service=database_service,
         abs_client=abs_client,
-        booklore_clients=providers.List(booklore_client),
+        booklore_client=booklore_client,
         storyteller_client=storyteller_client,
         library_service=library_service,
         books_dir=books_dir,
@@ -216,7 +214,7 @@ class Container(containers.DeclarativeContainer):
         BackgroundJobService,
         database_service=database_service,
         abs_client=abs_client,
-        booklore_clients=providers.List(booklore_client),
+        booklore_client=booklore_client,
         ebook_parser=ebook_parser,
         transcriber=transcriber,
         alignment_service=alignment_service,

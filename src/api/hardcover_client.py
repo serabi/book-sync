@@ -805,29 +805,39 @@ class HardcoverClient:
             "tags",
         }
 
+        def _normalize_category_label(value):
+            normalized = _normalize_tag_name(value).lower()
+            singular_map = {
+                'genres': 'genre',
+                'moods': 'mood',
+                'content warnings': 'content warning',
+                'tags': 'tag',
+            }
+            return singular_map.get(normalized, normalized)
+
         def _normalize_category(raw_tag):
             if not isinstance(raw_tag, dict):
                 return ""
 
             category = raw_tag.get("tag_category")
             if isinstance(category, dict):
-                return (
+                return _normalize_category_label(
                     category.get("slug")
                     or category.get("category")
                     or category.get("name")
                     or ""
-                ).strip().lower()
+                )
 
             if isinstance(category, str):
-                return category.strip().lower()
+                return _normalize_category_label(category)
 
-            return (
+            return _normalize_category_label(
                 raw_tag.get("category")
                 or raw_tag.get("tag_category_slug")
                 or raw_tag.get("tag_category_name")
                 or raw_tag.get("type")
                 or ""
-            ).strip().lower()
+            )
 
         genres = []
         tags = []
@@ -839,14 +849,14 @@ class HardcoverClient:
                 return
             if clean_name.lower() in ignored_category_labels:
                 return
-            if category == "genre":
+            if _normalize_category_label(category) == "genre":
                 genres.append(clean_name)
             else:
                 tags.append(clean_name)
 
         if isinstance(source_tags, dict):
             for raw_category, values in source_tags.items():
-                category = _normalize_tag_name(raw_category).lower()
+                category = _normalize_category_label(raw_category)
                 if isinstance(values, list):
                     for value in values:
                         if isinstance(value, dict):
@@ -883,7 +893,7 @@ class HardcoverClient:
                         continue
                     if name.strip().lower() in ignored_category_labels:
                         continue
-                    if category == "genre":
+                    if _normalize_category_label(category) == "genre":
                         genres.append(name)
                     else:
                         tags.append(name)

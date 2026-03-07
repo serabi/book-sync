@@ -1,5 +1,8 @@
 # Hardcover Routes - Flask Blueprint for Hardcover API endpoints
+import ipaddress
 import logging
+import socket
+from urllib.parse import urlparse
 
 from flask import Blueprint, flash, jsonify, redirect, request, url_for
 
@@ -34,6 +37,43 @@ def _get_dependencies():
             ),
         )
     return _database_service, _container, None
+
+
+def _validate_custom_cover_url(raw_url):
+    parsed = urlparse(raw_url)
+    if parsed.scheme not in {'http', 'https'}:
+        return "Custom cover URL must start with http:// or https://"
+    if not parsed.netloc or not parsed.hostname:
+        return "Custom cover URL must include a valid host"
+
+    hostname = parsed.hostname.strip().lower()
+    if hostname == 'localhost':
+        return "Custom cover URL cannot use a local address"
+
+    try:
+        ip = ipaddress.ip_address(hostname)
+        if ip.is_loopback or ip.is_private or ip.is_link_local or ip.is_reserved or ip.is_unspecified:
+            return "Custom cover URL cannot use a local or private address"
+        return None
+    except ValueError:
+        if '.' not in hostname:
+            return "Custom cover URL must use a fully qualified public hostname"
+
+    try:
+        resolved = socket.getaddrinfo(hostname, None, type=socket.SOCK_STREAM)
+    except socket.gaierror:
+        return "Custom cover URL host could not be resolved"
+
+    for _family, _socktype, _proto, _canonname, sockaddr in resolved:
+        address = sockaddr[0]
+        try:
+            ip = ipaddress.ip_address(address)
+        except ValueError:
+            continue
+        if ip.is_loopback or ip.is_private or ip.is_link_local or ip.is_reserved or ip.is_unspecified:
+            return "Custom cover URL cannot use a local or private address"
+
+    return None
 
 
 @hardcover_bp.route("/api/hardcover/resolve", methods=["GET"])
@@ -312,6 +352,9 @@ def set_book_cover(abs_id):
         url = (data.get("url") or "").strip()
         if not url:
             return jsonify({"error": "No URL provided"}), 400
+        validation_error = _validate_custom_cover_url(url)
+        if validation_error:
+            return jsonify({"error": validation_error}), 400
         book.custom_cover_url = url
         database_service.save_book(book)
         cover_url = url

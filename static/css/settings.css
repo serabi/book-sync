@@ -514,7 +514,7 @@ input:checked + .slider:before {
 
 .sidebar-version-text {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--color-text-faint);
   font-weight: 600;
   letter-spacing: 0.5px;
   font-family: monospace;
@@ -522,10 +522,10 @@ input:checked + .slider:before {
 
 .sidebar-update-link {
   font-size: 11px;
-  color: #7C3AED;
+  color: var(--color-primary-hover);
   text-decoration: none;
-  background: rgba(124, 58, 237, 0.15);
-  border: 1px solid rgba(124, 58, 237, 0.3);
+  background: var(--color-primary-light);
+  border: 1px solid var(--color-primary-border);
   border-radius: 4px;
   padding: 3px 8px;
   white-space: nowrap;
@@ -534,7 +534,7 @@ input:checked + .slider:before {
 }
 
 .sidebar-update-link:hover {
-  background: rgba(124, 58, 237, 0.25);
+  background: var(--color-surface-hover);
 }
 
 /* ─── Responsive: Tablet ─── */

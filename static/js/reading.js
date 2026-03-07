@@ -308,7 +308,11 @@ function initReadingPage(currentYear) {
           return r.json();
         })
         .then(data => {
-          if (data.success) window.location.reload();
+          if (data.success) {
+            window.location.reload();
+            return;
+          }
+          goalSave.disabled = false;
         })
         .catch(() => { goalSave.disabled = false; });
     });

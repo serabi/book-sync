@@ -1,12 +1,11 @@
 """Covers blueprint — /covers/<filename> and /api/cover-proxy/booklore/."""
 
 import logging
-import re
 
 import requests
 from flask import Blueprint, Response, send_from_directory
 
-from src.blueprints.helpers import get_booklore_clients, get_container, get_covers_dir, get_database_service
+from src.blueprints.helpers import get_booklore_client, get_container, get_covers_dir, get_database_service
 
 logger = logging.getLogger(__name__)
 
@@ -46,20 +45,12 @@ def serve_cover(filename):
     return "Cover not found", 404
 
 
-@covers_bp.route('/api/cover-proxy/booklore/<source_tag>/<int:book_id>')
-def proxy_booklore_cover(source_tag, book_id):
-    """Proxy cover access to Booklore instances (requires Bearer token auth)."""
-    if not re.fullmatch(r'[a-zA-Z0-9_\-]+', source_tag):
-        return "Invalid source tag", 400
-
+@covers_bp.route('/api/cover-proxy/booklore/<int:book_id>')
+def proxy_booklore_cover(book_id):
+    """Proxy cover access to Booklore (requires Bearer token auth)."""
     try:
-        bl_client = None
-        for client in get_booklore_clients():
-            if client.source_tag == source_tag and client.is_configured():
-                bl_client = client
-                break
-
-        if not bl_client:
+        bl_client = get_booklore_client()
+        if not bl_client.is_configured():
             return "Booklore not configured", 404
 
         token = bl_client._get_fresh_token()
@@ -75,5 +66,5 @@ def proxy_booklore_cover(source_tag, book_id):
         else:
             return "Cover not found", 404
     except Exception as e:
-        logger.error(f"Error proxying Booklore cover for book {book_id} ({source_tag}): {e}")
+        logger.error(f"Error proxying Booklore cover for book {book_id}: {e}")
         return "Error loading cover", 500

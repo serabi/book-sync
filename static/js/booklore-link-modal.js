@@ -3,7 +3,7 @@
  * Allows linking a PageKeeper book to a Booklore book by searching and selecting.
  */
 
-var bookloreModalState = { absId: null };
+var bookloreModalState = { absId: null, searchRequestId: 0 };
 
 function _blEl(tag, className, text) {
     var e = document.createElement(tag);
@@ -27,6 +27,7 @@ function openBookloreModal(absId, title) {
 function closeBookloreModal() {
     document.getElementById('bl-modal').style.display = 'none';
     bookloreModalState.absId = null;
+    bookloreModalState.searchRequestId += 1;
 }
 
 function searchBooklore() {
@@ -37,12 +38,15 @@ function searchBooklore() {
     while (resultsDiv.firstChild) resultsDiv.removeChild(resultsDiv.firstChild);
     resultsDiv.appendChild(_blEl('div', 'st-loading', 'Searching Booklore...'));
 
+    var requestId = ++bookloreModalState.searchRequestId;
+
     fetch('/api/booklore/search?q=' + encodeURIComponent(query))
         .then(function(r) {
             if (!r.ok) throw new Error('Search failed: ' + r.status);
             return r.json();
         })
         .then(function(books) {
+            if (requestId !== bookloreModalState.searchRequestId) return;
             while (resultsDiv.firstChild) resultsDiv.removeChild(resultsDiv.firstChild);
 
             // Unlink option
@@ -81,19 +85,20 @@ function searchBooklore() {
 
                 var btn = _blEl('button', 'action-btn success', 'Link');
                 btn.addEventListener('click', function() {
-                    linkBooklore(book.fileName, book.source_tag);
+                    linkBooklore(book.fileName);
                 });
                 card.appendChild(btn);
                 resultsDiv.appendChild(card);
             });
         })
         .catch(function(e) {
+            if (requestId !== bookloreModalState.searchRequestId) return;
             while (resultsDiv.firstChild) resultsDiv.removeChild(resultsDiv.firstChild);
             resultsDiv.appendChild(_blEl('div', 'st-error', 'Error: ' + e.message));
         });
 }
 
-function linkBooklore(filename, sourceTag) {
+function linkBooklore(filename) {
     if (!bookloreModalState.absId) return;
 
     var resultsDiv = document.getElementById('bl-results');
@@ -103,7 +108,7 @@ function linkBooklore(filename, sourceTag) {
     fetch('/api/booklore/link/' + encodeURIComponent(bookloreModalState.absId), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filename: filename, source_tag: sourceTag || '' })
+        body: JSON.stringify({ filename: filename })
     })
     .then(function(r) {
         if (r.ok) {

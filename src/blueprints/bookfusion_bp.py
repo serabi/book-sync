@@ -8,7 +8,7 @@ from datetime import datetime
 
 from flask import Blueprint, current_app, jsonify, render_template, request
 
-from src.blueprints.helpers import get_booklore_clients, get_container, get_database_service
+from src.blueprints.helpers import get_booklore_client, get_container, get_database_service
 from src.db.models import Book, HardcoverDetails
 
 logger = logging.getLogger(__name__)
@@ -33,11 +33,10 @@ def booklore_books():
     q = request.args.get('q', '').strip()
     results = []
 
-    for client in get_booklore_clients():
-        if not client.is_configured():
-            continue
+    client = get_booklore_client()
+    if client.is_configured():
         try:
-            label = current_app.config.get(f"{client.config_prefix}_LABEL", "Booklore")
+            label = current_app.config.get("BOOKLORE_LABEL", "Booklore")
             books = client.search_books(q) if q else client.get_all_books()
             for b in (books or []):
                 fname = b.get('fileName', '')
@@ -49,10 +48,9 @@ def booklore_books():
                     'authors': b.get('authors', ''),
                     'fileName': fname,
                     'source': label,
-                    'source_tag': client.source_tag,
                 })
         except Exception as e:
-            logger.warning(f"Booklore ({client.source_tag}) search failed: {e}")
+            logger.warning(f"Booklore search failed: {e}")
 
     return jsonify(results)
 
@@ -65,7 +63,6 @@ def upload_book():
         return jsonify({'error': 'No data provided'}), 400
 
     book_id = data.get('book_id')
-    source_tag = data.get('source_tag', 'booklore')
     title = data.get('title', '')
     authors = data.get('authors', '')
     filename = data.get('fileName', '')
@@ -79,15 +76,9 @@ def upload_book():
     if not bf_client.upload_api_key:
         return jsonify({'error': 'BookFusion upload API key not configured'}), 400
 
-    # Find the right Booklore client by source_tag
-    bl_client = None
-    for client in get_booklore_clients():
-        if client.source_tag == source_tag and client.is_configured():
-            bl_client = client
-            break
-
-    if not bl_client:
-        return jsonify({'error': f'Booklore instance "{source_tag}" not found'}), 400
+    bl_client = get_booklore_client()
+    if not bl_client.is_configured():
+        return jsonify({'error': 'Booklore not configured'}), 400
 
     # Download from Booklore
     file_bytes = bl_client.download_book(book_id)

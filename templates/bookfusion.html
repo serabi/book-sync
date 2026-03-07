@@ -221,7 +221,6 @@
                         </div>
                         <button class="bf-upload-btn"
                             data-book-id="${escapeHtml(b.id)}"
-                            data-source-tag="${escapeHtml(b.source_tag)}"
                             data-title="${escapeHtml(b.title || '')}"
                             data-authors="${escapeHtml(b.authors || '')}"
                             data-file-name="${escapeHtml(b.fileName || '')}"
@@ -238,7 +237,6 @@
     function handleUploadClick(btn) {
         const book = {
             id: btn.dataset.bookId,
-            source_tag: btn.dataset.sourceTag,
             title: btn.dataset.title,
             authors: btn.dataset.authors,
             fileName: btn.dataset.fileName,
@@ -255,7 +253,6 @@
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
                 book_id: book.id,
-                source_tag: book.source_tag,
                 title: book.title,
                 authors: book.authors,
                 fileName: book.fileName,

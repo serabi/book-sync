@@ -21,14 +21,14 @@ class SuggestionService:
     def __init__(self,
                  database_service,
                  abs_client,
-                 booklore_clients: list,
+                 booklore_client,
                  storyteller_client,
                  library_service,
                  books_dir,
                  ebook_parser):
         self.database_service = database_service
         self.abs_client = abs_client
-        self._booklore_clients = booklore_clients
+        self.booklore_client = booklore_client
         self.storyteller_client = storyteller_client
         self.library_service = library_service
         self.books_dir = books_dir
@@ -161,10 +161,6 @@ class SuggestionService:
         with self._rescan_lock:
             self._rescan_status.update(kwargs)
 
-    def _get_booklore_source_tag(self, bl_client) -> str:
-        source_tag = getattr(bl_client, "source_tag", "default")
-        return source_tag if isinstance(source_tag, str) and source_tag else "default"
-
     def get_rescan_status(self) -> dict:
         with self._rescan_lock:
             status = dict(self._rescan_status)
@@ -221,28 +217,25 @@ class SuggestionService:
         seen = set()
 
         self._update_rescan_status(phase="loading_booklore", message="Loading Booklore candidates...")
-        for bl_client in self._booklore_clients:
-            if not (bl_client and bl_client.is_configured()):
-                continue
+        bl_client = self.booklore_client
+        if bl_client and bl_client.is_configured():
             try:
                 for book in bl_client.get_all_books() or []:
                     filename = book.get('fileName', '')
                     if not filename or not filename.lower().endswith('.epub'):
                         continue
-                    source_tag = self._get_booklore_source_tag(bl_client)
-                    dedupe_key = ("booklore", source_tag, filename.lower())
+                    dedupe_key = ("booklore", filename.lower())
                     if dedupe_key in seen:
                         continue
                     seen.add(dedupe_key)
                     candidates.append({
                         "source_family": "booklore",
                         "source": "booklore",
-                        "source_key": f"booklore:{source_tag}:{filename}",
+                        "source_key": f"booklore:{filename}",
                         "title": book.get('title') or Path(filename).stem,
                         "author": book.get('authors') or '',
                         "filename": filename,
                         "id": str(book.get('id') or ''),
-                        "source_tag": source_tag,
                         "action_kind": "create_mapping",
                     })
             except Exception as e:
@@ -484,24 +477,21 @@ class SuggestionService:
                 logger.debug(f"Reverse suggestions: Storyteller check failed: {e}")
 
         # Check Booklore books
-        for bl_client in self._booklore_clients:
-            if not (bl_client and bl_client.is_configured()):
-                continue
+        if self.booklore_client and self.booklore_client.is_configured():
             try:
-                bl_books = bl_client.get_all_books()
+                bl_books = self.booklore_client.get_all_books()
                 for bl_book in bl_books:
                     title = bl_book.get('title', '')
                     filename = bl_book.get('fileName', '')
                     if not title:
                         continue
 
-                    # Check if this book has progress
-                    pct_raw, _ = bl_client.get_progress(filename)
+                    pct_raw, _ = self.booklore_client.get_progress(filename)
                     if not pct_raw or pct_raw < 0.01 or pct_raw > 0.70:
                         continue
 
                     clean_title = re.sub(r'\s*[\(\[].*?[\)\]]', '', title).strip().lower()
-                    source_key = f"booklore:{bl_client.source_tag}:{filename}"
+                    source_key = f"booklore:{filename}"
                     matches = self._find_abs_audiobook_matches(clean_title, abs_by_title, mapped_abs_ids)
                     if matches:
                         self._save_reverse_suggestion(matches, title, source_key)
@@ -542,12 +532,38 @@ class SuggestionService:
         cover = f"/api/cover-proxy/{abs_id}"
         # Include source_key as provenance so we know where the suggestion originated
         matches_with_provenance = [dict(m, source_key=source_key) for m in matches]
+        existing = self.database_service.get_pending_suggestion(abs_id) or self.database_service.get_suggestion(abs_id)
+        merged_matches = []
+        merged_index = {}
+
+        def _match_key(match):
+            return (
+                match.get('abs_id'),
+                match.get('source_key'),
+                match.get('title'),
+                match.get('author'),
+            )
+
+        for match in (existing.matches if existing else []) + matches_with_provenance:
+            key = _match_key(match)
+            prior = merged_index.get(key)
+            if prior is None:
+                merged_index[key] = len(merged_matches)
+                merged_matches.append(dict(match))
+                continue
+
+            current = merged_matches[prior]
+            merged_matches[prior] = {
+                **current,
+                **{k: v for k, v in match.items() if v not in (None, '')},
+            }
+
         suggestion = PendingSuggestion(
             source_id=abs_id,
-            title=best.get('title', title),
-            author=best.get('author'),
-            cover_url=cover,
-            matches_json=json.dumps(matches_with_provenance),
+            title=(existing.title if existing and existing.title else best.get('title', title)),
+            author=(existing.author if existing and existing.author else best.get('author')),
+            cover_url=(existing.cover_url if existing and existing.cover_url else cover),
+            matches_json=json.dumps(merged_matches),
         )
         self.database_service.save_pending_suggestion(suggestion)
         logger.info(f"Reverse suggestion: '{title}' has matching audiobook '{best.get('title')}' in ABS")
@@ -700,13 +716,10 @@ class SuggestionService:
             if author:
                 query = f"{query} {author}"
 
-            for bl_client in self._booklore_clients:
-                if not (bl_client and bl_client.is_configured()):
-                    continue
+            if self.booklore_client and self.booklore_client.is_configured():
                 try:
-                    live_results = bl_client.search_books(query) or []
+                    live_results = self.booklore_client.search_books(query) or []
                     live_candidates = []
-                    source_tag = self._get_booklore_source_tag(bl_client)
                     for book in live_results:
                         filename = book.get("fileName", "")
                         if not filename or not filename.lower().endswith(".epub"):
@@ -714,12 +727,11 @@ class SuggestionService:
                         live_candidates.append({
                             "source_family": "booklore",
                             "source": "booklore",
-                            "source_key": f"booklore:{source_tag}:{filename}",
+                            "source_key": f"booklore:{filename}",
                             "title": book.get("title") or Path(filename).stem,
                             "author": book.get("authors") or "",
                             "filename": filename,
                             "id": str(book.get("id") or ""),
-                            "source_tag": source_tag,
                             "action_kind": "create_mapping",
                         })
                     matches.extend(

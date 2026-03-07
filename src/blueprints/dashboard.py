@@ -7,13 +7,7 @@ from pathlib import Path
 
 from flask import Blueprint, render_template
 
-from src.blueprints.helpers import (
-    get_abs_service,
-    get_booklore_clients,
-    get_container,
-    get_database_service,
-    get_service_web_url,
-)
+from src.blueprints.helpers import get_abs_service, get_booklore_client, get_container, get_database_service, get_service_web_url
 from src.version import APP_VERSION
 
 logger = logging.getLogger(__name__)
@@ -96,7 +90,6 @@ def index():
     hardcover_by_book = {h.abs_id: h for h in all_hardcover}
 
     # Fetch Booklore metadata for ebook-only title/author enrichment
-    # Collect a list per filename so dual instances don't overwrite each other
     all_booklore_books = database_service.get_all_booklore_books()
     booklore_by_filename = {}
     for bl_book in all_booklore_books:
@@ -249,7 +242,7 @@ def index():
         mapping['storyteller_legacy_link'] = is_legacy_link
 
         # Platform deep links
-        if book_type != 'ebook-only':
+        if book_type != 'ebook-only' and book.abs_id and not book.abs_id.startswith('bf-'):
             abs_base = get_service_web_url('ABS') or (abs_service.abs_client.base_url if abs_service.is_available() else '')
             mapping['abs_url'] = f"{abs_base}/item/{book.abs_id}" if abs_base else None
         else:
@@ -257,13 +250,11 @@ def index():
 
         # Booklore deep links (check all instances)
         mapping['booklore_id'] = None
-        mapping['booklore_source_tag'] = None
         mapping['booklore_url'] = None
         if book.ebook_filename:
-            for bl_client in get_booklore_clients():
-                try:
-                    if not bl_client.is_configured():
-                        continue
+            bl_client = get_booklore_client()
+            try:
+                if bl_client.is_configured():
                     bl_book = bl_client.find_book_by_filename(book.ebook_filename, allow_refresh=False)
                     if not bl_book and book.original_ebook_filename:
                         bl_book = bl_client.find_book_by_filename(book.original_ebook_filename, allow_refresh=False)
@@ -271,12 +262,9 @@ def index():
                         bl_base = get_service_web_url('BOOKLORE') or bl_client.base_url
                         url = f"{bl_base}/book/{bl_book.get('id')}?tab=view"
                         mapping['booklore_id'] = bl_book.get('id')
-                        mapping['booklore_source_tag'] = bl_client.source_tag
                         mapping['booklore_url'] = url
-                        break
-                except Exception:
-                    logger.debug(f"Booklore lookup failed for '{getattr(bl_client, 'source_tag', '?')}', skipping")
-                    continue
+            except Exception:
+                logger.debug("Booklore lookup failed, skipping")
 
         if mapping.get('hardcover_slug'):
             mapping['hardcover_url'] = f"https://hardcover.app/books/{mapping['hardcover_slug']}"
@@ -311,7 +299,7 @@ def index():
 
         # Booklore cover fallback for books without an ABS cover
         if not mapping['cover_url'] and mapping.get('booklore_id'):
-            mapping['cover_url'] = f"/api/cover-proxy/booklore/{mapping.get('booklore_source_tag') or 'booklore'}/{mapping['booklore_id']}"
+            mapping['cover_url'] = f"/api/cover-proxy/booklore/{mapping['booklore_id']}"
 
         # Custom cover URL fallback (user-pasted)
         if not mapping['cover_url'] and book.custom_cover_url:
