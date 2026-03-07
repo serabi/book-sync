@@ -6,13 +6,40 @@ ABS-specific routes (/api/abs/*, /api/cover-proxy/*) are in abs_bp.py.
 import json
 import logging
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 
-from src.blueprints.helpers import get_container, get_database_service
+from src.blueprints.helpers import get_booklore_clients, get_container, get_database_service
+from src.db.models import Book
 
 logger = logging.getLogger(__name__)
 
 api_bp = Blueprint('api', __name__)
+
+
+def _serialize_suggestion(s):
+    try:
+        matches = json.loads(s.matches_json) if s.matches_json else []
+    except Exception as e:
+        logger.debug(f"Failed to parse matches_json for suggestion '{s.source_id}': {e}")
+        matches = []
+
+    for m in matches:
+        evidence = m.get('evidence') or []
+        m['has_bookfusion'] = (
+            m.get('source_family') == 'bookfusion'
+            or any(ev.startswith('bookfusion') for ev in evidence)
+        )
+
+    return {
+        "id": s.id,
+        "source_id": s.source_id,
+        "title": s.title,
+        "author": s.author,
+        "cover_url": s.cover_url,
+        "matches": matches,
+        "has_bookfusion_evidence": any(m.get('has_bookfusion') for m in matches),
+        "created_at": s.created_at.isoformat()
+    }
 
 
 # ---------------- Status ----------------
@@ -100,24 +127,23 @@ def api_processing_status():
 def get_suggestions():
     database_service = get_database_service()
     suggestions = database_service.get_all_pending_suggestions()
-    result = []
-    for s in suggestions:
-        try:
-            matches = json.loads(s.matches_json) if s.matches_json else []
-        except Exception as e:
-            logger.debug(f"Failed to parse matches_json for suggestion '{s.source_id}': {e}")
-            matches = []
+    return jsonify([_serialize_suggestion(s) for s in suggestions if s.matches])
 
-        result.append({
-            "id": s.id,
-            "source_id": s.source_id,
-            "title": s.title,
-            "author": s.author,
-            "cover_url": s.cover_url,
-            "matches": matches,
-            "created_at": s.created_at.isoformat()
-        })
-    return jsonify(result)
+
+@api_bp.route('/api/suggestions/rescan', methods=['POST'])
+def rescan_suggestions():
+    container = get_container()
+    data = request.get_json(silent=True) or {}
+    force = bool(data.get('force'))
+    stats = container.suggestion_service().request_rescan_library_suggestions(force=force)
+    return jsonify({"success": True, **stats})
+
+
+@api_bp.route('/api/suggestions/rescan-status', methods=['GET'])
+def rescan_suggestions_status():
+    container = get_container()
+    status = container.suggestion_service().get_rescan_status()
+    return jsonify({"success": True, **status})
 
 
 @api_bp.route('/api/suggestions/<source_id>/dismiss', methods=['POST'])
@@ -142,6 +168,53 @@ def clear_stale_suggestions():
     count = database_service.clear_stale_suggestions()
     logger.info(f"Cleared {count} stale suggestions from database")
     return jsonify({"success": True, "count": count})
+
+
+@api_bp.route('/api/suggestions/<source_id>/link-bookfusion', methods=['POST'])
+def link_suggestion_bookfusion(source_id):
+    database_service = get_database_service()
+    container = get_container()
+    suggestion = database_service.get_pending_suggestion(source_id)
+    if not suggestion:
+        return jsonify({"error": "Suggestion not found"}), 404
+
+    data = request.get_json(silent=True) or {}
+    match_index = data.get('match_index')
+    matches = suggestion.matches or []
+    if match_index is None or not isinstance(match_index, int) or match_index < 0 or match_index >= len(matches):
+        return jsonify({"error": "Valid match_index required"}), 400
+
+    match = matches[match_index]
+    bookfusion_ids = match.get('bookfusion_ids') or []
+    if match.get('source_family') != 'bookfusion' or not bookfusion_ids:
+        return jsonify({"error": "Selected match is not a BookFusion candidate"}), 400
+
+    abs_book = database_service.get_book(source_id)
+    if not abs_book:
+        abs_client = container.abs_client()
+        item = abs_client.get_item_details(source_id) if abs_client else None
+        metadata = (item or {}).get('media', {}).get('metadata', {})
+        abs_book = Book(
+            abs_id=source_id,
+            abs_title=metadata.get('title') or suggestion.title or source_id,
+            status='active',
+            duration=(item or {}).get('media', {}).get('duration'),
+            sync_mode='audiobook',
+        )
+        database_service.save_book(abs_book)
+        abs_service = container.abs_service()
+        if abs_service and abs_service.is_available():
+            try:
+                abs_service.add_to_collection(source_id, current_app.config['ABS_COLLECTION_NAME'])
+            except Exception as e:
+                logger.warning(f"Failed to add '{source_id}' to ABS collection during BookFusion link: {e}")
+
+    for bid in bookfusion_ids:
+        database_service.set_bookfusion_book_match(bid, source_id)
+        database_service.link_bookfusion_book(bid, source_id)
+
+    database_service.dismiss_suggestion(source_id)
+    return jsonify({"success": True, "abs_id": source_id})
 
 
 @api_bp.route('/api/sync-reading-dates', methods=['POST'])
@@ -211,7 +284,66 @@ def get_booklore_libraries():
     return _get_booklore_libraries(lambda c: c.booklore_client(), "Booklore")
 
 
-@api_bp.route('/api/booklore/2/libraries', methods=['GET'])
-def get_booklore_2_libraries():
-    """Return available Booklore 2 libraries."""
-    return _get_booklore_libraries(lambda c: c.booklore_client_2(), "Booklore 2")
+
+@api_bp.route('/api/booklore/search', methods=['GET'])
+def api_booklore_search():
+    """Search Booklore books by title/author/filename."""
+    query = request.args.get('q', '').strip()
+    if not query:
+        return jsonify([])
+
+    results = []
+    for client in get_booklore_clients():
+        if not client.is_configured():
+            continue
+        try:
+            config_key = f"{client.config_prefix}_LABEL"
+            label = current_app.config.get(config_key, "Booklore")
+            books = client.search_books(query)
+            for b in (books or []):
+                results.append({
+                    'id': b.get('id'),
+                    'title': b.get('title', ''),
+                    'authors': b.get('authors', ''),
+                    'fileName': b.get('fileName', ''),
+                    'source': label,
+                    'source_tag': client.source_tag,
+                })
+        except Exception:
+            logger.warning("Booklore search failed for source_tag=%s", client.source_tag, exc_info=True)
+
+    return jsonify(results)
+
+
+@api_bp.route('/api/booklore/link/<abs_id>', methods=['POST'])
+def api_booklore_link(abs_id):
+    """Link or unlink a PageKeeper book to a Booklore book by filename."""
+    database_service = get_database_service()
+    book = database_service.get_book(abs_id)
+    if not book:
+        return jsonify({"error": "Book not found"}), 404
+
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "No data provided"}), 400
+
+    if 'filename' not in data:
+        return jsonify({"error": "Missing 'filename' in JSON payload"}), 400
+    filename_raw = data.get('filename')
+    if filename_raw is None:
+        filename = ''
+    elif not isinstance(filename_raw, str):
+        return jsonify({"error": "'filename' must be a string or null"}), 400
+    else:
+        filename = filename_raw.strip()
+
+    if not filename:
+        logger.info(f"Unlinking Booklore for '{book.abs_title}'")
+        book.ebook_filename = None
+        database_service.save_book(book)
+        return jsonify({"success": True, "message": "Booklore unlinked"})
+
+    book.ebook_filename = filename
+    database_service.save_book(book)
+    logger.info(f"Linked Booklore file '{filename}' to '{book.abs_title}'")
+    return jsonify({"success": True, "message": "Linked successfully"})

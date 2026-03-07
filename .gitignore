@@ -36,6 +36,7 @@ cwa_debug.log
 # Local documentation and screenshots
 docs/
 screenshots/
+pagekeeper-wiki/
 
 # Local System Rules
 .cursorrules

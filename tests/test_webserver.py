@@ -8,10 +8,12 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 # Add project root to Python path
 sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.modules.setdefault('nh3', SimpleNamespace(clean=lambda value, tags=None, attributes=None: value))
 
 
 class MockContainer:
@@ -26,6 +28,10 @@ class MockContainer:
         self.mock_database_service.get_all_settings.return_value = {}  # Default empty settings
         self.mock_ebook_parser = Mock()
         self.mock_sync_clients = Mock()
+        self.mock_bookfusion_client = Mock()
+        self.mock_bookfusion_client.is_configured.return_value = False
+        self.mock_bookfusion_client.highlights_api_key = ''
+        self.mock_bookfusion_client.upload_api_key = ''
 
         # Configure the sync manager to return our mock clients
         self.mock_sync_manager.abs_client = self.mock_abs_client
@@ -53,13 +59,8 @@ class MockContainer:
     def database_service(self):
         return self.mock_database_service
 
-    def sync_clients(self):
-        """Return mock sync clients for integrations."""
-        return {
-            'ABS': Mock(is_configured=Mock(return_value=True)),
-            'KoSync': Mock(is_configured=Mock(return_value=True)),
-            'Storyteller': Mock(is_configured=Mock(return_value=False))
-        }
+    def bookfusion_client(self):
+        return self.mock_bookfusion_client
 
     def data_dir(self):
         return Path(tempfile.gettempdir()) / 'test_data'
@@ -379,9 +380,9 @@ class CleanFlaskIntegrationTest(unittest.TestCase):
     def test_match_endpoint_with_clean_di(self):
         """Test match endpoint using clean dependency injection."""
         # Mock the kosync ID generation
-        import src.blueprints.books
-        original_get_kosync = src.blueprints.books.get_kosync_id_for_ebook
-        src.blueprints.books.get_kosync_id_for_ebook = Mock(return_value='test-kosync-id')
+        import src.blueprints.matching_bp
+        original_get_kosync = src.blueprints.matching_bp.get_kosync_id_for_ebook
+        src.blueprints.matching_bp.get_kosync_id_for_ebook = Mock(return_value='test-kosync-id')
 
         try:
             # Configure mocks
@@ -439,7 +440,7 @@ class CleanFlaskIntegrationTest(unittest.TestCase):
             print("[OK] Match endpoint test passed with clean DI")
 
         finally:
-            src.blueprints.books.get_kosync_id_for_ebook = original_get_kosync
+            src.blueprints.matching_bp.get_kosync_id_for_ebook = original_get_kosync
 
     def test_clear_progress_endpoint_clean_di(self):
         """Test clear progress endpoint with clean dependency injection."""
@@ -568,9 +569,9 @@ class CleanFlaskIntegrationTest(unittest.TestCase):
 
     def test_ebook_only_match(self):
         """Test ebook-only import creates book with synthetic abs_id."""
-        import src.blueprints.books
-        original_get_kosync = src.blueprints.books.get_kosync_id_for_ebook
-        src.blueprints.books.get_kosync_id_for_ebook = Mock(return_value='abcdef1234567890aabbccdd')
+        import src.blueprints.matching_bp
+        original_get_kosync = src.blueprints.matching_bp.get_kosync_id_for_ebook
+        src.blueprints.matching_bp.get_kosync_id_for_ebook = Mock(return_value='abcdef1234567890aabbccdd')
 
         self.mock_booklore_client.is_configured.return_value = False
 
@@ -596,13 +597,13 @@ class CleanFlaskIntegrationTest(unittest.TestCase):
 
             print("[OK] Ebook-only match test passed")
         finally:
-            src.blueprints.books.get_kosync_id_for_ebook = original_get_kosync
+            src.blueprints.matching_bp.get_kosync_id_for_ebook = original_get_kosync
 
     def test_attach_ebook_to_audio_only(self):
         """Test attaching an ebook to an existing audio-only book."""
-        import src.blueprints.books
-        original_get_kosync = src.blueprints.books.get_kosync_id_for_ebook
-        src.blueprints.books.get_kosync_id_for_ebook = Mock(return_value='new-kosync-hash')
+        import src.blueprints.matching_bp
+        original_get_kosync = src.blueprints.matching_bp.get_kosync_id_for_ebook
+        src.blueprints.matching_bp.get_kosync_id_for_ebook = Mock(return_value='new-kosync-hash')
 
         from src.db.models import Book
         existing_book = Book(
@@ -634,7 +635,7 @@ class CleanFlaskIntegrationTest(unittest.TestCase):
 
             print("[OK] Attach ebook test passed")
         finally:
-            src.blueprints.books.get_kosync_id_for_ebook = original_get_kosync
+            src.blueprints.matching_bp.get_kosync_id_for_ebook = original_get_kosync
 
     def test_attach_audiobook_to_ebook_only(self):
         """Test attaching an audiobook to an existing ebook-only book."""
@@ -691,9 +692,9 @@ class CleanFlaskIntegrationTest(unittest.TestCase):
 
     def test_ebook_only_with_storyteller(self):
         """Test ebook-only import with both ebook and Storyteller UUID."""
-        import src.blueprints.books
-        original_get_kosync = src.blueprints.books.get_kosync_id_for_ebook
-        src.blueprints.books.get_kosync_id_for_ebook = Mock(return_value='abcdef1234567890aabbccdd')
+        import src.blueprints.matching_bp
+        original_get_kosync = src.blueprints.matching_bp.get_kosync_id_for_ebook
+        src.blueprints.matching_bp.get_kosync_id_for_ebook = Mock(return_value='abcdef1234567890aabbccdd')
 
         self.mock_booklore_client.is_configured.return_value = False
 
@@ -718,7 +719,7 @@ class CleanFlaskIntegrationTest(unittest.TestCase):
 
             print("[OK] Ebook-only with Storyteller test passed")
         finally:
-            src.blueprints.books.get_kosync_id_for_ebook = original_get_kosync
+            src.blueprints.matching_bp.get_kosync_id_for_ebook = original_get_kosync
 
     def test_storyteller_only_match(self):
         """Test Storyteller-only import creates book with synthetic ID and no ebook."""

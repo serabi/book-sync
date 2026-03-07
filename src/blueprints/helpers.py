@@ -46,34 +46,55 @@ def get_abs_service():
     return current_app.config['abs_service']
 
 
+# --------------- Service URL helpers ---------------
+
+def get_service_web_url(service_prefix):
+    """Return the preferred web URL for a service based on its URL mode setting.
+
+    Reads {PREFIX}_HEADER_URL_MODE (default: 'external') and returns the
+    internal or external URL accordingly, with fallbacks to legacy server URLs.
+    """
+    prefix = service_prefix.upper()
+    mode = os.environ.get(f'{prefix}_HEADER_URL_MODE', 'external').lower()
+
+    legacy_fallbacks = {
+        'ABS': os.environ.get('ABS_SERVER', ''),
+        'BOOKLORE': os.environ.get('BOOKLORE_SERVER', ''),
+        'STORYTELLER': os.environ.get('STORYTELLER_API_URL', ''),
+        'CWA': os.environ.get('CWA_SERVER', ''),
+    }
+    internal_url = os.environ.get(f'{prefix}_WEB_URL_INTERNAL', '') or legacy_fallbacks.get(prefix, '')
+    external_url = os.environ.get(f'{prefix}_WEB_URL_EXTERNAL', '') or os.environ.get(f'{prefix}_WEB_URL', '')
+
+    if prefix == 'HARDCOVER' and not external_url:
+        external_url = 'https://hardcover.app'
+
+    if mode == 'internal':
+        return (internal_url or external_url).rstrip('/')
+    return (external_url or internal_url).rstrip('/')
+
+
 # --------------- Booklore multi-instance helpers ---------------
 
 def get_booklore_clients():
-    """Return a list of configured (or all) BookloreClient instances from the container."""
+    """Return a list of BookloreClient instances from the container."""
     container = get_container()
-    clients = [container.booklore_client()]
-    try:
-        clients.append(container.booklore_client_2())
-    except AttributeError:
-        pass
-    except Exception as e:
-        logger.debug(f"Failed to resolve booklore_client_2: {e}")
-    return clients
+    return [container.booklore_client()]
 
 
 def find_in_booklore(filename):
-    """Search both Booklore instances, return (book_info, client) or (None, None)."""
-    for client in get_booklore_clients():
-        if client.is_configured():
-            book = client.find_book_by_filename(filename)
-            if book:
-                return book, client
+    """Search Booklore for a book by filename, return (book_info, client) or (None, None)."""
+    client = get_container().booklore_client()
+    if client.is_configured():
+        book = client.find_book_by_filename(filename)
+        if book:
+            return book, client
     return None, None
 
 
 def any_booklore_configured():
-    """Return True if any Booklore instance is configured."""
-    return any(c.is_configured() for c in get_booklore_clients())
+    """Return True if Booklore is configured."""
+    return get_container().booklore_client().is_configured()
 
 
 # --------------- Helper functions ---------------

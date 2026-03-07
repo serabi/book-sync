@@ -7,8 +7,14 @@ from pathlib import Path
 
 from flask import Blueprint, render_template
 
-from src.blueprints.helpers import get_abs_service, get_booklore_clients, get_container, get_database_service
-from src.version import APP_VERSION, get_update_status
+from src.blueprints.helpers import (
+    get_abs_service,
+    get_booklore_clients,
+    get_container,
+    get_database_service,
+    get_service_web_url,
+)
+from src.version import APP_VERSION
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +26,7 @@ def index():
     """
     Render the dashboard with enriched book and progress data.
 
-    Loads books, listening states, pending suggestions, hardcover and Booklore metadata, and integration statuses, then renders the dashboard page with per-book mappings, overall progress, suggestions, app version and update information.
+    Loads books, listening states, hardcover and Booklore metadata, and integration statuses, then renders the dashboard page with per-book mappings, overall progress, app version and update information.
 
     Returns:
         Rendered template response for the dashboard page.
@@ -85,10 +91,6 @@ def index():
             states_by_book[state.abs_id] = []
         states_by_book[state.abs_id].append(state)
 
-    # Fetch pending suggestions
-    suggestions_raw = database_service.get_all_pending_suggestions()
-    suggestions = [s for s in suggestions_raw if len(s.matches) > 0]
-
     # Fetch all hardcover details at once
     all_hardcover = database_service.get_all_hardcover_details()
     hardcover_by_book = {h.abs_id: h for h in all_hardcover}
@@ -106,6 +108,20 @@ def index():
     sync_clients = container.sync_clients()
     for client_name, client in sync_clients.items():
         integrations[client_name.lower()] = client.is_configured()
+
+    # BookFusion integration status
+    bf_client = container.bookfusion_client()
+    integrations['bookfusion'] = bf_client.is_configured()
+
+    # Bulk-fetch BookFusion link data (avoid N+1)
+    bf_linked_ids = set()
+    bf_highlight_counts = {}
+    if integrations['bookfusion']:
+        try:
+            bf_linked_ids = database_service.get_bookfusion_linked_abs_ids()
+            bf_highlight_counts = database_service.get_bookfusion_highlight_counts()
+        except Exception as e:
+            logger.warning(f"Could not fetch BookFusion link data: {e}")
 
     mappings = []
     total_duration = 0
@@ -211,7 +227,8 @@ def index():
                 'asin': hardcover_details.asin,
                 'matched_by': hardcover_details.matched_by,
                 'hardcover_linked': True,
-                'hardcover_title': book.abs_title
+                'hardcover_title': book.abs_title,
+                'hardcover_cover_url': hardcover_details.hardcover_cover_url,
             })
         else:
             mapping.update({
@@ -233,14 +250,15 @@ def index():
 
         # Platform deep links
         if book_type != 'ebook-only':
-            mapping['abs_url'] = abs_service.get_abs_item_url(book.abs_id)
+            abs_base = get_service_web_url('ABS') or (abs_service.abs_client.base_url if abs_service.is_available() else '')
+            mapping['abs_url'] = f"{abs_base}/item/{book.abs_id}" if abs_base else None
         else:
             mapping['abs_url'] = None
 
         # Booklore deep links (check all instances)
         mapping['booklore_id'] = None
+        mapping['booklore_source_tag'] = None
         mapping['booklore_url'] = None
-        mapping['booklore_2_url'] = None
         if book.ebook_filename:
             for bl_client in get_booklore_clients():
                 try:
@@ -250,12 +268,12 @@ def index():
                     if not bl_book and book.original_ebook_filename:
                         bl_book = bl_client.find_book_by_filename(book.original_ebook_filename, allow_refresh=False)
                     if bl_book:
-                        url = f"{bl_client.base_url}/book/{bl_book.get('id')}?tab=view"
-                        if bl_client.source_tag == 'booklore':
-                            mapping['booklore_id'] = bl_book.get('id')
-                            mapping['booklore_url'] = url
-                        else:
-                            mapping['booklore_2_url'] = url
+                        bl_base = get_service_web_url('BOOKLORE') or bl_client.base_url
+                        url = f"{bl_base}/book/{bl_book.get('id')}?tab=view"
+                        mapping['booklore_id'] = bl_book.get('id')
+                        mapping['booklore_source_tag'] = bl_client.source_tag
+                        mapping['booklore_url'] = url
+                        break
                 except Exception:
                     logger.debug(f"Booklore lookup failed for '{getattr(bl_client, 'source_tag', '?')}', skipping")
                     continue
@@ -267,7 +285,13 @@ def index():
         else:
             mapping['hardcover_url'] = None
 
+        # BookFusion link data
+        is_bf_linked = (book.abs_id in bf_linked_ids) or book.abs_id.startswith('bf-')
+        mapping['bookfusion_linked'] = is_bf_linked
+        mapping['bookfusion_highlight_count'] = bf_highlight_counts.get(book.abs_id, 0)
+
         mapping['unified_progress'] = min(max_progress, 100.0)
+        mapping['latest_activity_at'] = latest_update_time or None
 
         if latest_update_time > 0:
             diff = time.time() - latest_update_time
@@ -285,6 +309,18 @@ def index():
         else:
             mapping['cover_url'] = None
 
+        # Booklore cover fallback for books without an ABS cover
+        if not mapping['cover_url'] and mapping.get('booklore_id'):
+            mapping['cover_url'] = f"/api/cover-proxy/booklore/{mapping.get('booklore_source_tag') or 'booklore'}/{mapping['booklore_id']}"
+
+        # Custom cover URL fallback (user-pasted)
+        if not mapping['cover_url'] and book.custom_cover_url:
+            mapping['cover_url'] = book.custom_cover_url
+
+        # Hardcover cover fallback
+        if not mapping['cover_url'] and mapping.get('hardcover_cover_url'):
+            mapping['cover_url'] = mapping['hardcover_cover_url']
+
         duration = mapping.get('duration', 0)
         progress_pct = mapping.get('unified_progress', 0)
 
@@ -301,20 +337,13 @@ def index():
     else:
         overall_progress = 0
 
-    latest_version, update_available = get_update_status()
-
     booklore_label = os.environ.get('BOOKLORE_LABEL', 'Booklore') or 'Booklore'
-    booklore_2_label = os.environ.get('BOOKLORE_2_LABEL', 'Booklore 2') or 'Booklore 2'
 
     return render_template(
         'index.html',
         mappings=mappings,
         integrations=integrations,
         progress=overall_progress,
-        suggestions=suggestions,
         app_version=APP_VERSION,
-        update_available=update_available,
-        latest_version=latest_version,
         booklore_label=booklore_label,
-        booklore_2_label=booklore_2_label
     )
