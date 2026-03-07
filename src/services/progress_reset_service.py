@@ -85,8 +85,8 @@ class ProgressResetService:
                 )
                 self.database_service.save_state(state)
 
-            # Clear started_at so the book appears as "not started"
-            self.database_service.update_book_reading_fields(abs_id, started_at=None)
+            # Clear reading timestamps so the book appears as "not started"
+            self.database_service.update_book_reading_fields(abs_id, started_at=None, finished_at=None)
 
             # Set not_started immediately so the sync daemon won't pick this book up
             if book.status not in ('pending', 'processing'):

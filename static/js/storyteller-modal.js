@@ -38,11 +38,11 @@ async function searchStoryteller() {
         const response = await fetch(`/api/storyteller/search?q=${encodeURIComponent(query)}`);
         if (!response.ok) {
             let message = `Search failed (${response.status})`;
+            const text = await response.text();
             try {
-                const err = await response.json();
+                const err = JSON.parse(text);
                 message = err.error || message;
             } catch (_err) {
-                const text = await response.text();
                 if (text) message = text;
             }
             throw new Error(message);

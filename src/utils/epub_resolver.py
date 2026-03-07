@@ -55,6 +55,7 @@ def get_local_epub(ebook_filename, books_dir, epub_cache_dir, booklore_client=No
                 else:
                     content = booklore_client.download_book(book_id)
                     if content:
+                        cached_path.parent.mkdir(parents=True, exist_ok=True)
                         tmp_fd, tmp_path = tempfile.mkstemp(dir=cached_path.parent, suffix='.tmp')
                         try:
                             with os.fdopen(tmp_fd, 'wb') as f:

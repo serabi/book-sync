@@ -352,7 +352,7 @@ class SuggestionService:
                 match = self._apply_bookfusion_evidence(source_title, source_author, match, bookfusion_context)
             ranked.append(match)
 
-        ranked.sort(key=lambda m: (m.get("score", 0.0), m.get("source_family") != "booklore", m.get("highlight_count", 0)), reverse=True)
+        ranked.sort(key=lambda m: (m.get("score", 0.0), m.get("source_family") == "booklore", m.get("highlight_count", 0)), reverse=True)
         return ranked[:6]
 
     def queue_suggestion(self, abs_id: str) -> None:
@@ -615,6 +615,7 @@ class SuggestionService:
         mapped_ids = {b.abs_id for b in self.database_service.get_all_books()}
         existing_actionable = {
             s.source_id: s for s in self.database_service.get_all_actionable_suggestions()
+            if getattr(s, 'source', 'abs') == 'abs'
         }
         bookfusion_context = self._get_bookfusion_context()
         candidates = self._build_library_candidates(bookfusion_context=bookfusion_context, include_filesystem=True)

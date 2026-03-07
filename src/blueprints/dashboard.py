@@ -113,14 +113,14 @@ def index():
     integrations['bookfusion'] = bf_client.is_configured()
 
     # Bulk-fetch BookFusion link data (avoid N+1)
+    # Always load persisted state so books show links/highlights even when BF client is unconfigured
     bf_linked_ids = set()
     bf_highlight_counts = {}
-    if integrations['bookfusion']:
-        try:
-            bf_linked_ids = database_service.get_bookfusion_linked_abs_ids()
-            bf_highlight_counts = database_service.get_bookfusion_highlight_counts()
-        except Exception as e:
-            logger.warning(f"Could not fetch BookFusion link data: {e}")
+    try:
+        bf_linked_ids = database_service.get_bookfusion_linked_abs_ids()
+        bf_highlight_counts = database_service.get_bookfusion_highlight_counts()
+    except Exception as e:
+        logger.warning(f"Could not fetch BookFusion link data: {e}")
 
     mappings = []
     total_duration = 0
@@ -303,13 +303,13 @@ def index():
         else:
             mapping['cover_url'] = None
 
-        # Booklore cover fallback for books without an ABS cover
-        if not mapping['cover_url'] and mapping.get('booklore_id'):
-            mapping['cover_url'] = f"/api/cover-proxy/booklore/{mapping['booklore_id']}"
-
-        # Custom cover URL fallback (user-pasted)
+        # Custom cover URL override (user-pasted) takes precedence over auto-discovered sources
         if not mapping['cover_url'] and book.custom_cover_url:
             mapping['cover_url'] = book.custom_cover_url
+
+        # Booklore cover fallback for books without an ABS or custom cover
+        if not mapping['cover_url'] and mapping.get('booklore_id'):
+            mapping['cover_url'] = f"/api/cover-proxy/booklore/{mapping['booklore_id']}"
 
         # Hardcover cover fallback
         if not mapping['cover_url'] and mapping.get('hardcover_cover_url'):

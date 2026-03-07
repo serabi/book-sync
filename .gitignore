@@ -40,6 +40,7 @@ pagekeeper-wiki/
 
 # Local System Rules
 .cursorrules
+AGENTS.md
 BRANCH_STATUS.md
 CLAUDE.md
 

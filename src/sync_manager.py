@@ -624,7 +624,7 @@ class SyncManager:
             active_books = self.database_service.get_books_by_status('active')
 
         bulk_states_per_client = {}
-        if not target_abs_id and active_books:
+        if not target_abs_id:
             logger.debug(f"Sync cycle starting - {len(active_books)} active book(s)")
             for client_name, client in self.sync_clients.items():
                 try:
@@ -635,7 +635,7 @@ class SyncManager:
                 except Exception as e:
                     logger.warning(f"Failed to pre-fetch bulk state for {client_name}: {e}")
 
-            # Check for suggestions
+            # Check for suggestions (runs even with no active books)
             if 'ABS' in bulk_states_per_client:
                 self.check_for_suggestions(bulk_states_per_client['ABS'], active_books)
 
@@ -675,6 +675,10 @@ class SyncManager:
             logger.debug(f"'{abs_id}' '{title_snip}' Audio-only mode - using clients: {list(active_clients.keys())}")
         elif sync_type == 'ebook':
             logger.debug(f"'{abs_id}' '{title_snip}' Ebook-only mode - using clients: {list(active_clients.keys())}")
+
+        if not active_clients:
+            logger.debug(f"'{abs_id}' '{title_snip}' No applicable sync clients, skipping")
+            return
 
         # Build config using active_clients - parallel fetch
         config = self._fetch_states_parallel(book, prev_states_by_client, title_snip, bulk_states_per_client, active_clients)
@@ -822,7 +826,19 @@ class SyncManager:
         # Get canonical text from leader
         txt = leader_client.get_text_from_current_state(book, leader_state)
         if not txt:
-            logger.warning(f"'{abs_id}' '{title_snip}' Could not get text from leader '{leader}'")
+            logger.warning(f"'{abs_id}' '{title_snip}' Could not get text from leader '{leader}', persisting leader snapshot")
+            # Persist leader state so this delta isn't rediscovered on the next poll
+            leader_current = leader_state.current
+            state = State(
+                abs_id=abs_id,
+                client_name=leader.lower(),
+                percentage=leader_current.get('pct'),
+                timestamp=leader_current.get('timestamp'),
+                xpath=leader_current.get('xpath'),
+                cfi=leader_current.get('cfi'),
+                last_updated=leader_current.get('last_updated'),
+            )
+            self.database_service.save_state(state)
             return
 
         # Get locator (percentage, xpath, etc) from text

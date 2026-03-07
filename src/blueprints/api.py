@@ -38,7 +38,7 @@ def _serialize_suggestion(s):
         "cover_url": s.cover_url,
         "matches": matches,
         "has_bookfusion_evidence": any(m.get('has_bookfusion') for m in matches),
-        "created_at": s.created_at.isoformat(),
+        "created_at": s.created_at.isoformat() if s.created_at else None,
         "status": 'hidden' if s.status == 'dismissed' else s.status,
         "hidden": s.status in ('hidden', 'dismissed'),
     }

@@ -496,118 +496,120 @@ def batch_match():
         elif action == 'process_queue':
             failed_items = []
             for item in session.get('queue', []):
-                # Handle audio-only queue items
-                if item.get('audio_only'):
+                item_label = item.get('ebook_display_name') or item.get('ebook_filename') or item.get('abs_id')
+                try:
+                    # Handle audio-only queue items
+                    if item.get('audio_only'):
+                        book = Book(
+                            abs_id=item['abs_id'],
+                            abs_title=item['abs_title'],
+                            ebook_filename=None,
+                            kosync_doc_id=None,
+                            status='active',
+                            duration=item['duration'],
+                            sync_mode='audiobook',
+                        )
+                        database_service.save_book(book)
+                        abs_service.add_to_collection(item['abs_id'], current_app.config['ABS_COLLECTION_NAME'])
+                        hardcover_sync_client = container.sync_clients().get('Hardcover')
+                        if hardcover_sync_client and hardcover_sync_client.is_configured():
+                            hardcover_sync_client.automatch_hardcover(book)
+                        database_service.resolve_suggestion(item['abs_id'])
+                        continue
+
+                    ebook_filename = item['ebook_filename']
+                    storyteller_uuid = item.get('storyteller_uuid', '')
+                    original_ebook_filename = None
+                    duration = item['duration']
+                    booklore_id = None
+                    kosync_doc_id = None
+
+                    bl_match, bl_match_client = find_in_booklore(ebook_filename)
+                    if bl_match:
+                        booklore_id = bl_match.get('id')
+
+                    kosync_doc_id = get_kosync_id_for_ebook(ebook_filename, booklore_id, bl_client=bl_match_client)
+
+                    if not kosync_doc_id:
+                        logger.warning(f"Could not compute KOSync ID for {sanitize_log_data(ebook_filename)}, skipping")
+                        failed_items.append(item.get('ebook_display_name') or ebook_filename)
+                        continue
+
+                    # Hash Preservation
+                    current_book_entry = database_service.get_book(item['abs_id'])
+                    if current_book_entry and current_book_entry.kosync_doc_id:
+                        logger.info(f"Preserving existing hash '{current_book_entry.kosync_doc_id}' for '{item['abs_id']}' instead of new hash '{kosync_doc_id}'")
+                        kosync_doc_id = current_book_entry.kosync_doc_id
+
+                    # Duplicate Merge
+                    existing_book = database_service.get_book_by_kosync_id(kosync_doc_id)
+                    migration_source_id = None
+                    abs_ebook_item_id = None
+
+                    if existing_book and existing_book.abs_id != item['abs_id']:
+                        logger.info(f"Found existing book entry '{existing_book.abs_id}' for this ebook -- Merging into '{item['abs_id']}'")
+                        migration_source_id = existing_book.abs_id
+                        abs_ebook_item_id = existing_book.abs_ebook_item_id or existing_book.abs_id
+                        if not original_ebook_filename:
+                            original_ebook_filename = existing_book.original_ebook_filename or existing_book.ebook_filename
+                        merge_metadata = _copy_book_merge_metadata(existing_book, {
+                            'abs_ebook_item_id': abs_ebook_item_id,
+                            'original_ebook_filename': original_ebook_filename,
+                            'storyteller_uuid': storyteller_uuid or existing_book.storyteller_uuid,
+                        })
+                    else:
+                        merge_metadata = {
+                            'storyteller_uuid': storyteller_uuid or None,
+                            'original_ebook_filename': original_ebook_filename,
+                            'abs_ebook_item_id': abs_ebook_item_id,
+                        }
+
                     book = Book(
                         abs_id=item['abs_id'],
                         abs_title=item['abs_title'],
-                        ebook_filename=None,
-                        kosync_doc_id=None,
-                        status='active',
-                        duration=item['duration'],
-                        sync_mode='audiobook',
+                        ebook_filename=ebook_filename,
+                        kosync_doc_id=kosync_doc_id,
+                        transcript_file=None,
+                        status="pending",
+                        duration=duration,
+                        **merge_metadata,
                     )
+
                     database_service.save_book(book)
-                    abs_service.add_to_collection(item['abs_id'], current_app.config['ABS_COLLECTION_NAME'])
-                    hardcover_sync_client = container.sync_clients().get('Hardcover')
-                    if hardcover_sync_client and hardcover_sync_client.is_configured():
-                        hardcover_sync_client.automatch_hardcover(book)
-                    database_service.resolve_suggestion(item['abs_id'])
-                    continue
 
-                ebook_filename = item['ebook_filename']
-                storyteller_uuid = item.get('storyteller_uuid', '')
-                original_ebook_filename = None
-                duration = item['duration']
-                booklore_id = None
-                kosync_doc_id = None
-
-                bl_match, bl_match_client = find_in_booklore(ebook_filename)
-                if bl_match:
-                    booklore_id = bl_match.get('id')
-
-                kosync_doc_id = get_kosync_id_for_ebook(ebook_filename, booklore_id, bl_client=bl_match_client)
-
-                if not kosync_doc_id:
-                    logger.warning(f"Could not compute KOSync ID for {sanitize_log_data(ebook_filename)}, skipping")
-                    failed_items.append(item.get('ebook_display_name') or ebook_filename)
-                    continue
-
-                # Hash Preservation
-                current_book_entry = database_service.get_book(item['abs_id'])
-                if current_book_entry and current_book_entry.kosync_doc_id:
-                    logger.info(f"Preserving existing hash '{current_book_entry.kosync_doc_id}' for '{item['abs_id']}' instead of new hash '{kosync_doc_id}'")
-                    kosync_doc_id = current_book_entry.kosync_doc_id
-
-                # Duplicate Merge
-                existing_book = database_service.get_book_by_kosync_id(kosync_doc_id)
-                migration_source_id = None
-                abs_ebook_item_id = None
-
-                if existing_book and existing_book.abs_id != item['abs_id']:
-                    logger.info(f"Found existing book entry '{existing_book.abs_id}' for this ebook -- Merging into '{item['abs_id']}'")
-                    migration_source_id = existing_book.abs_id
-                    abs_ebook_item_id = existing_book.abs_ebook_item_id or existing_book.abs_id
-                    if not original_ebook_filename:
-                        original_ebook_filename = existing_book.original_ebook_filename or existing_book.ebook_filename
-                    merge_metadata = _copy_book_merge_metadata(existing_book, {
-                        'abs_ebook_item_id': abs_ebook_item_id,
-                        'original_ebook_filename': original_ebook_filename,
-                        'storyteller_uuid': storyteller_uuid or existing_book.storyteller_uuid,
-                    })
-                else:
-                    merge_metadata = {
-                        'storyteller_uuid': storyteller_uuid or None,
-                        'original_ebook_filename': original_ebook_filename,
-                        'abs_ebook_item_id': abs_ebook_item_id,
-                    }
-
-                book = Book(
-                    abs_id=item['abs_id'],
-                    abs_title=item['abs_title'],
-                    ebook_filename=ebook_filename,
-                    kosync_doc_id=kosync_doc_id,
-                    transcript_file=None,
-                    status="pending",
-                    duration=duration,
-                    **merge_metadata,
-                )
-
-                database_service.save_book(book)
-
-                # Duplicate Merge: Migrate
-                if migration_source_id:
-                    try:
+                    # Duplicate Merge: Migrate
+                    if migration_source_id:
                         database_service.migrate_book_data(migration_source_id, item['abs_id'])
                         database_service.delete_book(migration_source_id)
                         abs_service.add_to_collection(item['abs_id'], current_app.config['ABS_COLLECTION_NAME'])
                         logger.info(f"Successfully merged {migration_source_id} into {item['abs_id']}")
-                    except Exception as e:
-                        logger.error(f"Failed to merge book data: {e}")
-                        raise
 
-                # Trigger Hardcover Automatch
-                hardcover_sync_client = container.sync_clients().get('Hardcover')
-                if hardcover_sync_client and hardcover_sync_client.is_configured():
-                    hardcover_sync_client.automatch_hardcover(book)
+                    # Trigger Hardcover Automatch
+                    hardcover_sync_client = container.sync_clients().get('Hardcover')
+                    if hardcover_sync_client and hardcover_sync_client.is_configured():
+                        hardcover_sync_client.automatch_hardcover(book)
 
-                if not migration_source_id:
-                    abs_service.add_to_collection(item['abs_id'], current_app.config['ABS_COLLECTION_NAME'])
-                if bl_match_client:
-                    shelf_filename = original_ebook_filename or ebook_filename
+                    if not migration_source_id:
+                        abs_service.add_to_collection(item['abs_id'], current_app.config['ABS_COLLECTION_NAME'])
+                    if bl_match_client:
+                        shelf_filename = original_ebook_filename or ebook_filename
+                        try:
+                            bl_match_client.add_to_shelf(shelf_filename)
+                        except Exception as e:
+                            logger.warning(f"Booklore add_to_shelf failed for '{sanitize_log_data(shelf_filename)}': {e}")
+                    database_service.resolve_suggestion(item['abs_id'])
+                    database_service.resolve_suggestion(kosync_doc_id)
+
                     try:
-                        bl_match_client.add_to_shelf(shelf_filename)
+                        device_doc = database_service.get_kosync_doc_by_filename(ebook_filename)
+                        if device_doc and device_doc.document_hash != kosync_doc_id:
+                            database_service.resolve_suggestion(device_doc.document_hash)
                     except Exception as e:
-                        logger.warning(f"Booklore add_to_shelf failed for '{sanitize_log_data(shelf_filename)}': {e}")
-                database_service.resolve_suggestion(item['abs_id'])
-                database_service.resolve_suggestion(kosync_doc_id)
+                        logger.warning(f"Failed to check/resolve device hash: {e}")
 
-                try:
-                    device_doc = database_service.get_kosync_doc_by_filename(ebook_filename)
-                    if device_doc and device_doc.document_hash != kosync_doc_id:
-                        database_service.resolve_suggestion(device_doc.document_hash)
                 except Exception as e:
-                    logger.warning(f"Failed to check/resolve device hash: {e}")
+                    logger.error(f"Failed to process queue item '{sanitize_log_data(item_label)}': {e}")
+                    failed_items.append(item_label)
 
             if failed_items:
                 names = ', '.join(failed_items)

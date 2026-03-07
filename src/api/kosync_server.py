@@ -498,7 +498,8 @@ def kosync_put_progress():
                                         "source": "ebook",
                                         "filename": epub_filename,
                                         "confidence": "high"
-                                    }])
+                                    }]),
+                                    source='kosync',
                                 )
                                 _database_service.save_pending_suggestion(suggestion)
                                 logger.info(f"Created suggestion for '{title}' - found {len(audiobook_matches)} audiobook match(es)")
