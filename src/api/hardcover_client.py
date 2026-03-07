@@ -129,6 +129,18 @@ class HardcoverClient:
 
         return None
 
+    def _extract_cover_url(self, cached_image) -> str | None:
+        """Extract a cover image URL from the cached_image jsonb field.
+        The field is a JSON object like {"url": "https://..."} or similar.
+        """
+        if not cached_image:
+            return None
+        if isinstance(cached_image, dict):
+            return cached_image.get("url")
+        if isinstance(cached_image, str):
+            return cached_image
+        return None
+
     def _extract_authors_from_cached(self, cached_contributors) -> list[str]:
         """
         Parses the JSON list of contributors from Hardcover API.
@@ -166,6 +178,7 @@ class HardcoverClient:
                     id
                     title
                     slug
+                    cached_image
                 }}
             }}
         }}
@@ -180,6 +193,7 @@ class HardcoverClient:
                 "edition_id": edition["id"],
                 "pages": edition["pages"],
                 "title": edition["book"]["title"],
+                "cached_image": self._extract_cover_url(edition["book"].get("cached_image")),
             }
         return None
 
@@ -220,6 +234,7 @@ class HardcoverClient:
                 id
                 title
                 slug
+                cached_image
                 cached_contributors
             }
         }
@@ -296,6 +311,7 @@ class HardcoverClient:
                 "edition_id": edition.get("id") if edition else None,
                 "pages": edition.get("pages") if edition else None,
                 "title": best_match["title"],
+                "cached_image": self._extract_cover_url(best_match.get("cached_image")),
             }
 
         return None
@@ -439,6 +455,7 @@ class HardcoverClient:
                         id
                         title
                         slug
+                        cached_image
                         default_ebook_edition {
                             id
                             pages
@@ -471,6 +488,7 @@ class HardcoverClient:
                     id
                     title
                     slug
+                    cached_image
                     default_ebook_edition {
                         id
                         pages
@@ -509,6 +527,7 @@ class HardcoverClient:
             "pages": edition.get("pages") if edition else None,
             "audio_seconds": audio_seconds,
             "title": book.get("title"),
+            "cached_image": self._extract_cover_url(book.get("cached_image")),
         }
 
     def find_user_book(self, book_id: int) -> dict | None:
@@ -752,5 +771,57 @@ class HardcoverClient:
                     return False
                 return True
             return False
+
+    def search_books_with_covers(self, query_str: str, limit: int = 5) -> list[dict]:
+        """Search for books and return results with cover images (for cover picker)."""
+        search_query = """
+        query ($query: String!) {
+            search(
+                query: $query,
+                per_page: 10,
+                page: 1,
+                query_type: "Book"
+            ) {
+                ids
+            }
+        }
+        """
+
+        result = self.query(search_query, {"query": query_str})
+        if not result or not result.get("search") or not result["search"].get("ids"):
+            return []
+
+        book_ids = result["search"]["ids"][:limit]
+        if not book_ids:
+            return []
+
+        book_query = """
+        query ($ids: [Int!]) {
+            books(where: { id: { _in: $ids }}) {
+                id
+                title
+                slug
+                cached_image
+                cached_contributors
+            }
+        }
+        """
+
+        book_result = self.query(book_query, {"ids": book_ids})
+        if not book_result or not book_result.get("books"):
+            return []
+
+        results = []
+        for book in book_result["books"]:
+            authors = self._extract_authors_from_cached(book.get("cached_contributors"))
+            results.append({
+                "book_id": book["id"],
+                "title": book.get("title", ""),
+                "author": authors[0] if authors else "",
+                "cached_image": self._extract_cover_url(book.get("cached_image")),
+                "slug": book.get("slug"),
+            })
+
+        return results
 
 

@@ -30,7 +30,8 @@ class IntegrationRepository(BaseRepository):
             [HardcoverDetails.abs_id == details.abs_id],
             details,
             ['hardcover_book_id', 'hardcover_slug', 'hardcover_edition_id',
-             'hardcover_pages', 'hardcover_audio_seconds', 'isbn', 'asin', 'matched_by'],
+             'hardcover_pages', 'hardcover_audio_seconds', 'isbn', 'asin', 'matched_by',
+             'hardcover_cover_url'],
         )
 
     def delete_hardcover_details(self, abs_id):

@@ -225,7 +225,8 @@ def index():
                 'asin': hardcover_details.asin,
                 'matched_by': hardcover_details.matched_by,
                 'hardcover_linked': True,
-                'hardcover_title': book.abs_title
+                'hardcover_title': book.abs_title,
+                'hardcover_cover_url': hardcover_details.hardcover_cover_url,
             })
         else:
             mapping.update({
@@ -306,6 +307,14 @@ def index():
         # Booklore cover fallback for books without an ABS cover
         if not mapping['cover_url'] and mapping.get('booklore_id'):
             mapping['cover_url'] = f"/api/cover-proxy/booklore/{mapping.get('booklore_source_tag') or 'booklore'}/{mapping['booklore_id']}"
+
+        # Custom cover URL fallback (user-pasted)
+        if not mapping['cover_url'] and book.custom_cover_url:
+            mapping['cover_url'] = book.custom_cover_url
+
+        # Hardcover cover fallback
+        if not mapping['cover_url'] and mapping.get('hardcover_cover_url'):
+            mapping['cover_url'] = mapping['hardcover_cover_url']
 
         duration = mapping.get('duration', 0)
         progress_pct = mapping.get('unified_progress', 0)

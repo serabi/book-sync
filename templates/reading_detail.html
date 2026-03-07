@@ -51,6 +51,10 @@
                     {% else %}
                     <div class="r-cover-placeholder"></div>
                     {% endif %}
+                    <button type="button" class="r-change-cover-btn" id="change-cover-btn" title="Change cover">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                        Change Cover
+                    </button>
                 </div>
                 <div class="r-hero-info">
                     <h1 class="r-detail-title">{{ book.abs_title }}{% if metadata.subtitle %}: {{ metadata.subtitle }}{% endif %}</h1>
@@ -274,9 +278,50 @@
         {% endif %}
     </div>
 
+    {# ── Cover Picker Modal ── #}
+    <div id="cover-picker-modal" class="modal-backdrop" style="display:none;" onclick="if(event.target===this)closeCoverPicker()">
+        <div class="modal-content cp-modal-content">
+            <div class="modal-header">
+                <h3>Change Cover</h3>
+                <button class="modal-close" onclick="closeCoverPicker()">&times;</button>
+            </div>
+            <div class="cp-tabs">
+                <button type="button" id="cp-tab-search" class="cp-tab active" onclick="switchCoverTab('search')">Search Hardcover</button>
+                <button type="button" id="cp-tab-custom" class="cp-tab" onclick="switchCoverTab('custom')">Paste URL</button>
+            </div>
+            <div id="cp-search-pane">
+                <form class="cp-search-form" onsubmit="handleCoverSearch(event); return false;">
+                    <input type="text" id="cp-search-input" class="input-inline" placeholder="Search by title...">
+                    <button type="submit" class="btn btn-primary btn-sm">Search</button>
+                </form>
+                <div id="cp-results" class="cp-results-grid"></div>
+            </div>
+            <div id="cp-custom-pane" style="display:none;">
+                <div class="cp-custom-form">
+                    <input type="url" id="cp-custom-url" class="input-inline" placeholder="https://example.com/cover.jpg">
+                    <button type="button" class="btn btn-primary btn-sm" onclick="submitCustomCoverUrl()">Set Cover</button>
+                </div>
+            </div>
+            <div id="cp-status" class="cp-status"></div>
+            <div class="cp-footer">
+                <button type="button" class="btn btn-sm btn-danger-subtle" onclick="removeCover()">Remove Cover</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/cover-picker-modal.js"></script>
     <script src="/static/js/reading.js"></script>
     <script>
         initReadingDetail();
+
+        (function() {
+            var btn = document.getElementById('change-cover-btn');
+            if (btn) {
+                btn.addEventListener('click', function() {
+                    openCoverPicker({{ book.abs_id | tojson }}, {{ book.abs_title | tojson }});
+                });
+            }
+        })();
 
         function setManualProgress() {
             var input = document.getElementById('manual-pct-input');

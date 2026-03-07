@@ -77,6 +77,16 @@ def _build_book_reading_data(book, database_service, abs_service, states_by_book
         if bl_id:
             cover_url = f"/api/cover-proxy/booklore/{bl_meta.source or 'booklore'}/{bl_id}"
 
+    # Custom cover URL fallback (user-pasted)
+    if not cover_url and book.custom_cover_url:
+        cover_url = book.custom_cover_url
+
+    # Hardcover cover fallback
+    if not cover_url:
+        hc_details = database_service.get_hardcover_details(book.abs_id)
+        if hc_details and hc_details.hardcover_cover_url:
+            cover_url = hc_details.hardcover_cover_url
+
     return {
         'abs_id': book.abs_id,
         'abs_title': display_title,

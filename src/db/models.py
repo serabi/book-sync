@@ -80,6 +80,7 @@ class Book(Base):
     sync_mode = Column(String(20), default='audiobook')  # 'audiobook' or 'ebook_only'
     storyteller_uuid = Column(String(36), index=True, nullable=True)
     abs_ebook_item_id = Column(String(255), nullable=True)  # New ID to track ebook item separately
+    custom_cover_url = Column(String(500), nullable=True)
 
     # Reading tracker fields
     started_at = Column(String(10), nullable=True)    # YYYY-MM-DD
@@ -99,6 +100,7 @@ class Book(Base):
                  kosync_doc_id: str = None, transcript_file: str = None,
                  status: str = 'active', duration: float = None, sync_mode: str = 'audiobook',
                  storyteller_uuid: str = None, abs_ebook_item_id: str = None,
+                 custom_cover_url: str = None,
                  started_at: str = None, finished_at: str = None,
                  rating: float = None, read_count: int = 1):
         self.abs_id = abs_id
@@ -112,6 +114,7 @@ class Book(Base):
         self.sync_mode = sync_mode
         self.storyteller_uuid = storyteller_uuid
         self.abs_ebook_item_id = abs_ebook_item_id
+        self.custom_cover_url = custom_cover_url
         self.started_at = started_at
         self.finished_at = finished_at
         self.rating = rating
@@ -177,6 +180,7 @@ class HardcoverDetails(Base):
     isbn = Column(String(255))
     asin = Column(String(255))
     matched_by = Column(String(50))  # 'isbn', 'asin', 'title_author', 'title'
+    hardcover_cover_url = Column(String(500), nullable=True)
 
     # Relationship
     book = relationship("Book", back_populates="hardcover_details")
@@ -184,7 +188,8 @@ class HardcoverDetails(Base):
     def __init__(self, abs_id: str, hardcover_book_id: str = None, hardcover_slug: str = None,
                  hardcover_edition_id: str = None,
                  hardcover_pages: int = None, hardcover_audio_seconds: int = None,
-                 isbn: str = None, asin: str = None, matched_by: str = None):
+                 isbn: str = None, asin: str = None, matched_by: str = None,
+                 hardcover_cover_url: str = None):
         self.abs_id = abs_id
         self.hardcover_book_id = hardcover_book_id
         self.hardcover_slug = hardcover_slug
@@ -194,6 +199,7 @@ class HardcoverDetails(Base):
         self.isbn = isbn
         self.asin = asin
         self.matched_by = matched_by
+        self.hardcover_cover_url = hardcover_cover_url
 
     def __repr__(self):
         return f"<HardcoverDetails(abs_id='{self.abs_id}', hardcover_book_id='{self.hardcover_book_id}')>"

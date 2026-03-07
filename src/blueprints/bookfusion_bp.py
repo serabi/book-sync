@@ -9,7 +9,7 @@ from collections import defaultdict
 from flask import Blueprint, jsonify, render_template, request
 
 from src.blueprints.helpers import get_booklore_clients, get_container, get_database_service
-from src.db.models import Book
+from src.db.models import Book, HardcoverDetails
 
 logger = logging.getLogger(__name__)
 
@@ -229,6 +229,16 @@ def _estimate_reading_dates(db_service, abs_id: str, bookfusion_ids: list[str], 
             elif title:
                 search_result = hc_client.search_by_title_author(title)
                 if search_result:
+                    # Persist HardcoverDetails so the cover URL and link survive
+                    if not hc_details:
+                        new_details = HardcoverDetails(
+                            abs_id=abs_id,
+                            hardcover_book_id=str(search_result['book_id']),
+                            hardcover_slug=search_result.get('slug'),
+                            hardcover_cover_url=search_result.get('cached_image'),
+                            matched_by='title',
+                        )
+                        db_service.save_hardcover_details(new_details)
                     user_book = hc_client.find_user_book(search_result['book_id'])
             if user_book:
                 reads = user_book.get('user_book_reads', [])
