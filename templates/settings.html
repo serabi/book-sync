@@ -766,27 +766,10 @@
                                 <input type="password" name="HARDCOVER_TOKEN" placeholder="{{ '(unchanged)' if get_val('HARDCOVER_TOKEN') else '' }}">
                             </div>
                             <div class="form-group full-width">
-                                <label>Header Links</label>
-                                <div class="field-grid">
-                                    <div class="form-group">
-                                        <label>Internal URL</label>
-                                        <input type="text" name="HARDCOVER_WEB_URL_INTERNAL" value="{{ get_val('HARDCOVER_WEB_URL_INTERNAL') }}"
-                                            placeholder="http://10.0.0.97:3000">
-                                    </div>
-                                    <div class="form-group">
-                                        <label>External URL</label>
-                                        <input type="text" name="HARDCOVER_WEB_URL_EXTERNAL" value="{{ get_val('HARDCOVER_WEB_URL_EXTERNAL') or get_val('HARDCOVER_WEB_URL') }}"
-                                            placeholder="https://hardcover.app">
-                                    </div>
-                                    <div class="form-group">
-                                        <label>Header Target</label>
-                                        <select name="HARDCOVER_HEADER_URL_MODE">
-                                            <option value="internal" {% if get_val('HARDCOVER_HEADER_URL_MODE', 'external') == 'internal' %}selected{% endif %}>Use Internal</option>
-                                            <option value="external" {% if get_val('HARDCOVER_HEADER_URL_MODE', 'external') != 'internal' %}selected{% endif %}>Use External</option>
-                                        </select>
-                                    </div>
-                                </div>
-                                <div class="help-text">Choose whether the navbar shortcut opens the LAN address or your external URL. If unset, Hardcover falls back to hardcover.app.</div>
+                                <label>Navbar URL</label>
+                                <input type="text" name="HARDCOVER_WEB_URL_EXTERNAL" value="{{ get_val('HARDCOVER_WEB_URL_EXTERNAL') or get_val('HARDCOVER_WEB_URL') }}"
+                                    placeholder="https://hardcover.app">
+                                <div class="help-text">URL for the navbar shortcut. Defaults to hardcover.app if left blank.</div>
                             </div>
                             <div class="help-text" style="margin-top: 0.5rem;">
                                 When enabled, Hardcover is used to populate reading dates and provide cover
