@@ -166,6 +166,8 @@ def push_dates_to_hardcover(abs_id, container, database_service):
             'is_finished': is_finished,
             'current_percentage': local_pct,
             'audio_seconds': audio_seconds if audio_seconds > 0 else None,
+            'started_at': book.started_at if book.started_at and not hc_started else None,
+            'finished_at': book.finished_at if book.finished_at and not hc_finished else None,
         }
 
         hardcover_client.update_progress(

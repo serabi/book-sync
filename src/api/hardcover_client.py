@@ -91,10 +91,16 @@ class HardcoverClient:
                 timeout=10,
             )
 
-            # Handle rate limiting (429)
-            if r.status_code == 429:
-                logger.warning("Hardcover rate limit hit (429), retrying after 5s")
-                time.sleep(5)
+            # Handle rate limiting (429) with exponential backoff
+            max_retries = 3
+            backoff = 5
+            attempt = 0
+            while r.status_code == 429 and attempt < max_retries:
+                attempt += 1
+                logger.warning(
+                    f"Hardcover rate limit hit (429), retry {attempt}/{max_retries} after {backoff}s"
+                )
+                time.sleep(backoff)
                 with self._rate_lock:
                     self._last_request_time = time.monotonic()
                 r = requests.post(
@@ -103,6 +109,13 @@ class HardcoverClient:
                     headers=self.headers,
                     timeout=10,
                 )
+                backoff *= 2
+
+            if r.status_code == 429:
+                logger.error(
+                    f"Hardcover rate limit persisted after {max_retries} retries, giving up"
+                )
+                return None
 
             if r.status_code == 200:
                 data = r.json()
@@ -667,11 +680,16 @@ class HardcoverClient:
         is_finished: bool = False,
         current_percentage: float = 0.0,
         audio_seconds: int = None,
+        started_at: str = None,
+        finished_at: str = None,
     ) -> bool:
         """
         Update reading progress.
         Uses current_percentage > 0.02 (2%) to decide when to set 'started_at'.
         For audiobook editions, pass audio_seconds to use progress_seconds instead of progress_pages.
+
+        Optional started_at/finished_at (YYYY-MM-DD strings) override the default
+        of using today's date when filling missing dates on the Hardcover read.
         """
         # First check if there's an existing read
         read_query = """
@@ -703,16 +721,16 @@ class HardcoverClient:
             started_at_val = existing_read.get("started_at")
             finished_at_val = existing_read.get("finished_at")
 
-            # If no start date exists, and we passed 2%, set it to today
+            # If no start date exists, and we passed 2%, fill it in
             if not started_at_val and should_start:
-                started_at_val = today
+                started_at_val = started_at or today
                 logger.info(
-                    f"Hardcover: Setting started_at to '{today}' (Progress: {current_percentage:.1%})"
+                    f"Hardcover: Setting started_at to '{started_at_val}' (Progress: {current_percentage:.1%})"
                 )
 
             if is_finished and not finished_at_val:
-                finished_at_val = today
-                logger.info(f"Hardcover: Setting finished_at to '{today}'")
+                finished_at_val = finished_at or today
+                logger.info(f"Hardcover: Setting finished_at to '{finished_at_val}'")
 
             # Use progress_seconds for audiobooks, progress_pages for page-based editions
             if audio_seconds and audio_seconds > 0:
@@ -772,8 +790,8 @@ class HardcoverClient:
         else:
             # --- CREATE NEW READ ---
             # Apply logic to new reads too
-            started_at_val = today if should_start else None
-            finished_at_val = today if is_finished else None
+            started_at_val = (started_at or today) if should_start else None
+            finished_at_val = (finished_at or today) if is_finished else None
 
             # Use progress_seconds for audiobooks, progress_pages for page-based editions
             if audio_seconds and audio_seconds > 0:

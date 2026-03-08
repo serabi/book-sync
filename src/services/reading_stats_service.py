@@ -41,8 +41,9 @@ class ReadingStatsService:
                 month_idx = self._month_index(book.finished_at)
                 if month_idx is not None:
                     monthly_finished[month_idx] += 1
-                if book.rating is not None:
-                    ratings.append(float(book.rating))
+                rating = getattr(book, 'rating', None)
+                if rating is not None:
+                    ratings.append(float(rating))
 
         goal = self.database_service.get_reading_goal(year)
         goal_target = goal.target_books if goal else None

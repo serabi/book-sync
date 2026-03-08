@@ -473,18 +473,18 @@ function initReadingDetail() {
             if (data.success) {
               applyRatingState(data.rating);
               if (!hardcoverSyncAvailable) {
-                syncStatus.hidden = true;
+                if (syncStatus) syncStatus.hidden = true;
               } else if (data.hardcover_synced) {
                 setSyncStatus('success', 'Synced to Hardcover');
               } else if (data.hardcover_error) {
                 setSyncStatus('warning', 'Saved locally, Hardcover sync failed');
               } else {
-                syncStatus.hidden = true;
+                if (syncStatus) syncStatus.hidden = true;
               }
             }
           })
           .catch(() => {
-            setSyncStatus('warning', 'Saved locally, Hardcover sync failed');
+            setSyncStatus('error', 'Save failed — rating not saved');
           });
       });
     });

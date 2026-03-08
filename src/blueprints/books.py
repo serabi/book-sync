@@ -237,7 +237,10 @@ def resume_book(abs_id):
     if was_inactive:
         hc_sync = container.hardcover_sync_client()
         if hc_sync.is_configured():
-            hc_sync.push_local_status(book, 'active')
+            try:
+                hc_sync.push_local_status(book, 'active')
+            except Exception as e:
+                logger.warning(f"Failed to push active status to Hardcover for '{abs_id}': {e}")
 
         # Push READING status to Booklore
         if book.ebook_filename:

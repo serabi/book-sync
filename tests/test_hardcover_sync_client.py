@@ -73,8 +73,8 @@ class TestHardcoverSyncClient(unittest.TestCase):
         self.mock_abs_client.get_item_details.return_value = mock_abs_item
 
         self.mock_hardcover_client.search_by_isbn.return_value = {
-            'book_id': '12345',
-            'edition_id': '67890',
+            'book_id': 12345,
+            'edition_id': 67890,
             'pages': 300,
             'title': 'Test ISBN Book'
         }
@@ -94,7 +94,7 @@ class TestHardcoverSyncClient(unittest.TestCase):
         self.mock_hardcover_client.search_by_isbn.assert_called_once_with('9781234567890')
 
         # Verify initial status was set to Want to Read (1)
-        self.mock_hardcover_client.update_status.assert_any_call(12345, 1, '67890')
+        self.mock_hardcover_client.update_status.assert_any_call(12345, 1, 67890)
 
         saved_details = self.database_service.get_hardcover_details('test-hardcover-book')
         self.assertIsNotNone(saved_details)

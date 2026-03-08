@@ -1250,6 +1250,10 @@
   color: var(--color-warning);
 }
 
+.r-rating-sync--error {
+  color: var(--color-danger, red);
+}
+
 /* Dates */
 .r-detail-dates {
   display: flex;
