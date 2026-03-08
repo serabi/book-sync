@@ -288,6 +288,38 @@ class HardcoverSyncClient(SyncClient):
         record_write('Hardcover', book.abs_id, {'status': hardcover_details.hardcover_status_id})
         return created
 
+    def _create_or_adopt_user_book(self, book, hardcover_details, edition_id=None):
+        """Check if a user_book already exists on Hardcover before creating one.
+
+        If the user already has this book on Hardcover (e.g. marked as Read),
+        adopt the existing status instead of overwriting it with Want to Read.
+        Only creates a new user_book (with a locally-mapped status) when none exists.
+        """
+        ub = self.hardcover_client.get_user_book(hardcover_details.hardcover_book_id)
+        if ub:
+            # Adopt existing — do NOT overwrite the user's Hardcover status
+            hardcover_details.hardcover_user_book_id = ub['id']
+            hardcover_details.hardcover_status_id = ub.get('status_id')
+            self.database_service.save_hardcover_details(hardcover_details)
+            logger.info(
+                f"Hardcover: adopted existing user_book {ub['id']} "
+                f"(status {ub.get('status_id')}) for '{sanitize_log_data(book.abs_title)}'"
+            )
+            return
+
+        # No existing user_book — create one with a status mapped from local
+        hc_status_id = LOCAL_TO_HC_STATUS.get(book.status, HC_WANT_TO_READ)
+        result = self.hardcover_client.update_status(
+            int(hardcover_details.hardcover_book_id),
+            hc_status_id,
+            int(edition_id) if edition_id else None,
+        )
+        if result and result.get('id'):
+            hardcover_details.hardcover_user_book_id = result['id']
+            hardcover_details.hardcover_status_id = result.get('status_id', hc_status_id)
+            self.database_service.save_hardcover_details(hardcover_details)
+        record_write('Hardcover', book.abs_id, {'status': hc_status_id})
+
     def _ensure_read_id(self, user_book_id, hardcover_details):
         """Return cached read ID or fetch and cache it.
 
@@ -462,14 +494,8 @@ class HardcoverSyncClient(SyncClient):
             )
 
             self.database_service.save_hardcover_details(hardcover_details)
-            result = self.hardcover_client.update_status(int(match.get('book_id')), HC_WANT_TO_READ, match.get('edition_id'))
-            # Cache the user_book_id from the status update result
-            if result and result.get('id'):
-                hardcover_details.hardcover_user_book_id = result['id']
-                hardcover_details.hardcover_status_id = HC_WANT_TO_READ
-                self.database_service.save_hardcover_details(hardcover_details)
-            record_write('Hardcover', book.abs_id, {'status': HC_WANT_TO_READ})
-            logger.info(f"Hardcover: '{sanitize_log_data(meta.get('title'))}' matched and set to Want to Read (matched by {matched_by})")
+            self._create_or_adopt_user_book(book, hardcover_details, match.get('edition_id'))
+            logger.info(f"Hardcover: '{sanitize_log_data(meta.get('title'))}' matched (matched by {matched_by})")
         else:
             logger.warning(f"Hardcover: No match found for '{sanitize_log_data(meta.get('title'))}'")
 
@@ -512,12 +538,11 @@ class HardcoverSyncClient(SyncClient):
         self.database_service.save_hardcover_details(details)
         logger.info(f"Manually matched ABS {book_abs_id} to Hardcover {match['book_id']} ({match.get('title')})")
 
-        result = self.hardcover_client.update_status(match['book_id'], HC_WANT_TO_READ, match.get('edition_id'))
-        if result and result.get('id'):
-            details.hardcover_user_book_id = result['id']
-            details.hardcover_status_id = HC_WANT_TO_READ
-            self.database_service.save_hardcover_details(details)
-        record_write('Hardcover', book_abs_id, {'status': HC_WANT_TO_READ})
+        book = self.database_service.get_book(book_abs_id)
+        if not book:
+            # Fallback: create a minimal Book for status mapping
+            book = Book(abs_id=book_abs_id, abs_title='', status='')
+        self._create_or_adopt_user_book(book, details, match.get('edition_id'))
         return True
 
     def get_text_from_current_state(self, book: Book, state: ServiceState) -> str | None:

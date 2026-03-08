@@ -17,11 +17,22 @@ from src.blueprints.helpers import (
     get_service_web_url,
 )
 from src.db.models import State
+from src.services.reading_date_service import pull_reading_dates
 from src.services.reading_stats_service import ReadingStatsService
 
 logger = logging.getLogger(__name__)
 
 reading_bp = Blueprint('reading', __name__)
+
+
+def _pull_started_at(abs_id):
+    """Pull started_at from Hardcover/ABS before falling back to today."""
+    try:
+        container = get_container()
+        dates = pull_reading_dates(abs_id, container, get_database_service())
+        return dates.get('started_at', date.today().isoformat())
+    except Exception:
+        return date.today().isoformat()
 
 
 def _get_reading_stats_service():
@@ -553,7 +564,7 @@ def update_progress(abs_id):
     if percentage > 0 and book.status not in ('active', 'paused', 'dnf', 'completed'):
         book.status = 'active'
         if not book.started_at:
-            book.started_at = date.today().isoformat()
+            book.started_at = _pull_started_at(abs_id)
         database_service.save_book(book)
 
     state = State(
@@ -857,18 +868,18 @@ def update_status(abs_id):
             pct = 1.0
         database_service.add_reading_journal(abs_id, event=event, percentage=pct)
 
-    # Auto-set dates
+    # Auto-set dates (pull from external sources before falling back to today)
     today = date.today().isoformat()
     if new_status == 'active':
         if not book.started_at:
-            database_service.update_book_reading_fields(abs_id, started_at=today)
+            database_service.update_book_reading_fields(abs_id, started_at=_pull_started_at(abs_id))
             database_service.add_reading_journal(abs_id, event='started')
         else:
             database_service.add_reading_journal(abs_id, event='resumed')
     elif new_status == 'completed' and not book.finished_at:
         updates = {'finished_at': today}
         if not book.started_at:
-            updates['started_at'] = today
+            updates['started_at'] = _pull_started_at(abs_id)
         database_service.update_book_reading_fields(abs_id, **updates)
 
     # Push status to Hardcover (Step 11)
