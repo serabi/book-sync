@@ -95,7 +95,8 @@ class HardcoverClient:
             if r.status_code == 429:
                 logger.warning("Hardcover rate limit hit (429), retrying after 5s")
                 time.sleep(5)
-                self._last_request_time = time.monotonic()
+                with self._rate_lock:
+                    self._last_request_time = time.monotonic()
                 r = requests.post(
                     self.api_url,
                     json={"query": query, "variables": variables or {}},
@@ -1000,7 +1001,7 @@ class HardcoverClient:
         return results
 
     def get_currently_reading(self) -> dict:
-        """Bulk-fetch all user_books with Want to Read (1) or Currently Reading (2) status.
+        """Bulk-fetch all user_books with Want to Read (1), Currently Reading (2), or Paused (4) status.
 
         Returns dict keyed by book_id for quick lookup.
         """

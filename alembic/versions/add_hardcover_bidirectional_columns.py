@@ -37,7 +37,16 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Remove bidirectional sync columns."""
+    """Remove bidirectional sync columns.
+
+    WARNING: Dropping these columns is destructive — any cached Hardcover IDs
+    and status data stored in them will be permanently lost.
+    """
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    columns = [c['name'] for c in inspector.get_columns('hardcover_details')]
+
     for col_name in ('hardcover_user_book_id', 'hardcover_user_book_read_id',
                      'hardcover_status_id', 'hardcover_audio_edition_id'):
-        op.drop_column('hardcover_details', col_name)
+        if col_name in columns:
+            op.drop_column('hardcover_details', col_name)

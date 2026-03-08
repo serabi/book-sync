@@ -814,7 +814,6 @@ def update_status(abs_id):
 
     # Auto-create journal entries for transitions
     event_map = {
-        'active': 'resumed' if old_status in ('paused', 'dnf') else 'started',
         'completed': 'finished',
         'paused': 'paused',
         'dnf': 'dnf',
@@ -828,10 +827,12 @@ def update_status(abs_id):
 
     # Auto-set dates
     today = date.today().isoformat()
-    if new_status == 'active' and not book.started_at:
-        database_service.update_book_reading_fields(abs_id, started_at=today)
-        # Persist a real 'started' journal entry
-        database_service.add_reading_journal(abs_id, event='started')
+    if new_status == 'active':
+        if not book.started_at:
+            database_service.update_book_reading_fields(abs_id, started_at=today)
+            database_service.add_reading_journal(abs_id, event='started')
+        else:
+            database_service.add_reading_journal(abs_id, event='resumed')
     elif new_status == 'completed' and not book.finished_at:
         updates = {'finished_at': today}
         if not book.started_at:

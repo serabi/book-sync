@@ -179,6 +179,7 @@ class TestBookStatusEndpoints(unittest.TestCase):
         """Resuming from DNF should push 'active' status to Hardcover."""
         book = self._make_book(status='dnf')
         self.db.get_book.return_value = book
+        self.db.get_hardcover_details.return_value = None
 
         self.mock_container._hardcover_sync_client = Mock(is_configured=Mock(return_value=True))
 
@@ -243,6 +244,7 @@ class TestBookStatusEndpoints(unittest.TestCase):
         """DNF should push 'dnf' status to Hardcover via sync client."""
         book = self._make_book(status='active')
         self.db.get_book.return_value = book
+        self.db.get_hardcover_details.return_value = None
 
         self.mock_container._hardcover_sync_client = Mock(is_configured=Mock(return_value=True))
 

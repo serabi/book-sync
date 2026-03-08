@@ -158,13 +158,20 @@ def push_dates_to_hardcover(abs_id, container, database_service):
         local_pct = _max_state_progress(abs_id, database_service)
         is_finished = local_pct >= 0.99 or book.status == 'completed'
 
+        pages = max(0, min(total_pages, int(total_pages * local_pct))) if total_pages > 0 else 0
+
+        # Build kwargs, forwarding local dates only when HC is missing them
+        progress_kwargs = {
+            'edition_id': hc_details.hardcover_edition_id,
+            'is_finished': is_finished,
+            'current_percentage': local_pct,
+            'audio_seconds': audio_seconds if audio_seconds > 0 else None,
+        }
+
         hardcover_client.update_progress(
             user_book_id,
-            max(1, int(total_pages * local_pct)) if total_pages > 0 else 0,
-            edition_id=hc_details.hardcover_edition_id,
-            is_finished=is_finished,
-            current_percentage=local_pct,
-            audio_seconds=audio_seconds if audio_seconds > 0 else None,
+            pages,
+            **progress_kwargs,
         )
         logger.info(f"Pushed dates to Hardcover for '{abs_id}'")
 

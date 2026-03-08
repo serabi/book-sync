@@ -175,7 +175,10 @@ def pause_book(abs_id):
     container = get_container()
     hc_sync = container.hardcover_sync_client()
     if hc_sync.is_configured():
-        hc_sync.push_local_status(book, 'paused')
+        try:
+            hc_sync.push_local_status(book, 'paused')
+        except Exception as e:
+            logger.warning(f"Failed to push paused status to Hardcover for '{abs_id}': {e}")
 
     return jsonify({"success": True})
 
@@ -197,7 +200,10 @@ def dnf_book(abs_id):
     container = get_container()
     hc_sync = container.hardcover_sync_client()
     if hc_sync.is_configured():
-        hc_sync.push_local_status(book, 'dnf')
+        try:
+            hc_sync.push_local_status(book, 'dnf')
+        except Exception as e:
+            logger.warning(f"Failed to push DNF status to Hardcover for '{abs_id}': {e}")
 
     return jsonify({"success": True})
 
