@@ -89,6 +89,24 @@ else 0 %}
         {% endif %}
         {% endif %}
 
+        {# Storyteller submission status badge #}
+        {% if mapping.storyteller_submission_status in ['queued', 'processing'] %}
+        <div class="storyteller-status-text st-pending">
+            <span class="st-pending-dot"></span>
+            <span>Awaiting Storyteller processing</span>
+        </div>
+        {% elif mapping.storyteller_submission_status == 'ready' %}
+        <div class="storyteller-status-text st-ready">
+            <span class="st-ready-icon">✦</span>
+            <span>Storyteller aligned</span>
+        </div>
+        {% elif mapping.storyteller_submission_status == 'failed' %}
+        <div class="storyteller-status-text st-failed">
+            <span>⚠</span>
+            <span>Storyteller submission failed</span>
+        </div>
+        {% endif %}
+
         {# Attach action buttons for incomplete book types #}
         {% if bt == 'audio-only' %}
         <div class="attach-action">

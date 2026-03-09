@@ -34,6 +34,7 @@ class DatabaseService:
 
     def __init__(self, db_path: str):
         import os
+
         self.db_path = Path(os.path.abspath(db_path))
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.db_manager = DatabaseManager(str(self.db_path))
@@ -81,13 +82,14 @@ class DatabaseService:
             # Check current revision
             from sqlalchemy import create_engine
             from sqlalchemy import inspect as sa_inspect
+
             engine = create_engine(f"sqlite:///{self.db_path}")
 
             try:
                 inspector = sa_inspect(engine)
                 tables = inspector.get_table_names()
 
-                if tables and 'alembic_version' not in tables:
+                if tables and "alembic_version" not in tables:
                     # Legacy database without Alembic — stamp it at head
                     logger.info("Legacy database detected — stamping at current Alembic head")
                     command.stamp(alembic_cfg, "head")
@@ -115,12 +117,13 @@ class DatabaseService:
         """Safety net: add any model columns missing from existing tables."""
         from sqlalchemy import inspect as sa_inspect
         from sqlalchemy import text
+
         try:
             inspector = sa_inspect(self.db_manager.engine)
             for table_name, model in Base.metadata.tables.items():
                 if table_name not in inspector.get_table_names():
                     continue
-                existing_cols = {c['name'] for c in inspector.get_columns(table_name)}
+                existing_cols = {c["name"] for c in inspector.get_columns(table_name)}
                 for col in model.columns:
                     if col.name not in existing_cols:
                         col_type = col.type.compile(self.db_manager.engine.dialect)
@@ -155,10 +158,9 @@ class DatabaseService:
         """One-time cleanup: strip .md suffix from BookFusion titles."""
         try:
             from .models import BookfusionBook
+
             with self.get_session() as session:
-                dirty = session.query(BookfusionBook).filter(
-                    BookfusionBook.title.like('%.md')
-                ).all()
+                dirty = session.query(BookfusionBook).filter(BookfusionBook.title.like("%.md")).all()
                 for b in dirty:
                     stripped = b.title[:-3].strip()
                     b.title = stripped if stripped else b.title
@@ -430,6 +432,9 @@ class DatabaseService:
     def get_storyteller_submission(self, abs_id):
         return self._integrations.get_storyteller_submission(abs_id)
 
+    def get_all_storyteller_submissions_latest(self):
+        return self._integrations.get_all_storyteller_submissions_latest()
+
     # ── Integrations: Booklore (delegates to IntegrationRepository) ──
 
     def get_booklore_book(self, filename):
@@ -465,10 +470,10 @@ class DatabaseService:
         return self._integrations.get_bookfusion_highlights_for_book(abs_id)
 
     def get_bookfusion_sync_cursor(self):
-        return self._settings.get_setting('BOOKFUSION_SYNC_CURSOR')
+        return self._settings.get_setting("BOOKFUSION_SYNC_CURSOR")
 
     def set_bookfusion_sync_cursor(self, cursor):
-        return self._settings.set_setting('BOOKFUSION_SYNC_CURSOR', cursor)
+        return self._settings.set_setting("BOOKFUSION_SYNC_CURSOR", cursor)
 
     def save_bookfusion_books(self, books):
         return self._integrations.save_bookfusion_books(books)
@@ -518,10 +523,10 @@ class DatabaseMigrator:
 
         # Migrate mappings/books
         if self.json_db_path.exists():
-            with open(self.json_db_path, encoding='utf-8') as f:
+            with open(self.json_db_path, encoding="utf-8") as f:
                 data = json.load(f)
 
-            mappings = data.get('mappings', [])
+            mappings = data.get("mappings", [])
             if isinstance(mappings, dict):
                 mappings = list(mappings.values())
 
@@ -529,14 +534,14 @@ class DatabaseMigrator:
 
         # Migrate states
         if self.json_state_path.exists():
-            with open(self.json_state_path, encoding='utf-8') as f:
+            with open(self.json_state_path, encoding="utf-8") as f:
                 state_data = json.load(f)
             self._migrate_states(state_data)
 
         # Rename old files
         for path in [self.json_db_path, self.json_state_path]:
             if path.exists():
-                backup = path.with_suffix(path.suffix + '.migrated')
+                backup = path.with_suffix(path.suffix + ".migrated")
                 path.rename(backup)
                 logger.info(f"Renamed {path} to {backup}")
 
@@ -545,40 +550,49 @@ class DatabaseMigrator:
     def _migrate_books(self, mappings_list):
         """Convert JSON mappings to Book + Job + HardcoverDetails records."""
         from .models import Book, HardcoverDetails, Job
+
         for m in mappings_list:
-            abs_id = m.get('abs_id')
+            abs_id = m.get("abs_id")
             if not abs_id:
                 continue
 
             book = Book(
                 abs_id=abs_id,
-                abs_title=m.get('abs_title'),
-                ebook_filename=m.get('ebook_filename'),
-                original_ebook_filename=m.get('original_ebook_filename'),
-                kosync_doc_id=m.get('kosync_doc_id'),
-                transcript_file=m.get('transcript_file'),
-                status=m.get('status', 'active'),
-                duration=m.get('duration'),
-                sync_mode=m.get('sync_mode', 'audiobook'),
-                storyteller_uuid=m.get('storyteller_uuid'),
-                abs_ebook_item_id=m.get('abs_ebook_item_id'),
+                abs_title=m.get("abs_title"),
+                ebook_filename=m.get("ebook_filename"),
+                original_ebook_filename=m.get("original_ebook_filename"),
+                kosync_doc_id=m.get("kosync_doc_id"),
+                transcript_file=m.get("transcript_file"),
+                status=m.get("status", "active"),
+                duration=m.get("duration"),
+                sync_mode=m.get("sync_mode", "audiobook"),
+                storyteller_uuid=m.get("storyteller_uuid"),
+                abs_ebook_item_id=m.get("abs_ebook_item_id"),
             )
             self.db_service.save_book(book)
 
             # Migrate job data if present
-            if m.get('last_sync_attempt') or m.get('retry_count'):
+            if m.get("last_sync_attempt") or m.get("retry_count"):
                 job = Job(
                     abs_id=abs_id,
-                    last_attempt=m.get('last_sync_attempt'),
-                    retry_count=m.get('retry_count', 0),
-                    last_error=m.get('last_error'),
+                    last_attempt=m.get("last_sync_attempt"),
+                    retry_count=m.get("retry_count", 0),
+                    last_error=m.get("last_error"),
                 )
                 self.db_service.save_job(job)
 
             # Migrate hardcover details if present
             hc = {}
-            for key in ['hardcover_book_id', 'hardcover_slug', 'hardcover_edition_id',
-                       'hardcover_pages', 'hardcover_audio_seconds', 'isbn', 'asin', 'matched_by']:
+            for key in [
+                "hardcover_book_id",
+                "hardcover_slug",
+                "hardcover_edition_id",
+                "hardcover_pages",
+                "hardcover_audio_seconds",
+                "isbn",
+                "asin",
+                "matched_by",
+            ]:
                 if m.get(key):
                     hc[key] = m[key]
 
@@ -591,46 +605,73 @@ class DatabaseMigrator:
     def _migrate_states(self, state_dict):
         """Migrate state data to State models."""
         from .models import State
+
         for abs_id, data in state_dict.items():
-            last_updated = data.get('last_updated')
+            last_updated = data.get("last_updated")
 
-            if 'kosync_pct' in data:
-                self.db_service.save_state(State(
-                    abs_id=abs_id, client_name='kosync', last_updated=last_updated,
-                    percentage=data['kosync_pct'], xpath=data.get('kosync_xpath'),
-                ))
+            if "kosync_pct" in data:
+                self.db_service.save_state(
+                    State(
+                        abs_id=abs_id,
+                        client_name="kosync",
+                        last_updated=last_updated,
+                        percentage=data["kosync_pct"],
+                        xpath=data.get("kosync_xpath"),
+                    )
+                )
 
-            if 'abs_pct' in data:
-                self.db_service.save_state(State(
-                    abs_id=abs_id, client_name='abs', last_updated=last_updated,
-                    percentage=data['abs_pct'], timestamp=data.get('abs_ts'),
-                ))
+            if "abs_pct" in data:
+                self.db_service.save_state(
+                    State(
+                        abs_id=abs_id,
+                        client_name="abs",
+                        last_updated=last_updated,
+                        percentage=data["abs_pct"],
+                        timestamp=data.get("abs_ts"),
+                    )
+                )
 
-            if 'absebook_pct' in data:
-                self.db_service.save_state(State(
-                    abs_id=abs_id, client_name='absebook', last_updated=last_updated,
-                    percentage=data['absebook_pct'], cfi=data.get('absebook_cfi'),
-                ))
+            if "absebook_pct" in data:
+                self.db_service.save_state(
+                    State(
+                        abs_id=abs_id,
+                        client_name="absebook",
+                        last_updated=last_updated,
+                        percentage=data["absebook_pct"],
+                        cfi=data.get("absebook_cfi"),
+                    )
+                )
 
-            if 'storyteller_pct' in data:
-                self.db_service.save_state(State(
-                    abs_id=abs_id, client_name='storyteller', last_updated=last_updated,
-                    percentage=data['storyteller_pct'], xpath=data.get('storyteller_xpath'),
-                    cfi=data.get('storyteller_cfi'),
-                ))
+            if "storyteller_pct" in data:
+                self.db_service.save_state(
+                    State(
+                        abs_id=abs_id,
+                        client_name="storyteller",
+                        last_updated=last_updated,
+                        percentage=data["storyteller_pct"],
+                        xpath=data.get("storyteller_xpath"),
+                        cfi=data.get("storyteller_cfi"),
+                    )
+                )
 
-            if 'booklore_pct' in data:
-                self.db_service.save_state(State(
-                    abs_id=abs_id, client_name='booklore', last_updated=last_updated,
-                    percentage=data['booklore_pct'], xpath=data.get('booklore_xpath'),
-                    cfi=data.get('booklore_cfi'),
-                ))
+            if "booklore_pct" in data:
+                self.db_service.save_state(
+                    State(
+                        abs_id=abs_id,
+                        client_name="booklore",
+                        last_updated=last_updated,
+                        percentage=data["booklore_pct"],
+                        xpath=data.get("booklore_xpath"),
+                        cfi=data.get("booklore_cfi"),
+                    )
+                )
 
     def should_migrate(self) -> bool:
         """Check if migration is needed (JSON files exist but no data in SQLAlchemy)."""
         try:
             with self.db_service.get_session() as session:
                 from sqlalchemy import text
+
                 count = session.execute(text("SELECT count(*) FROM books")).scalar()
                 if count > 0:
                     return False
