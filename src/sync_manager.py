@@ -112,6 +112,7 @@ class SyncManager:
                 alignment_service=alignment_service,
                 library_service=library_service,
                 storyteller_client=storyteller_client,
+                storyteller_submission_service=None,
                 epub_cache_dir=self.epub_cache_dir,
                 data_dir=data_dir,
                 books_dir=books_dir,

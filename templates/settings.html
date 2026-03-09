@@ -326,6 +326,17 @@
                                     placeholder="/storyteller-import">
                                 <div class="help-text">Mount Storyteller's /import directory here. Books submitted for narrated EPUB3 creation will be copied from Audiobookshelf and Booklore to this path.</div>
                             </div>
+                            <div class="form-group">
+                                <label for="STORYTELLER_FORCE_MODE">Force Storyteller (skip Whisper)</label>
+                                <div class="toggle-switch-wrapper">
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" id="STORYTELLER_FORCE_MODE" name="STORYTELLER_FORCE_MODE"
+                                            {% if get_bool('STORYTELLER_FORCE_MODE') %}checked{% endif %}>
+                                        <span class="slider"></span>
+                                    </label>
+                                </div>
+                                <div class="help-text">When enabled, books with a Storyteller link or submission will wait for Storyteller processing instead of falling back to Whisper transcription. Books without a Storyteller link will still use the default transcription provider configured in Advanced settings.</div>
+                            </div>
                         </div>
                     </div>
                 </div>
