@@ -265,7 +265,7 @@
                         </label>
                         <button class="r-goal-widget r-goal-widget--stats" id="goal-card" type="button">
                             {% if goal %}
-                            {% set goal_pct = stats.goal_percent|default(0) %}
+                            {% set goal_pct = stats.goal_percent|default(0, true) %}
                             <svg class="r-goal-ring" viewBox="0 0 48 48" aria-hidden="true">
                                 <circle cx="24" cy="24" r="20" fill="none" stroke="var(--color-border)" stroke-width="3"/>
                                 <circle cx="24" cy="24" r="20" fill="none" stroke="var(--color-success)" stroke-width="3"
@@ -304,7 +304,7 @@
                     </article>
                     <article class="r-stats-card">
                         <span class="r-stats-card-label">Goal Progress</span>
-                        <strong class="r-stats-card-value" id="stats-goal-progress">{{ '%.0f'|format(stats.goal_percent|default(0)) }}%</strong>
+                        <strong class="r-stats-card-value" id="stats-goal-progress">{{ '%.0f'|format(stats.goal_percent|default(0, true)) }}%</strong>
                         <span class="r-stats-card-meta" id="stats-total-tracked">{{ stats.total_tracked|default(0) }} tracked books total</span>
                     </article>
                 </div>

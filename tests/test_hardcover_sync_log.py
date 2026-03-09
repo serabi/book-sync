@@ -204,6 +204,8 @@ class TestHardcoverSyncLogAPI(unittest.TestCase):
 
     def setUp(self):
         self.temp_dir = tempfile.mkdtemp()
+        self._orig_data_dir = os.environ.get('DATA_DIR')
+        self._orig_books_dir = os.environ.get('BOOKS_DIR')
         os.environ['DATA_DIR'] = self.temp_dir
         os.environ['BOOKS_DIR'] = self.temp_dir
 
@@ -234,8 +236,15 @@ class TestHardcoverSyncLogAPI(unittest.TestCase):
 
         import src.db.migration_utils
         src.db.migration_utils.initialize_database = self.original_init_db
-        os.environ.pop('DATA_DIR', None)
-        os.environ.pop('BOOKS_DIR', None)
+        # Restore original env vars instead of removing them
+        if self._orig_data_dir is not None:
+            os.environ['DATA_DIR'] = self._orig_data_dir
+        else:
+            os.environ.pop('DATA_DIR', None)
+        if self._orig_books_dir is not None:
+            os.environ['BOOKS_DIR'] = self._orig_books_dir
+        else:
+            os.environ.pop('BOOKS_DIR', None)
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_get_all_logs(self):
