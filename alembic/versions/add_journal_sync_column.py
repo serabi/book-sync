@@ -15,10 +15,18 @@ depends_on = None
 
 
 def upgrade():
-    with op.batch_alter_table('hardcover_details') as batch_op:
-        batch_op.add_column(sa.Column('journal_sync', sa.String(10), nullable=True))
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    columns = [c['name'] for c in inspector.get_columns('hardcover_details')]
+    if 'journal_sync' not in columns:
+        with op.batch_alter_table('hardcover_details') as batch_op:
+            batch_op.add_column(sa.Column('journal_sync', sa.String(10), nullable=True))
 
 
 def downgrade():
-    with op.batch_alter_table('hardcover_details') as batch_op:
-        batch_op.drop_column('journal_sync')
+    conn = op.get_bind()
+    inspector = sa.inspect(conn)
+    columns = [c['name'] for c in inspector.get_columns('hardcover_details')]
+    if 'journal_sync' in columns:
+        with op.batch_alter_table('hardcover_details') as batch_op:
+            batch_op.drop_column('journal_sync')

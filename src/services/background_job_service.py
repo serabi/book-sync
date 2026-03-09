@@ -232,25 +232,9 @@ class BackgroundJobService:
             book_text, _ = self.ebook_parser.extract_text_and_map(epub_path)
 
             # Priority 1: Storyteller wordTimeline
-            if (book.storyteller_uuid
-                    and self.storyteller_client
-                    and os.environ.get('STORYTELLER_ASSETS_DIR', '').strip()):
-                try:
-                    st_chapters = self.storyteller_client.get_word_timeline_chapters(book.storyteller_uuid)
-                    if st_chapters:
-                        if not self.alignment_service:
-                            logger.warning(f"Skipping Storyteller alignment for '{book.abs_title}': alignment_service not available")
-                        else:
-                            logger.info(f"Using Storyteller wordTimeline for '{book.abs_title}' ({len(st_chapters)} chapters)")
-                            update_progress(0.5, 2)
-                            success = self.alignment_service.align_storyteller_and_store(
-                                abs_id, st_chapters, book_text
-                            )
-                            if success:
-                                transcript_source = "STORYTELLER_NATIVE"
-                                update_progress(1.0, 2)
-                except Exception as e:
-                    logger.warning(f"Storyteller wordTimeline failed for '{book.abs_title}': {e}")
+            transcript_source = self._try_storyteller_alignment(
+                book, abs_id, book_text, update_progress
+            )
 
             # Priority 2: SMIL extraction
             if not transcript_source and hasattr(self.transcriber, 'transcribe_from_smil'):
@@ -359,3 +343,42 @@ class BackgroundJobService:
                 book.status = 'failed_retry_later'
 
             self.database_service.save_book(book)
+
+    def _try_storyteller_alignment(self, book, abs_id, book_text, update_progress) -> str | None:
+        """Attempt Storyteller word-timeline alignment.
+
+        Returns "STORYTELLER_NATIVE" on success, None on failure/unavailable.
+        Also checks for active submissions that haven't finished processing yet.
+        """
+        if not book.storyteller_uuid and not self.storyteller_client:
+            return None
+
+        # Check for active submission awaiting processing
+        submission = self.database_service.get_active_storyteller_submission(abs_id)
+        if submission and submission.status in ('queued', 'processing'):
+            logger.info(f"Storyteller processing not yet complete for '{sanitize_log_data(book.abs_title)}', falling back to SMIL/Whisper")
+            return None
+
+        if not (book.storyteller_uuid
+                and self.storyteller_client
+                and os.environ.get('STORYTELLER_ASSETS_DIR', '').strip()):
+            return None
+
+        try:
+            st_chapters = self.storyteller_client.get_word_timeline_chapters(book.storyteller_uuid)
+            if not st_chapters:
+                return None
+            if not self.alignment_service:
+                logger.warning(f"Skipping Storyteller alignment for '{sanitize_log_data(book.abs_title)}': alignment_service not available")
+                return None
+            logger.info(f"Using Storyteller wordTimeline for '{sanitize_log_data(book.abs_title)}' ({len(st_chapters)} chapters)")
+            update_progress(0.5, 2)
+            success = self.alignment_service.align_storyteller_and_store(
+                abs_id, st_chapters, book_text
+            )
+            if success:
+                update_progress(1.0, 2)
+                return "STORYTELLER_NATIVE"
+        except Exception as e:
+            logger.warning(f"Storyteller wordTimeline failed for '{sanitize_log_data(book.abs_title)}': {e}")
+        return None

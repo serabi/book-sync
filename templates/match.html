@@ -204,6 +204,12 @@
                                 <input type="hidden" name="storyteller_uuid" value="">
                                 {% endif %}
                             </div>
+                            {% if storyteller_submit_available %}
+                            <label class="storyteller-submit-option">
+                                <input type="checkbox" name="storyteller_submit" value="1">
+                                Submit to Storyteller for narrated EPUB3 creation
+                            </label>
+                            {% endif %}
                         </div>
                     </div>
                     {% else %}

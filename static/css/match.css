@@ -401,6 +401,21 @@ input[type="radio"] {
   padding: 18px;
 }
 
+.storyteller-submit-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  margin-top: 8px;
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.storyteller-submit-option input[type="checkbox"] {
+  accent-color: var(--color-primary);
+}
+
 .batch-select-card {
   width: 100%;
   border: 2px solid var(--color-border-light);

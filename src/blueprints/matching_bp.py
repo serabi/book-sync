@@ -382,6 +382,32 @@ def match():
                 bl_match_client.add_to_shelf(shelf_filename)
             except Exception as e:
                 logger.warning(f"Booklore add_to_shelf failed for '{sanitize_log_data(shelf_filename)}': {e}")
+        # Storyteller submission (fire-and-forget)
+        if request.form.get('storyteller_submit'):
+            try:
+                st_sub_svc = container.storyteller_submission_service()
+                if st_sub_svc.is_available():
+                    from src.utils.epub_resolver import get_local_epub
+                    books_dir = current_app.config.get('BOOKS_DIR', '')
+                    epub_cache_dir = current_app.config.get('EPUB_CACHE_DIR', '')
+                    epub_path = get_local_epub(
+                        ebook_filename, books_dir, epub_cache_dir,
+                        container.booklore_client()
+                    )
+                    audio_files = container.abs_client().get_audio_files(abs_id)
+                    if epub_path and audio_files:
+                        from pathlib import Path
+                        result = st_sub_svc.submit_book(
+                            abs_id, manager.get_abs_title(selected_ab),
+                            Path(epub_path), audio_files,
+                        )
+                        if not result.success:
+                            logger.warning(f"Storyteller submission failed: {result.error}")
+                    else:
+                        logger.warning(f"Storyteller submission skipped: epub={'found' if epub_path else 'missing'}, audio={len(audio_files or [])} files")
+            except Exception as e:
+                logger.warning(f"Storyteller submission error: {e}")
+
         # Remove resolved suggestions once the mapping is created
         database_service.resolve_suggestion(abs_id)
         database_service.resolve_suggestion(kosync_doc_id)
@@ -443,12 +469,20 @@ def match():
                 preselected_audiobook['cover_url'] = abs_service.get_cover_proxy_url(preselect_abs_id)
                 audiobooks.insert(0, preselected_audiobook)
 
+    storyteller_submit_available = False
+    try:
+        st_sub_svc = container.storyteller_submission_service()
+        storyteller_submit_available = st_sub_svc.is_available()
+    except Exception:
+        pass
+
     return render_template('match.html', audiobooks=audiobooks, ebooks=ebooks,
                            storyteller_books=storyteller_books, search=search,
                            get_title=manager.get_abs_title,
                            attach_to=attach_to, attach_title=attach_title,
                            link_to=link_to, link_title=link_title,
-                           preselect_abs_id=preselect_abs_id)
+                           preselect_abs_id=preselect_abs_id,
+                           storyteller_submit_available=storyteller_submit_available)
 
 
 @matching_bp.route('/batch-match', methods=['GET', 'POST'])
@@ -478,6 +512,7 @@ def batch_match():
                         "ebook_filename": ebook_filename,
                         "ebook_display_name": ebook_display_name,
                         "storyteller_uuid": storyteller_uuid,
+                        "storyteller_submit": bool(request.form.get('storyteller_submit')),
                         "duration": manager.get_duration(selected_ab),
                         "cover_url": abs_service.get_cover_proxy_url(abs_id),
                         "audio_only": is_audio_only,
@@ -597,6 +632,30 @@ def batch_match():
                             bl_match_client.add_to_shelf(shelf_filename)
                         except Exception as e:
                             logger.warning(f"Booklore add_to_shelf failed for '{sanitize_log_data(shelf_filename)}': {e}")
+                    # Storyteller submission (fire-and-forget)
+                    if item.get('storyteller_submit'):
+                        try:
+                            st_sub_svc = container.storyteller_submission_service()
+                            if st_sub_svc.is_available():
+                                from src.utils.epub_resolver import get_local_epub
+                                books_dir = current_app.config.get('BOOKS_DIR', '')
+                                epub_cache_dir = current_app.config.get('EPUB_CACHE_DIR', '')
+                                epub_path = get_local_epub(
+                                    ebook_filename, books_dir, epub_cache_dir,
+                                    container.booklore_client()
+                                )
+                                audio_files = container.abs_client().get_audio_files(item['abs_id'])
+                                if epub_path and audio_files:
+                                    from pathlib import Path
+                                    result = st_sub_svc.submit_book(
+                                        item['abs_id'], item['abs_title'],
+                                        Path(epub_path), audio_files,
+                                    )
+                                    if not result.success:
+                                        logger.warning(f"Storyteller submission failed: {result.error}")
+                        except Exception as e:
+                            logger.warning(f"Storyteller submission error: {e}")
+
                     database_service.resolve_suggestion(item['abs_id'])
                     database_service.resolve_suggestion(kosync_doc_id)
 
@@ -636,6 +695,14 @@ def batch_match():
             except Exception as e:
                 logger.warning(f"Storyteller search failed in batch_match route: {e}")
 
+    storyteller_submit_available = False
+    try:
+        st_sub_svc = container.storyteller_submission_service()
+        storyteller_submit_available = st_sub_svc.is_available()
+    except Exception:
+        pass
+
     queue_view = _build_batch_queue_view(session.get('queue', []))
     return render_template('batch_match.html', audiobooks=audiobooks, ebooks=ebooks, storyteller_books=storyteller_books,
-                           queue=queue_view['items'], queue_summary=queue_view, search=search, get_title=manager.get_abs_title)
+                           queue=queue_view['items'], queue_summary=queue_view, search=search, get_title=manager.get_abs_title,
+                           storyteller_submit_available=storyteller_submit_available)
