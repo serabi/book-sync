@@ -381,6 +381,15 @@ class HardcoverSyncClient(SyncClient):
 
     # ── Optional Journal Mirroring (Step 14) ──────────────────────────
 
+    def _get_journal_privacy(self) -> int:
+        """Read the user's journal privacy setting (default: 3 = private)."""
+        if not self.database_service:
+            return 3
+        val = self.database_service.get_setting('HARDCOVER_JOURNAL_PRIVACY')
+        if val and val.isdigit() and int(val) in (1, 2, 3):
+            return int(val)
+        return 3
+
     def _mirror_journal_if_enabled(self, book, hardcover_details, hc_status_id):
         """Create a Hardcover reading journal entry if the user has enabled mirroring."""
         event_map = {
@@ -397,14 +406,70 @@ class HardcoverSyncClient(SyncClient):
 
         try:
             edition_id = self._select_edition_id(book, hardcover_details)
+            privacy = self._get_journal_privacy()
             self.hardcover_client.create_reading_journal(
                 int(hardcover_details.hardcover_book_id),
                 int(edition_id) if edition_id else None,
                 event_name,
+                privacy_setting_id=privacy,
             )
             logger.info(f"Hardcover journal mirrored: '{event_name}' for '{sanitize_log_data(book.abs_title)}'")
         except Exception as e:
             logger.debug(f"Could not mirror journal to Hardcover: {e}")
+
+    def _is_journal_push_enabled(self, hardcover_details) -> bool:
+        """Check if journal note pushing is enabled for this book.
+
+        Per-book override (journal_sync) takes precedence over global default.
+        """
+        per_book = hardcover_details.journal_sync
+        if per_book == 'on':
+            return True
+        if per_book == 'off':
+            return False
+        # None → fall back to global setting
+        if not self.database_service:
+            return False
+        val = self.database_service.get_setting('HARDCOVER_JOURNAL_PUSH_NOTES')
+        return val and val.lower() == 'true'
+
+    def push_journal_note(self, book, entry: str):
+        """Push a journal note to Hardcover (fire-and-forget on creation)."""
+        if not self.is_configured() or not self.database_service:
+            return
+
+        hardcover_details = self.database_service.get_hardcover_details(book.abs_id)
+        if not hardcover_details or not hardcover_details.hardcover_book_id:
+            return
+
+        if not self._is_journal_push_enabled(hardcover_details):
+            return
+
+        try:
+            edition_id = self._select_edition_id(book, hardcover_details)
+            privacy = self._get_journal_privacy()
+            self.hardcover_client.create_reading_journal(
+                int(hardcover_details.hardcover_book_id),
+                int(edition_id) if edition_id else None,
+                'note',
+                entry=entry,
+                privacy_setting_id=privacy,
+            )
+            log_hardcover_action(
+                self.database_service, abs_id=book.abs_id,
+                book_title=sanitize_log_data(book.abs_title),
+                direction='push', action='journal_note',
+                detail={'entry_preview': entry[:80] + ('...' if len(entry) > 80 else ''), 'privacy': privacy},
+            )
+            logger.info(f"Hardcover journal note pushed for '{sanitize_log_data(book.abs_title)}'")
+        except Exception as e:
+            log_hardcover_action(
+                self.database_service, abs_id=book.abs_id,
+                book_title=sanitize_log_data(book.abs_title),
+                direction='push', action='journal_note',
+                success=False, error_message=str(e),
+            )
+            logger.debug(f"Could not push journal note to Hardcover: {e}")
 
     def push_local_rating(self, book, rating):
         """Mirror a local rating change to Hardcover when a link exists."""
