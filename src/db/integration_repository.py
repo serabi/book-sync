@@ -126,6 +126,17 @@ class IntegrationRepository(BaseRepository):
                 session.expunge(sub)
             return sub
 
+    def update_storyteller_submission_status(self, submission_id, status, last_checked_at=None, storyteller_uuid=None):
+        """Update an existing submission's status without creating a new record."""
+        with self.get_session() as session:
+            sub = session.query(StorytellerSubmission).filter(StorytellerSubmission.id == submission_id).first()
+            if sub:
+                sub.status = status
+                if last_checked_at is not None:
+                    sub.last_checked_at = last_checked_at
+                if storyteller_uuid is not None:
+                    sub.storyteller_uuid = storyteller_uuid
+
     def get_storyteller_submission(self, abs_id):
         """Get the most recent submission (any status) for a book."""
         with self.get_session() as session:

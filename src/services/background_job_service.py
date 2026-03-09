@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from src.db.models import Job
+from src.services.storyteller_submission_service import StorytellerDeferral
 from src.utils.epub_resolver import get_local_epub
 from src.utils.logging_utils import sanitize_log_data
 
@@ -246,14 +247,20 @@ class BackgroundJobService:
             # In force mode, skip SMIL/Whisper entirely
             if storyteller_force and transcript_source != "STORYTELLER_NATIVE":
                 if transcript_source == "STORYTELLER_PENDING":
-                    raise Exception("Storyteller processing not yet complete (force mode enabled, skipping Whisper)")
-                elif book.storyteller_uuid or self.database_service.get_active_storyteller_submission(abs_id):
-                    raise Exception("Storyteller alignment not available yet (force mode enabled, skipping Whisper)")
+                    raise StorytellerDeferral(
+                        "Storyteller processing not yet complete (force mode enabled, skipping Whisper)"
+                    )
+                elif book.storyteller_uuid:
+                    raise StorytellerDeferral(
+                        "Storyteller alignment not available yet (force mode enabled, skipping Whisper)"
+                    )
                 else:
                     # Auto-submit to Storyteller if the submission service is available
                     auto_submitted = self._auto_submit_to_storyteller(book, abs_id, abs_title, epub_path)
                     if auto_submitted:
-                        raise Exception("Auto-submitted to Storyteller (force mode enabled, waiting for processing)")
+                        raise StorytellerDeferral(
+                            "Auto-submitted to Storyteller (force mode enabled, waiting for processing)"
+                        )
                     else:
                         logger.warning(
                             f"Force Storyteller mode is on but auto-submission unavailable for "
@@ -335,6 +342,22 @@ class BackgroundJobService:
                 logger.warning(f"Job record not found for completed book: {abs_id}")
 
             logger.info(f"Completed: {sanitize_log_data(abs_title)}")
+
+        except StorytellerDeferral as e:
+            # Deferral: don't increment retry count — just park the job for next cycle
+            logger.info(f"{sanitize_log_data(abs_title)}: {e}")
+
+            job = self.database_service.get_latest_job(abs_id)
+            updated_job = Job(
+                abs_id=abs_id,
+                last_attempt=time.time(),
+                retry_count=job.retry_count if job else 0,
+                last_error=str(e),
+                progress=job.progress if job else 0.0,
+            )
+            self.database_service.save_job(updated_job)
+            book.status = "failed_retry_later"
+            self.database_service.save_book(book)
 
         except Exception as e:
             logger.error(f"{sanitize_log_data(abs_title)}: {e}")
