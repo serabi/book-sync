@@ -407,7 +407,15 @@ def match():
             **merge_metadata,
         )
 
+        storyteller_submit = request.form.get("storyteller_submit")
+
         database_service.save_book(book)
+
+        # Create Storyteller reservation immediately after saving the book —
+        # before any HTTP calls (Hardcover, Booklore, ABS) that could take
+        # seconds and let the sync cycle pick up the book without a reservation.
+        if storyteller_submit:
+            _create_storyteller_reservation(database_service, abs_id)
 
         # Duplicate Merge: Migrate
         if migration_source_id:
@@ -434,8 +442,7 @@ def match():
             except Exception as e:
                 logger.warning(f"Booklore add_to_shelf failed for '{sanitize_log_data(shelf_filename)}': {e}")
         # Storyteller submission (runs in background thread to avoid blocking)
-        if request.form.get("storyteller_submit"):
-            _create_storyteller_reservation(database_service, abs_id)
+        if storyteller_submit:
             _submit_to_storyteller_async(
                 container,
                 abs_id,
@@ -659,6 +666,8 @@ def batch_match():
                             "abs_ebook_item_id": abs_ebook_item_id,
                         }
 
+                    batch_storyteller_submit = item.get("storyteller_submit")
+
                     book = Book(
                         abs_id=item["abs_id"],
                         abs_title=item["abs_title"],
@@ -671,6 +680,10 @@ def batch_match():
                     )
 
                     database_service.save_book(book)
+
+                    # Create reservation immediately after book save, before HTTP calls
+                    if batch_storyteller_submit:
+                        _create_storyteller_reservation(database_service, item["abs_id"])
 
                     # Duplicate Merge: Migrate
                     if migration_source_id:
@@ -695,8 +708,7 @@ def batch_match():
                                 f"Booklore add_to_shelf failed for '{sanitize_log_data(shelf_filename)}': {e}"
                             )
                     # Storyteller submission (runs in background thread)
-                    if item.get("storyteller_submit"):
-                        _create_storyteller_reservation(database_service, item["abs_id"])
+                    if batch_storyteller_submit:
                         _submit_to_storyteller_async(
                             container,
                             item["abs_id"],
