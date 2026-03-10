@@ -91,6 +91,8 @@ def get_booklore_client():
 
 def find_in_booklore(filename):
     """Search Booklore for a book by filename, return (book_info, client) or (None, None)."""
+    if not filename:
+        return None, None
     client = get_booklore_client()
     if client.is_configured():
         book = client.find_book_by_filename(filename)
