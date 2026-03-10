@@ -4,6 +4,30 @@
 
 All notable changes to PageKeeper will be documented in this file.
 
+## [0.2.0] - 2026-03-10
+
+### Added
+
+- **Hardcover bidirectional sync** — Reading status and progress now syncs both directions with Hardcover. Previously write-only.
+- **Hardcover journal push** — Journal notes from PageKeeper's reading tracker are pushed to Hardcover as user journal entries.
+- **Hardcover reading dates** — Historical `started_at`/`finished_at` dates are tracked and synced with Hardcover.
+- **Hardcover sync log** — New "Hardcover Sync" tab on the Logs page shows all sync operations with status, direction, and timestamps.
+- **Storyteller submission service** — Submit books directly to Storyteller for narrated EPUB3 creation from the match page. PageKeeper copies the EPUB and audio files to Storyteller's import directory, detects when Storyteller picks them up, and triggers processing via the API.
+- **Force Storyteller mode** — Setting that auto-submits all books to Storyteller, skipping local Whisper transcription entirely.
+- **Storyteller status badges** — Book cards show submission status: "Awaiting Storyteller" during processing, "Aligned via Storyteller" when complete.
+- **Configurable Storyteller timeout** — Import detection timeout is now an advanced setting (default 120s).
+
+### Fixed
+
+- **Race condition in Storyteller submissions** — Reservation record is now created synchronously before any async work, preventing the job scheduler from starting Whisper before the submission exists.
+- **Wrong-book matching in Storyteller** — Book detection now requires exact title match and snapshots existing books before import to avoid fuzzy mismatches.
+- **Stale Storyteller deferrals** — Job scheduler now polls Storyteller for completion before deferring, so books don't get stuck waiting forever after Storyteller finishes.
+- **Booklore None filename crash** — Guard added for audio-only books passed to `find_in_booklore()`.
+- **Dockerfile healthcheck** — Fixed endpoint from `/` to `/healthcheck`.
+- **`.dockerignore` not read** — File was named `dockerignore` (missing dot). Renamed and updated.
+
+---
+
 ## [0.1.2] - 2026-03-07
 
 ### Added
@@ -63,8 +87,8 @@ Forked from [abs-kosync-bridge](https://github.com/JadeTech-Solutions/abs-kosync
 | [KOReader](https://koreader.rocks/) (via KoSync) | E-reader protocol | Ebook reader on Kobo, Boox, Kindle; syncs EPUB position |
 | [Storyteller](https://smoores.gitlab.io/storyteller/) | Audiobook companion | Synced audiobook + EPUB app |
 | [Booklore](https://github.com/booklore) | Ebook library | Ebook manager; provides EPUB files and tracks reading progress |
-| [Hardcover](https://hardcover.app/) | Book tracking | Write-only; logs reading progress |
-| [Calibre-Web (CWA)](https://github.com/janeczku/calibre-web) | OPDS ebook source | Alternative source for fetching EPUBs |
+| [Hardcover](https://hardcover.app/) | Book tracking | Bidirectional reading status, progress, and journal sync |
+| [Calibre-Web Automated (CWA)](https://github.com/crocodilestick/Calibre-Web-Automated) | OPDS ebook source | Alternative source for fetching EPUBs |
 
 All integrations are optional.
 
@@ -102,7 +126,7 @@ All integrations are optional.
 | `ABS_LIBRARY_ID` | -- | ABS library ID to sync from |
 | `ABS_COLLECTION_NAME` | `Synced with KOReader` | ABS collection to auto-add synced books to |
 | `ABS_PROGRESS_OFFSET_SECONDS` | `0` | Rewind progress sent to ABS by this many seconds |
-| `ABS_ONLY_SEARCH_IN_ABS_LIBRARY_ID` | `false` | Limit ebook searches to the configured ABS library |
+| `ABS_LIBRARY_IDS` | -- | Comma-separated ABS library IDs to monitor (blank = all) |
 
 ### KOSync
 
@@ -123,6 +147,10 @@ All integrations are optional.
 | `STORYTELLER_API_URL` | -- | Storyteller server URL |
 | `STORYTELLER_USER` | -- | Storyteller username |
 | `STORYTELLER_PASSWORD` | -- | Storyteller password |
+| `STORYTELLER_IMPORT_DIR` | -- | Path to Storyteller's import directory (for submissions) |
+| `STORYTELLER_ASSETS_DIR` | -- | Path to Storyteller's data directory (for completion detection) |
+| `STORYTELLER_FORCE_MODE` | `false` | Auto-submit all books to Storyteller, skip Whisper |
+| `STORYTELLER_IMPORT_DETECT_TIMEOUT` | `120` | Seconds to wait for Storyteller to detect imported files |
 
 ### Booklore
 
@@ -205,7 +233,7 @@ All integrations are optional.
 | `DATA_DIR` | `/data` | Persistent data directory |
 | `BOOKS_DIR` | `/books` | Local ebook library path |
 | `AUDIOBOOKS_DIR` | `/audiobooks` | Local audiobook files path |
-| `STORYTELLER_LIBRARY_DIR` | `/storyteller_library` | Storyteller library directory |
+
 | `EBOOK_CACHE_SIZE` | `3` | LRU cache size for parsed ebooks |
 | `JOB_MAX_RETRIES` | `5` | Max transcription job retry attempts |
 | `JOB_RETRY_DELAY_MINS` | `15` | Minutes between job retries |

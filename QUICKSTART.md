@@ -13,7 +13,7 @@ PageKeeper syncs progress between any combination of these services:
 |---------|------|-------------|
 | **Audiobookshelf** | Audiobook server | Tracks audiobook listening progress |
 | **KOSync** | E-reader sync | Syncs KOReader/Calibre reading position |
-| **Storyteller** | Ebook server | Tracks ebook reading progress |
+| **Storyteller** | Narrated ebooks | Creates aligned narrated EPUB3s and syncs reading progress |
 | **Booklore** | Library manager | Ebook organization and shelf management |
 | **Hardcover** | Social reading | Updates reading status and page progress |
 
@@ -63,6 +63,8 @@ services:
 |-------|---------|-------------|
 | `./data:/data` | Database, logs, cache | Always |
 | `/path/to/ebooks:/books:ro` | Ebook files (EPUB, etc.) | Cross-format sync without Booklore (Booklore fetches files via API) |
+| `/path/to/storyteller/import:/storyteller-import` | Storyteller's import directory | Storyteller submission (PageKeeper copies ebook + audio here) |
+| `/path/to/storyteller/data:/storyteller-assets:ro` | Storyteller's data directory | Detecting when Storyteller finishes processing |
 
 ### Optional: Split-port mode (recommended for internet-exposed setups)
 
@@ -118,7 +120,7 @@ You should see the PageKeeper dashboard.
 2. Select an audiobook, ebook, or both depending on your setup
 3. Click **"Create Mapping"**
 
-That's it! Your mapping is saved and will appear on the dashboard immediately. The background sync picks it up within a few minutes (every 5 minutes by default, configurable in Settings). For audiobook+ebook linked books, an alignment step (Whisper transcription) runs automatically first — this takes additional time depending on book length. You can check transcription progress in the container logs.
+That's it! Your mapping is saved and will appear on the dashboard immediately. The background sync picks it up within a few minutes (every 5 minutes by default, configurable in Settings). For audiobook+ebook linked books, an alignment step runs automatically first — either via Storyteller (if configured and selected) or local Whisper transcription. You can check progress in the container logs.
 
 ---
 
@@ -129,7 +131,8 @@ That's it! Your mapping is saved and will appear on the dashboard immediately. T
 2. Enable and configure KOSync (or another ebook service) in Settings
 3. Mount your `/books` volume if using local ebook files
 4. Use "Single Match" to pair an audiobook with its ebook
-5. Progress syncs both directions
+5. Optionally check "Submit to Storyteller" to use Storyteller for alignment instead of local Whisper
+6. Progress syncs both directions
 
 ### Ebook-Only
 1. Enable at least two ebook services in Settings (KOSync, Storyteller, Booklore)
@@ -168,6 +171,7 @@ Look for error messages about missing volumes or startup failures.
 Once basic sync is working, explore the Settings page for:
 - **Sync tuning** — adjust sync intervals, delta thresholds
 - **Instant sync** — real-time sync via Audiobookshelf Socket.IO
+- **Force Storyteller** — automatically submit all books to Storyteller, skipping local Whisper
 - **Hardcover** — social reading tracking
 - **Telegram** — notifications for sync events
 

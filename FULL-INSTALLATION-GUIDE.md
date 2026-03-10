@@ -95,7 +95,7 @@ services:
       context: .
       args:
         INSTALL_GPU: "false"       # Set to "true" for NVIDIA GPU support
-        APP_VERSION: "0.1.2"       # Version shown in dashboard
+        APP_VERSION: "0.2.0"       # Version shown in dashboard
     container_name: pagekeeper
     restart: unless-stopped
 
@@ -113,8 +113,10 @@ services:
       # - /path/to/ebooks:/books:ro
 
       # === OPTIONAL — Storyteller ===
-      # Mount Storyteller's processing directory for native alignment (skips Whisper)
-      # - /path/to/storyteller/processing:/storyteller-data:ro
+      # For submitting books to Storyteller (PageKeeper copies ebook + audio here)
+      # - /path/to/storyteller/import:/storyteller-import
+      # For detecting when Storyteller finishes processing (native alignment)
+      # - /path/to/storyteller/data:/storyteller-data:ro
 
     ports:
       - "4477:4477"                # Dashboard — LAN only, do NOT forward
@@ -217,7 +219,7 @@ Then in KOReader on your e-reader:
 
 ### Storyteller
 
-An audiobook companion app with EPUB3 read-along support.
+A narrated ebook platform that creates aligned EPUB3s with read-along audio. PageKeeper can submit books to Storyteller for processing and use its word-level timing data for alignment (instead of running Whisper locally).
 
 Configure in **Settings > Storyteller**:
 
@@ -226,16 +228,23 @@ Configure in **Settings > Storyteller**:
 | **Server URL** | e.g. `http://storyteller:8001` |
 | **Username** | Storyteller login username |
 | **Password** | Storyteller login password |
-| **Assets Directory** | Path inside the container to Storyteller's processing data (for native alignment) |
+| **Import Directory** | Path inside the container to Storyteller's import folder (for submitting books) |
+| **Assets Directory** | Path inside the container to Storyteller's data folder (for detecting completion) |
+| **Force Storyteller** | When enabled, all books are automatically submitted to Storyteller instead of using Whisper |
 
-If using native alignment, add the volume mount:
+Add the volume mounts to your `docker-compose.yml`:
 
 ```yaml
 volumes:
-  - /path/to/storyteller/processing:/storyteller-data:ro
+  # For submitting books — PageKeeper copies ebook + audio here
+  - /path/to/storyteller/import:/storyteller-import
+  # For detecting completion and native alignment
+  - /path/to/storyteller/data:/storyteller-data:ro
 ```
 
-Then set **Assets Directory** to `/storyteller-data` in the settings.
+Then set **Import Directory** to `/storyteller-import` and **Assets Directory** to `/storyteller-data` in Settings.
+
+**How submission works:** When matching a book, check "Submit to Storyteller" (or enable Force Storyteller mode). PageKeeper copies the EPUB and audio files to Storyteller's import directory, waits for Storyteller to detect them, then triggers processing via the API. The book defers local Whisper transcription until Storyteller finishes.
 
 ### Booklore
 
@@ -266,7 +275,7 @@ Configure in **Settings > CWA**:
 
 ### Hardcover
 
-A book tracking service. PageKeeper syncs reading status to Hardcover (write-only — it pushes updates but doesn't pull from Hardcover).
+A social book tracking service. PageKeeper syncs reading status and progress bidirectionally with Hardcover, and can push journal notes.
 
 Configure in **Settings > Hardcover**:
 
@@ -369,17 +378,19 @@ You can also offload transcription to an external [Whisper.cpp](https://github.c
 |---|---|---|
 | **Server URL** | `WHISPER_CPP_URL` | URL of your Whisper.cpp server |
 
-### Storyteller Native Alignment
+### Storyteller Alignment
 
-The fastest alignment method — no transcription needed. If a book exists in Storyteller and has been processed, PageKeeper reads Storyteller's word-level timing data directly.
+If you already use Storyteller for narrated EPUB3s, PageKeeper can reuse its word-level timing data for alignment instead of running Whisper separately. This avoids duplicating transcription work — Storyteller already did it.
+
+Two ways to use it:
+
+1. **Submit via PageKeeper** — When matching a book, check "Submit to Storyteller" or enable Force Storyteller mode. PageKeeper copies the EPUB and audio to Storyteller's import directory, triggers processing, and waits for completion. The book skips Whisper entirely.
+
+2. **Use existing Storyteller books** — If a book already exists in Storyteller and has been processed, PageKeeper reads its timing data directly.
 
 Requirements:
-1. Mount Storyteller's processing directory:
-   ```yaml
-   volumes:
-     - /path/to/storyteller/processing:/storyteller-data:ro
-   ```
-2. Set **Assets Directory** to `/storyteller-data` in Settings > Storyteller
+- Mount Storyteller's import and data directories (see [Storyteller integration](#storyteller))
+- Configure the Server URL, credentials, Import Directory, and Assets Directory in Settings
 
 PageKeeper checks for Storyteller data first, then SMIL data in the EPUB, and only falls back to Whisper if neither is available.
 
@@ -507,10 +518,13 @@ All settings are configurable from the web UI and persist in the database. Envir
 | Variable | Default | Description |
 |---|---|---|
 | `STORYTELLER_ENABLED` | `false` | Enable Storyteller integration |
-| `STORYTELLER_API_URL` | `http://localhost:8001` | Storyteller server URL |
+| `STORYTELLER_API_URL` | (none) | Storyteller server URL |
 | `STORYTELLER_USER` | (none) | Storyteller username |
 | `STORYTELLER_PASSWORD` | (none) | Storyteller password |
-| `STORYTELLER_ASSETS_DIR` | (none) | Path to Storyteller processing data |
+| `STORYTELLER_IMPORT_DIR` | (none) | Path to Storyteller's import directory (for submissions) |
+| `STORYTELLER_ASSETS_DIR` | (none) | Path to Storyteller's data directory (for completion detection) |
+| `STORYTELLER_FORCE_MODE` | `false` | Auto-submit all books to Storyteller, skip Whisper |
+| `STORYTELLER_IMPORT_DETECT_TIMEOUT` | `120` | Seconds to wait for Storyteller to detect imported files |
 
 ### Booklore
 
@@ -599,7 +613,8 @@ All settings are configurable from the web UI and persist in the database. Envir
 |---|---|---|---|
 | `/data` | Database, cache, logs, transcripts | Yes | `rw` |
 | `/books` | EPUB ebook files (for alignment) | No* | `ro` |
-| `/storyteller-data` | Storyteller processing data (native alignment) | No | `ro` |
+| `/storyteller-import` | Storyteller import directory (for book submissions) | No | `rw` |
+| `/storyteller-data` | Storyteller data directory (for completion detection and native alignment) | No | `ro` |
 
 \* Not needed if you use Booklore or CWA to fetch ebooks via API.
 

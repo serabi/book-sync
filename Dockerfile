@@ -32,7 +32,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
     fi
 
 # 3. Create directories
-RUN mkdir -p /app/src /app/templates /app/static /data/audio_cache /data/logs /data/transcripts
+RUN mkdir -p /app/src /app/templates /app/static /data/audio_cache /data/logs /data/transcripts /storyteller-import /storyteller-data
 
 # 4. Copy Application Code
 COPY src/ /app/src/
@@ -40,6 +40,7 @@ COPY templates/ /app/templates/
 COPY static/ /app/static/
 COPY alembic/ /app/alembic/
 COPY alembic.ini /app/alembic.ini
+COPY scripts/ /app/scripts/
 
 COPY start.sh /app/start.sh
 RUN sed -i 's/\r$//' /app/start.sh && chmod +x /app/start.sh
@@ -47,6 +48,6 @@ RUN sed -i 's/\r$//' /app/start.sh && chmod +x /app/start.sh
 EXPOSE 4477
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD curl -f http://localhost:4477/ || exit 1
+    CMD curl -f http://localhost:4477/healthcheck || exit 1
 
 CMD ["/app/start.sh"]
