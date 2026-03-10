@@ -185,6 +185,9 @@ class StorytellerSubmissionService:
             try:
                 assets_root = Path(assets_dir) / "assets"
                 transcripts_dir = assets_root / submission.submission_dir / "transcriptions"
+                if assets_root.resolve() not in transcripts_dir.resolve().parents:
+                    logger.warning("Storyteller: refusing out-of-root transcript path in status check")
+                    return submission.status
                 if transcripts_dir.is_dir() and any(transcripts_dir.iterdir()):
                     self._update_submission_status(submission, "ready")
                     return "ready"

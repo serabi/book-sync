@@ -65,6 +65,13 @@ def _submit_to_storyteller_async(container, abs_id, abs_title, ebook_filename, b
                 )
         except Exception as e:
             logger.warning(f"Storyteller submission error for '{abs_title}': {e}")
+            try:
+                db_svc = container.database_service()
+                submission = db_svc.get_active_storyteller_submission(abs_id)
+                if submission:
+                    db_svc.update_storyteller_submission_status(submission.id, "failed")
+            except Exception:
+                pass
 
     threading.Thread(target=_do_submit, daemon=True).start()
 

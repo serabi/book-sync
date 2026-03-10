@@ -20,6 +20,9 @@ def upgrade() -> None:
     conn = op.get_bind()
     inspector = sa.inspect(conn)
     if 'storyteller_submissions' in inspector.get_table_names():
+        indexes = [idx['name'] for idx in inspector.get_indexes('storyteller_submissions')]
+        if 'ix_storyteller_submissions_abs_id' not in indexes:
+            op.create_index('ix_storyteller_submissions_abs_id', 'storyteller_submissions', ['abs_id'])
         return
 
     op.create_table(
