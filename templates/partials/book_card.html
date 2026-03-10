@@ -68,7 +68,9 @@ else 0 %}
             <span>Queued for processing</span>
         </div>
         {% elif mapping.status == 'failed_retry_later' %}
+        {% if mapping.storyteller_submission_status not in ['queued', 'processing'] %}
         <div class="retry-status-text">Retry scheduled{% if mapping.retry_count|default(0) > 0 %} (attempt {{ mapping.retry_count }}){% endif %}</div>
+        {% endif %}
         {% elif mapping.status in ['active', 'paused', 'dnf', 'not_started'] %}
         <div class="book-progress {% if mapping.status == 'paused' %}progress-paused{% elif mapping.status == 'dnf' %}progress-dnf{% endif %}">
             <div class="progress-bar">
@@ -125,7 +127,7 @@ else 0 %}
         {% endif %}
 
         <div class="card-footer">
-            <div class="last-sync">{% if mapping.status == 'processing' %}Processing...{% elif mapping.status == 'pending' %}Queued{% elif mapping.status == 'failed_retry_later' %}Retry pending{% else %}Synced {{ mapping.last_sync }}{% endif %}</div>
+            <div class="last-sync">{% if mapping.status == 'processing' %}Processing...{% elif mapping.status == 'pending' %}Queued{% elif mapping.status == 'failed_retry_later' %}{% if mapping.storyteller_submission_status in ['queued', 'processing'] %}Awaiting Storyteller{% else %}Retry pending{% endif %}{% else %}Synced {{ mapping.last_sync }}{% endif %}</div>
             <div class="card-menu">
                 <button class="card-menu-trigger" aria-label="Actions" aria-expanded="false">⋮</button>
                 <div class="card-menu-dropdown">

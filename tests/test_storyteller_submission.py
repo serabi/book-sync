@@ -22,6 +22,9 @@ class TestStorytellerSubmission(unittest.TestCase):
         self.mock_abs = Mock()
         self.mock_db = Mock()
 
+        # Default: no existing reservation (submit_book creates a new record)
+        self.mock_db.get_active_storyteller_submission.return_value = None
+
         self.service = StorytellerSubmissionService(
             storyteller_client=self.mock_storyteller,
             abs_client=self.mock_abs,
@@ -67,7 +70,7 @@ class TestStorytellerSubmission(unittest.TestCase):
 
     # ── submit_book: success ──
 
-    @patch.object(StorytellerSubmissionService, "_download_file", return_value=True)
+    @patch.object(StorytellerSubmissionService, "_download_file", side_effect=lambda url, dest: dest)
     def test_submit_copies_files_to_import_dir(self, mock_download):
         result = self.service.submit_book(
             abs_id="book-123",
@@ -87,7 +90,7 @@ class TestStorytellerSubmission(unittest.TestCase):
         # Audio download should have been called
         mock_download.assert_called_once()
 
-    @patch.object(StorytellerSubmissionService, "_download_file", return_value=True)
+    @patch.object(StorytellerSubmissionService, "_download_file", side_effect=lambda url, dest: dest)
     def test_submit_creates_correct_directory_structure(self, mock_download):
         result = self.service.submit_book(
             abs_id="book-123",
@@ -99,8 +102,10 @@ class TestStorytellerSubmission(unittest.TestCase):
         assert result.submission_dir == "My Great Book"
         assert (self.import_dir / "My Great Book").is_dir()
 
-    @patch.object(StorytellerSubmissionService, "_download_file", return_value=True)
+    @patch.object(StorytellerSubmissionService, "_download_file", side_effect=lambda url, dest: dest)
     def test_submit_persists_submission_record_only_on_success(self, mock_download):
+        # No existing reservation — should create a new submission record
+        self.mock_db.get_active_storyteller_submission.return_value = None
         result = self.service.submit_book(
             abs_id="book-123",
             title="Test Book",
@@ -113,7 +118,7 @@ class TestStorytellerSubmission(unittest.TestCase):
         assert submission_arg.abs_id == "book-123"
         assert submission_arg.status == "queued"
 
-    @patch.object(StorytellerSubmissionService, "_download_file", return_value=True)
+    @patch.object(StorytellerSubmissionService, "_download_file", side_effect=lambda url, dest: dest)
     def test_submit_multi_audio_names_files_sequentially(self, mock_download):
         audio_files = [
             {"stream_url": "http://abs/audio/ch1.mp3", "ext": "mp3"},

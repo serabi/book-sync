@@ -667,6 +667,12 @@ select:focus {
   margin-bottom: 6px;
 }
 
+.storyteller-waiting-text {
+  font-size: 11px;
+  color: var(--color-warning, #e0a030);
+  margin-bottom: 6px;
+}
+
 /* Storyteller submission status */
 .storyteller-status-text {
   display: flex;

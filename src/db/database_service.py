@@ -432,9 +432,10 @@ class DatabaseService:
     def get_storyteller_submission(self, abs_id):
         return self._integrations.get_storyteller_submission(abs_id)
 
-    def update_storyteller_submission_status(self, submission_id, status, last_checked_at=None, storyteller_uuid=None):
+    def update_storyteller_submission_status(self, submission_id, status, last_checked_at=None,
+                                               storyteller_uuid=None, submission_dir=None):
         return self._integrations.update_storyteller_submission_status(
-            submission_id, status, last_checked_at, storyteller_uuid
+            submission_id, status, last_checked_at, storyteller_uuid, submission_dir
         )
 
     def get_all_storyteller_submissions_latest(self):

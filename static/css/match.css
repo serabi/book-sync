@@ -422,6 +422,13 @@ input[type="radio"] {
   font-style: italic;
 }
 
+.storyteller-submit-detail {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  margin-top: 0.25rem;
+  padding-left: 1.5rem;
+}
+
 .batch-select-card {
   width: 100%;
   border: 2px solid var(--color-border-light);

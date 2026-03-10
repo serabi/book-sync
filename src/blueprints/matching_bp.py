@@ -20,13 +20,25 @@ from src.blueprints.helpers import (
     get_manager,
     get_searchable_ebooks,
 )
-from src.db.models import Book
+from src.db.models import Book, StorytellerSubmission
 from src.utils.logging_utils import sanitize_log_data
 from src.utils.path_utils import sanitize_filename
 
 logger = logging.getLogger(__name__)
 
 matching_bp = Blueprint("matching", __name__)
+
+
+def _create_storyteller_reservation(database_service, abs_id):
+    """Create a submission record synchronously so the job scheduler knows to defer.
+
+    This prevents a race condition where the background job picks up the book
+    and starts Whisper transcription before the async submission thread has
+    finished copying files and creating its own record.
+    """
+    submission = StorytellerSubmission(abs_id=abs_id, status="queued")
+    database_service.save_storyteller_submission(submission)
+    return submission
 
 
 def _submit_to_storyteller_async(container, abs_id, abs_title, ebook_filename, books_dir, epub_cache_dir):
@@ -423,6 +435,7 @@ def match():
                 logger.warning(f"Booklore add_to_shelf failed for '{sanitize_log_data(shelf_filename)}': {e}")
         # Storyteller submission (runs in background thread to avoid blocking)
         if request.form.get("storyteller_submit"):
+            _create_storyteller_reservation(database_service, abs_id)
             _submit_to_storyteller_async(
                 container,
                 abs_id,
@@ -683,6 +696,7 @@ def batch_match():
                             )
                     # Storyteller submission (runs in background thread)
                     if item.get("storyteller_submit"):
+                        _create_storyteller_reservation(database_service, item["abs_id"])
                         _submit_to_storyteller_async(
                             container,
                             item["abs_id"],

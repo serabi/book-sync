@@ -112,8 +112,9 @@ class StorytellerSubmissionService:
                     continue
                 audio_filename = f"{dir_name}.{ext}" if len(audio_files) == 1 else f"{dir_name}_{i + 1:02d}.{ext}"
                 audio_dest = target_dir / audio_filename
-                if self._download_file(stream_url, audio_dest):
-                    files_copied.append(audio_filename)
+                final_path = self._download_file(stream_url, audio_dest)
+                if final_path:
+                    files_copied.append(final_path.name)
 
             # Must have at least the ebook + one audio file
             if len(files_copied) < 2:
@@ -122,15 +123,22 @@ class StorytellerSubmissionService:
                 shutil.rmtree(target_dir, ignore_errors=True)
                 return SubmissionResult(success=False, error="Failed to download audio files")
 
-            # Persist submission record
+            # Update existing reservation or create new submission record
             from src.db.models import StorytellerSubmission
 
-            submission = StorytellerSubmission(
-                abs_id=abs_id,
-                status="queued",
-                submission_dir=dir_name,
-            )
-            self.database_service.save_storyteller_submission(submission)
+            existing = self.database_service.get_active_storyteller_submission(abs_id)
+            if existing:
+                submission = existing
+                self.database_service.update_storyteller_submission_status(
+                    existing.id, "queued", submission_dir=dir_name,
+                )
+            else:
+                submission = StorytellerSubmission(
+                    abs_id=abs_id,
+                    status="queued",
+                    submission_dir=dir_name,
+                )
+                self.database_service.save_storyteller_submission(submission)
 
             logger.info(f"Storyteller submission complete: '{title}' ({len(files_copied)} files) -> {dir_name}")
 
@@ -189,8 +197,11 @@ class StorytellerSubmissionService:
             if book and book.abs_title:
                 try:
                     results = self.storyteller_client.search_books(book.abs_title)
-                    if len(results) == 1:
-                        storyteller_uuid = results[0].get("uuid")
+                    # Only accept a single exact title match to avoid misidentification
+                    exact = [r for r in results
+                             if r.get("title", "").strip().lower() == book.abs_title.strip().lower()]
+                    if len(exact) == 1:
+                        storyteller_uuid = exact[0].get("uuid")
                         submission.storyteller_uuid = storyteller_uuid
                         self._update_submission_status(submission, "processing")
 
@@ -224,8 +235,9 @@ class StorytellerSubmissionService:
 
         Storyteller watches its import directory and creates DB records when files
         appear, but doesn't start alignment automatically. We need to:
-        1. Wait for Storyteller to detect the files (poll by title search)
-        2. Call POST /api/v2/books/{uuid}/process to start alignment
+        1. Snapshot existing books so we only match NEW ones
+        2. Wait for Storyteller to detect the files (poll by title search)
+        3. Call POST /api/v2/books/{uuid}/process to start alignment
 
         Returns the storyteller_uuid if processing was triggered, None otherwise.
         """
@@ -233,16 +245,32 @@ class StorytellerSubmissionService:
             logger.info("Storyteller API not configured — cannot auto-trigger processing")
             return None
 
+        # Snapshot existing book UUIDs so we only consider newly imported books
+        existing_uuids = set()
+        try:
+            existing_results = self.storyteller_client.search_books(title)
+            existing_uuids = {r.get("uuid") for r in existing_results if r.get("uuid")}
+        except Exception:
+            pass
+
         # Poll for the book to appear in Storyteller (up to ~30 seconds)
         storyteller_uuid = None
         for attempt in range(6):
             time.sleep(5)
             try:
                 results = self.storyteller_client.search_books(title)
-                if results:
-                    storyteller_uuid = results[0].get("uuid")
-                    if storyteller_uuid:
+                for result in results:
+                    uuid = result.get("uuid")
+                    result_title = result.get("title", "")
+                    # Skip books that existed before the import
+                    if uuid in existing_uuids:
+                        continue
+                    # Require exact title match for newly appeared books
+                    if result_title.strip().lower() == title.strip().lower():
+                        storyteller_uuid = uuid
                         break
+                if storyteller_uuid:
+                    break
             except Exception as e:
                 logger.debug(f"Storyteller search attempt {attempt + 1} failed: {e}")
 
@@ -282,16 +310,46 @@ class StorytellerSubmissionService:
             clean = clean[:200]
         return clean
 
-    def _download_file(self, url: str, dest: Path) -> bool:
-        """Download a file from a URL to a local path."""
+    def _download_file(self, url: str, dest: Path) -> Path | None:
+        """Download a file from a URL to a local path.
+
+        After download, checks if the file's actual format matches the extension.
+        ABS sometimes reports .mp3 for files that are actually M4A/M4B (AAC in MP4
+        container). Storyteller's ffmpeg fails on the mismatch, so we fix it here.
+
+        Returns the final Path (possibly renamed) on success, None on failure.
+        """
         try:
             with requests.get(url, stream=True, timeout=300) as r:
                 r.raise_for_status()
                 with open(dest, "wb") as f:
                     for chunk in r.iter_content(chunk_size=8192):
                         f.write(chunk)
-            logger.debug(f"Downloaded: {dest.name}")
-            return True
+
+            # Detect actual format from file magic bytes
+            corrected = self._fix_audio_extension(dest)
+            logger.debug(f"Downloaded: {corrected.name}")
+            return corrected
         except Exception as e:
             logger.error(f"Failed to download {dest.name}: {e}")
-            return False
+            return None
+
+    @staticmethod
+    def _fix_audio_extension(filepath: Path) -> Path:
+        """Rename audio file if its extension doesn't match its actual container format."""
+        try:
+            with open(filepath, "rb") as f:
+                header = f.read(12)
+        except OSError:
+            return filepath
+
+        # MP4/M4A/M4B: bytes 4-8 are 'ftyp'
+        if len(header) >= 8 and header[4:8] == b"ftyp":
+            current_ext = filepath.suffix.lower()
+            if current_ext in (".mp3", ".ogg", ".flac", ".wav"):
+                new_path = filepath.with_suffix(".m4b")
+                filepath.rename(new_path)
+                logger.info(f"Storyteller: renamed {filepath.name} -> {new_path.name} (actual format is MP4/M4A)")
+                return new_path
+
+        return filepath
