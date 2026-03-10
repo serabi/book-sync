@@ -1,0 +1,60 @@
+# Git
+.git
+.gitignore
+
+# Documentation
+*.md
+LICENSE
+docs/
+screenshots/
+pagekeeper-wiki/
+migrations/
+dev/
+
+# AI/IDE config
+.claude/
+.github/
+.coderabbit.yaml
+.cursorrules
+.kilocodemodes
+.vscode/
+.idea/
+
+# Python
+*.pyc
+__pycache__/
+*.py[cod]
+env/
+venv/
+.venv/
+
+# Data (runtime, not build)
+data/
+*.db
+epub_cache/
+transcripts/
+
+# Docker
+docker-compose*.yml
+Dockerfile*
+.dockerignore
+
+# Env/secrets
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Temp/logs
+*.log
+*.tmp
+tmp/
+temp/
+
+# Tests (not needed in production image)
+tests/
+run-tests.sh
+docker-compose.test.yml

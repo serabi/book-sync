@@ -1,0 +1,377 @@
+"""Dashboard blueprint — GET / (index)."""
+
+import logging
+import os
+import time
+from pathlib import Path
+
+from flask import Blueprint, render_template
+
+from src.blueprints.helpers import (
+    get_abs_service,
+    get_booklore_client,
+    get_container,
+    get_database_service,
+    get_hardcover_book_url,
+    get_service_web_url,
+)
+from src.version import APP_VERSION
+
+logger = logging.getLogger(__name__)
+
+dashboard_bp = Blueprint("dashboard", __name__)
+
+
+@dashboard_bp.route("/")
+def index():
+    """
+    Render the dashboard with enriched book and progress data.
+
+    Loads books, listening states, hardcover and Booklore metadata, and integration statuses, then renders the dashboard page with per-book mappings, overall progress, app version and update information.
+
+    Returns:
+        Rendered template response for the dashboard page.
+    """
+    container = get_container()
+    database_service = get_database_service()
+
+    books = database_service.get_all_books()
+
+    # Auto-complete and date sync — throttled to once per 5 minutes
+    from src.services.reading_date_service import auto_complete_finished_books, sync_reading_dates
+
+    _THROTTLE_KEY = "dashboard_date_sync_last_run"
+    _THROTTLE_SECONDS = 300
+    last_run_raw = database_service.get_setting(_THROTTLE_KEY)
+    try:
+        last_run = float(last_run_raw) if last_run_raw else 0.0
+    except (TypeError, ValueError):
+        last_run = 0.0
+    should_run_date_ops = (time.time() - last_run) >= _THROTTLE_SECONDS
+
+    if should_run_date_ops:
+        database_service.set_setting(_THROTTLE_KEY, str(time.time()))
+
+        ac_stats = auto_complete_finished_books(database_service, container)
+        if ac_stats["completed"]:
+            logger.info(f"Auto-completed {ac_stats['completed']} book(s) at 100% progress")
+            books = database_service.get_all_books()
+
+        needs_date_sync = any(
+            (not b.started_at and b.status in ("active", "paused", "completed", "dnf"))
+            or (not b.finished_at and b.status == "completed")
+            for b in books
+        )
+        if needs_date_sync:
+            stats = sync_reading_dates(database_service, container)
+            if stats["updated"] or stats["completed"]:
+                logger.info(f"Reading dates sync: {stats}")
+                books = database_service.get_all_books()
+
+    abs_service = get_abs_service()
+
+    # Fetch ABS metadata once for the whole dashboard (single API call)
+    abs_metadata_by_id = {}
+    try:
+        all_abs_books = abs_service.get_audiobooks()
+        for ab in all_abs_books:
+            ab_id = ab.get("id")
+            if ab_id:
+                metadata = ab.get("media", {}).get("metadata", {})
+                abs_metadata_by_id[ab_id] = {
+                    "subtitle": metadata.get("subtitle") or "",
+                    "author": metadata.get("authorName") or "",
+                }
+    except Exception as e:
+        logger.warning(f"Could not fetch ABS metadata for dashboard enrichment: {e}")
+
+    # Fetch all states at once to avoid N+1 queries
+    all_states = database_service.get_all_states()
+    states_by_book = {}
+    for state in all_states:
+        if state.abs_id not in states_by_book:
+            states_by_book[state.abs_id] = []
+        states_by_book[state.abs_id].append(state)
+
+    # Fetch all hardcover details at once
+    all_hardcover = database_service.get_all_hardcover_details()
+    hardcover_by_book = {h.abs_id: h for h in all_hardcover}
+
+    # Fetch Booklore metadata for ebook-only title/author enrichment
+    all_booklore_books = database_service.get_all_booklore_books()
+    booklore_by_filename = {}
+    for bl_book in all_booklore_books:
+        if not bl_book.filename:
+            continue
+        booklore_by_filename.setdefault(bl_book.filename.lower(), []).append(bl_book)
+
+    integrations = {}
+    sync_clients = container.sync_clients()
+    for client_name, client in sync_clients.items():
+        integrations[client_name.lower()] = client.is_configured()
+
+    # BookFusion integration status
+    bf_client = container.bookfusion_client()
+    integrations["bookfusion"] = bf_client.is_configured()
+
+    # Bulk-fetch BookFusion link data (avoid N+1)
+    # Always load persisted state so books show links/highlights even when BF client is unconfigured
+    bf_linked_ids = set()
+    bf_highlight_counts = {}
+    try:
+        bf_linked_ids = database_service.get_bookfusion_linked_abs_ids()
+        bf_highlight_counts = database_service.get_bookfusion_highlight_counts()
+    except Exception as e:
+        logger.warning(f"Could not fetch BookFusion link data: {e}")
+
+    # Bulk-fetch Storyteller submission statuses (avoid N+1)
+    st_submissions_by_book = {}
+    if integrations.get("storyteller"):
+        try:
+            st_submissions_by_book = database_service.get_all_storyteller_submissions_latest()
+        except Exception as e:
+            logger.warning(f"Could not fetch Storyteller submissions: {e}")
+
+    mappings = []
+    total_duration = 0
+    total_listened = 0
+
+    for book in books:
+        states = states_by_book.get(book.abs_id, [])
+        state_by_client = {state.client_name: state for state in states}
+
+        sync_mode = getattr(book, "sync_mode", "audiobook")
+        if sync_mode == "ebook_only":
+            book_type = "ebook-only"
+        elif not book.ebook_filename:
+            book_type = "audio-only"
+        else:
+            book_type = "linked"
+
+        # Look up Booklore metadata by ebook_filename or original_ebook_filename
+        # Prefer entries that have a title, since we use this for display enrichment
+        bl_meta = None
+        for fn in (book.ebook_filename, getattr(book, "original_ebook_filename", None)):
+            if fn:
+                candidates = booklore_by_filename.get(fn.lower(), [])
+                bl_meta = next((b for b in candidates if b.title), candidates[0] if candidates else None)
+                if bl_meta:
+                    break
+
+        # Skip ABS metadata enrichment for ebook-only books (synthetic ID won't resolve)
+        if book_type == "ebook-only":
+            abs_subtitle = ""
+            abs_author = (bl_meta.authors or "") if bl_meta else ""
+        else:
+            _abs_meta = abs_metadata_by_id.get(book.abs_id, {})
+            abs_subtitle = _abs_meta.get("subtitle", "")
+            abs_author = _abs_meta.get("author", "")
+
+        # Enrich title from Booklore if stored title looks like a filename
+        enriched_title = book.abs_title
+        if bl_meta and bl_meta.title:
+            stems = set()
+            for fn in (book.ebook_filename, getattr(book, "original_ebook_filename", None)):
+                if fn:
+                    stems.add(Path(fn).stem)
+            if book.abs_title in stems or book.abs_title in (
+                book.ebook_filename,
+                getattr(book, "original_ebook_filename", None),
+            ):
+                enriched_title = bl_meta.title
+                # Persist the improved title so it sticks
+                book.abs_title = bl_meta.title
+                database_service.save_book(book)
+
+        mapping = {
+            "abs_id": book.abs_id,
+            "abs_title": enriched_title,
+            "abs_subtitle": abs_subtitle,
+            "abs_author": abs_author,
+            "ebook_filename": book.ebook_filename,
+            "kosync_doc_id": book.kosync_doc_id,
+            "transcript_file": book.transcript_file,
+            "status": book.status,
+            "sync_mode": sync_mode,
+            "book_type": book_type,
+            "activity_flag": getattr(book, "activity_flag", False),
+            "unified_progress": 0,
+            "duration": book.duration or 0,
+            "storyteller_uuid": book.storyteller_uuid,
+            "storyteller_submission_status": None,
+            "states": {},
+        }
+
+        # Storyteller submission status (from bulk-fetched dict)
+        st_submission = st_submissions_by_book.get(book.abs_id)
+        if st_submission:
+            mapping["storyteller_submission_status"] = st_submission.status
+
+        if book.status in ("pending", "processing", "failed_retry_later"):
+            job = database_service.get_latest_job(book.abs_id)
+            if job:
+                mapping["job_progress"] = round((job.progress or 0.0) * 100, 1)
+                mapping["retry_count"] = job.retry_count or 0
+            else:
+                mapping["job_progress"] = 0.0
+                mapping["retry_count"] = 0
+
+        latest_update_time = 0
+        max_progress = 0
+
+        for client_name, state in state_by_client.items():
+            if state.last_updated and state.last_updated > latest_update_time:
+                latest_update_time = state.last_updated
+
+            mapping["states"][client_name] = {
+                "timestamp": state.timestamp or 0,
+                "percentage": round(state.percentage * 100, 1) if state.percentage else 0,
+                "last_updated": state.last_updated,
+            }
+
+            if state.percentage:
+                progress_pct = round(state.percentage * 100, 1)
+                max_progress = max(max_progress, progress_pct)
+
+        # Hardcover details
+        hardcover_details = hardcover_by_book.get(book.abs_id)
+        if hardcover_details:
+            # Map HC status ID → local equivalent for mismatch detection
+            hc_to_local = {2: "active", 3: "completed", 4: "paused", 5: "dnf"}
+            hc_local_equiv = hc_to_local.get(hardcover_details.hardcover_status_id)
+            hc_mismatch = (
+                hc_local_equiv is not None
+                and book.status in ("active", "paused", "dnf", "completed")
+                and hc_local_equiv != book.status
+            )
+            mapping.update(
+                {
+                    "hardcover_book_id": hardcover_details.hardcover_book_id,
+                    "hardcover_slug": hardcover_details.hardcover_slug,
+                    "hardcover_edition_id": hardcover_details.hardcover_edition_id,
+                    "hardcover_pages": hardcover_details.hardcover_pages,
+                    "isbn": hardcover_details.isbn,
+                    "asin": hardcover_details.asin,
+                    "matched_by": hardcover_details.matched_by,
+                    "hardcover_linked": True,
+                    "hardcover_title": book.abs_title,
+                    "hardcover_cover_url": hardcover_details.hardcover_cover_url,
+                    "hardcover_status_mismatch": hc_mismatch,
+                }
+            )
+        else:
+            mapping.update(
+                {
+                    "hardcover_book_id": None,
+                    "hardcover_slug": None,
+                    "hardcover_edition_id": None,
+                    "hardcover_pages": None,
+                    "isbn": None,
+                    "asin": None,
+                    "matched_by": None,
+                    "hardcover_linked": False,
+                    "hardcover_title": None,
+                }
+            )
+
+        # Legacy Storyteller link check
+        has_storyteller_state = "storyteller" in state_by_client
+        is_legacy_link = has_storyteller_state and not book.storyteller_uuid
+        mapping["storyteller_legacy_link"] = is_legacy_link
+
+        # Platform deep links
+        if book_type != "ebook-only" and book.abs_id and not book.abs_id.startswith("bf-"):
+            abs_base = get_service_web_url("ABS") or (
+                abs_service.abs_client.base_url if abs_service.is_available() else ""
+            )
+            mapping["abs_url"] = f"{abs_base}/item/{book.abs_id}" if abs_base else None
+        else:
+            mapping["abs_url"] = None
+
+        # Booklore deep links (check all instances)
+        mapping["booklore_id"] = None
+        mapping["booklore_url"] = None
+        if book.ebook_filename:
+            bl_client = get_booklore_client()
+            try:
+                if bl_client.is_configured():
+                    bl_book = bl_client.find_book_by_filename(book.ebook_filename, allow_refresh=False)
+                    if not bl_book and book.original_ebook_filename:
+                        bl_book = bl_client.find_book_by_filename(book.original_ebook_filename, allow_refresh=False)
+                    if bl_book:
+                        bl_base = get_service_web_url("BOOKLORE") or bl_client.base_url
+                        url = f"{bl_base}/book/{bl_book.get('id')}?tab=view"
+                        mapping["booklore_id"] = bl_book.get("id")
+                        mapping["booklore_url"] = url
+            except Exception:
+                logger.debug("Booklore lookup failed, skipping")
+
+        if mapping.get("hardcover_slug"):
+            mapping["hardcover_url"] = get_hardcover_book_url(mapping["hardcover_slug"])
+        elif mapping.get("hardcover_book_id"):
+            mapping["hardcover_url"] = get_hardcover_book_url(mapping["hardcover_book_id"])
+        else:
+            mapping["hardcover_url"] = None
+
+        # BookFusion link data
+        is_bf_linked = (book.abs_id in bf_linked_ids) or book.abs_id.startswith("bf-")
+        mapping["bookfusion_linked"] = is_bf_linked
+        mapping["bookfusion_highlight_count"] = bf_highlight_counts.get(book.abs_id, 0)
+
+        mapping["unified_progress"] = min(max_progress, 100.0)
+        mapping["latest_activity_at"] = latest_update_time or None
+
+        if latest_update_time > 0:
+            diff = time.time() - latest_update_time
+            if diff < 60:
+                mapping["last_sync"] = f"{int(diff)}s ago"
+            elif diff < 3600:
+                mapping["last_sync"] = f"{int(diff // 60)}m ago"
+            else:
+                mapping["last_sync"] = f"{int(diff // 3600)}h ago"
+        else:
+            mapping["last_sync"] = "Never"
+
+        if book.abs_id and book_type != "ebook-only":
+            mapping["cover_url"] = abs_service.get_cover_proxy_url(book.abs_id)
+        else:
+            mapping["cover_url"] = None
+
+        # Custom cover URL override (user-pasted) takes precedence over auto-discovered sources
+        if book.custom_cover_url:
+            mapping["cover_url"] = book.custom_cover_url
+
+        # Booklore cover fallback for books without an ABS or custom cover
+        if not mapping["cover_url"] and mapping.get("booklore_id"):
+            mapping["cover_url"] = f"/api/cover-proxy/booklore/{mapping['booklore_id']}"
+
+        # Hardcover cover fallback
+        if not mapping["cover_url"] and mapping.get("hardcover_cover_url"):
+            mapping["cover_url"] = mapping["hardcover_cover_url"]
+
+        duration = mapping.get("duration", 0)
+        progress_pct = mapping.get("unified_progress", 0)
+
+        if duration > 0:
+            total_duration += duration
+            total_listened += (progress_pct / 100.0) * duration
+
+        mappings.append(mapping)
+
+    if total_duration > 0:
+        overall_progress = round((total_listened / total_duration) * 100, 1)
+    elif mappings:
+        overall_progress = round(sum(m["unified_progress"] for m in mappings) / len(mappings), 1)
+    else:
+        overall_progress = 0
+
+    booklore_label = os.environ.get("BOOKLORE_LABEL", "Booklore") or "Booklore"
+
+    return render_template(
+        "index.html",
+        mappings=mappings,
+        integrations=integrations,
+        progress=overall_progress,
+        app_version=APP_VERSION,
+        booklore_label=booklore_label,
+    )

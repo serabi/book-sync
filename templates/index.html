@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+
+    {% from 'partials/book_card.html' import render_book_card %}
+
+    <title>PageKeeper</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" type="image/png" href="/static/icon.png">
+    <link rel="apple-touch-icon" href="/static/icon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/variables.css">
+    <link rel="stylesheet" href="/static/css/base.css">
+    <link rel="stylesheet" href="/static/css/layout.css">
+    <link rel="stylesheet" href="/static/css/components.css">
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+</head>
+
+<body>
+    {% include 'partials/navbar.html' %}
+
+    <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="flash-messages mb-16">
+            {% for category, msg in messages %}
+            <div class="flash flash-{{ category }} flash-msg-container">
+                {{ msg }}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+        {% if mappings %}
+        <div class="controls-bar">
+            <div class="control-group">
+                <input type="text" id="dashboard-search" placeholder="Search books...">
+            </div>
+            <div class="controls-divider"></div>
+            <div class="control-group">
+                <label for="filter-select">Show:</label>
+                <select id="filter-select">
+                    <option value="all">All Books</option>
+                    <option value="currently_reading">Currently Reading</option>
+                    <option value="finished">Finished</option>
+                    <option value="paused">Paused</option>
+                    <option value="dnf">DNF</option>
+                    <option value="audiobook">Audiobooks</option>
+                    <option value="ebook_only">Ebooks Only</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label for="sort-select">Sort by:</label>
+                <select id="sort-select">
+                    <option value="title">Title</option>
+                    <option value="progress">Progress</option>
+                    <option value="status">Status</option>
+                    <option value="last_sync">Last Synced</option>
+                </select>
+                <button type="button" class="sort-direction" id="sort-direction" title="Click to Reverse Order" style="border: none;">↓</button>
+            </div>
+        </div>
+
+        {% set processing_books = mappings|selectattr('status', 'in', ['pending', 'processing', 'failed_retry_later'])|list %}
+        {% if processing_books %}
+        <div class="book-section" id="processing-section">
+        <div class="section-header">
+            <h2>Processing</h2>
+        </div>
+        <div class="book-grid" id="processing-grid">
+            {% for mapping in processing_books %}
+            {{ render_book_card(mapping, integrations, booklore_label) }}
+            {% endfor %}
+        </div>
+        </div>
+        {% endif %}
+
+        <div class="book-section">
+        <div class="section-header">
+            <h2>Currently Reading</h2>
+        </div>
+
+        <div class="book-grid" id="currently-reading-grid">
+            {% for mapping in mappings %}
+            {% if mapping.unified_progress > 0 and mapping.unified_progress < 100 and mapping.status not in ['completed', 'paused', 'dnf', 'not_started', 'pending', 'processing', 'failed_retry_later'] %} {{ render_book_card(mapping,
+                integrations, booklore_label) }} {% endif %} {% endfor %} </div>
+        </div>
+
+                {% set finished_books = mappings|selectattr('status', 'equalto', 'completed')|list + mappings|rejectattr('status', 'equalto', 'completed')|selectattr('unified_progress', 'ge', 100)|list %}
+                <div class="book-section">
+                <div class="section-header mt-80">
+                    <h2>Finished</h2>
+                </div>
+                <div class="book-grid" id="finished-grid">
+                    {% for mapping in finished_books %}
+                    {{ render_book_card(mapping, integrations, booklore_label) }}
+                    {% endfor %}
+                </div>
+                </div>
+
+                {% set paused_books = mappings|selectattr('status', 'equalto', 'paused')|list %}
+                <div class="book-section">
+                <div class="section-header mt-80">
+                    <h2>Paused</h2>
+                </div>
+                <div class="book-grid" id="paused-grid">
+                    {% for mapping in paused_books %}
+                    {{ render_book_card(mapping, integrations, booklore_label) }}
+                    {% endfor %}
+                </div>
+                </div>
+
+                {% set dnf_books = mappings|selectattr('status', 'equalto', 'dnf')|list %}
+                <div class="book-section">
+                <div class="section-header mt-80">
+                    <h2>Did Not Finish</h2>
+                </div>
+                <div class="book-grid" id="dnf-grid">
+                    {% for mapping in dnf_books %}
+                    {{ render_book_card(mapping, integrations, booklore_label) }}
+                    {% endfor %}
+                </div>
+                </div>
+
+                <div class="book-section">
+                <div class="section-header mt-80">
+                    <h2>All Books</h2>
+                </div>
+
+                <div class="book-grid" id="all-books-grid">
+                    {% for mapping in mappings %}
+                    {{ render_book_card(mapping, integrations, booklore_label) }}
+                    {% endfor %}
+                </div>
+                </div>
+
+
+                {% else %}
+                <div class="empty-state">
+                    <div class="empty-state-icon"></div>
+                    <h2>No books syncing yet</h2>
+                    <p>Start by adding your first audiobook mapping</p>
+                    <a href="/match" class="btn btn-primary">Add Your First Book</a>
+                </div>
+                {% endif %}
+
+        </div>
+
+        <!-- Hardcover Edition Picker Modal -->
+        <div id="hardcover-modal" class="hc-modal" style="display:none;">
+            <div class="hc-modal-backdrop" onclick="closeHardcoverModal()"></div>
+            <div class="hc-modal-content">
+                <div class="hc-modal-header">
+                    <h3>Link to Hardcover</h3>
+                    <button class="hc-modal-close" onclick="closeHardcoverModal()" aria-label="Close">
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round">
+                            <path d="M1 1l12 12M13 1L1 13" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="hc-modal-body">
+                    <div id="hc-loading" class="hc-loading" style="display:none;">
+                        <div class="hc-loading-spinner"></div>
+                        <div class="hc-loading-text">Searching Hardcover...</div>
+                    </div>
+                    <div id="hc-found" style="display:none;">
+                        <div class="hc-book-info">
+                            <div class="hc-book-title" id="hc-title"></div>
+                            <div class="hc-book-author" id="hc-author"></div>
+                        </div>
+                        <div class="hc-editions-label">Select Edition</div>
+                        <div id="hc-editions"></div>
+                        <p class="hc-text-muted"><a href="#" onclick="showManualInput(); return false;">Wrong book?
+                                Enter URL manually</a></p>
+                    </div>
+                    <div id="hc-manual" style="display:none;">
+                        <p>Enter Hardcover URL or book ID:</p>
+                        <input type="text" id="hc-input" placeholder="https://hardcover.app/books/...">
+                        <button class="btn btn-md btn-accent" onclick="resolveManualInput()">Search</button>
+                    </div>
+                    <div id="hc-error" style="display:none;">
+                        <p id="hc-error-msg" class="hc-text-error"></p>
+                        <p class="hc-text-muted"><a href="#" onclick="showManualInput(); return false;">Try entering URL
+                                manually</a></p>
+                    </div>
+                </div>
+                <div class="hc-modal-footer">
+                    <button class="btn btn-md btn-secondary hc-btn-cancel" onclick="closeHardcoverModal()">Cancel</button>
+                    <button id="hc-link-btn" class="btn btn-md btn-accent hc-btn-link" onclick="linkSelectedEdition()" disabled>Link
+                        Book</button>
+                </div>
+            </div>
+        </div>
+        <script src="/static/js/hardcover-modal.js" defer></script>
+        <!-- Booklore Link Modal -->
+        <div id="bl-modal" class="hc-modal" style="display:none;">
+            <div class="hc-modal-backdrop" onclick="closeBookloreModal()"></div>
+            <div class="hc-modal-content">
+                <div class="hc-modal-header">
+                    <h3 id="bl-modal-title">Link to Booklore</h3>
+                    <button class="hc-modal-close" onclick="closeBookloreModal()" aria-label="Close">
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round">
+                            <path d="M1 1l12 12M13 1L1 13" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="hc-modal-body">
+                    <div class="st-search-bar">
+                        <input type="text" id="bl-search-input" placeholder="Search Booklore..." class="modal-search-input">
+                        <button onclick="searchBooklore()" class="btn btn-primary">Search</button>
+                    </div>
+                    <div id="bl-results" class="st-results"></div>
+                </div>
+            </div>
+        </div>
+        <script src="/static/js/booklore-link-modal.js" defer></script>
+        <!-- Storyteller Link Modal -->
+        <div id="st-modal" class="hidden">
+            <div class="st-modal-content">
+                <div class="st-modal-header">
+                    <h3 id="st-modal-title">Link Storyteller</h3>
+                    <button class="modal-close" onclick="closeStorytellerModal()" aria-label="Close">✕</button>
+                </div>
+                <div class="st-modal-body">
+                    <div class="st-search-bar">
+                        <input type="text" id="st-search-input" placeholder="Search Storyteller..." class="modal-search-input">
+                        <button onclick="searchStoryteller()" class="btn btn-primary">Search</button>
+                    </div>
+                    <div id="st-results" class="st-results"></div>
+                </div>
+            </div>
+        </div>
+        <script src="/static/js/storyteller-modal.js" defer></script>
+
+        <!-- Shared Action Panel (card menu) -->
+        <div id="action-panel" style="display:none;">
+            <div class="action-panel-overlay"></div>
+            <div class="action-panel-sheet">
+                <div class="action-panel-handle"></div>
+                <div id="action-panel-body"></div>
+            </div>
+        </div>
+
+        <!-- Generic Confirmation Modal -->
+        <div id="confirm-modal" class="confirm-modal" style="display:none;">
+            <div class="confirm-modal-overlay" onclick="closeConfirmModal()"></div>
+            <div class="confirm-modal-box">
+                <div class="confirm-modal-icon" id="confirm-modal-icon"></div>
+                <h3 class="confirm-modal-title" id="confirm-modal-title"></h3>
+                <p class="confirm-modal-message" id="confirm-modal-message"></p>
+                <div class="confirm-modal-actions">
+                    <button class="btn btn-secondary" onclick="closeConfirmModal()">Cancel</button>
+                    <form id="confirm-modal-form" method="POST" style="margin:0;">
+                        <button type="submit" class="btn" id="confirm-modal-submit">Confirm</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Delete Mapping Confirmation Modal -->
+        <div id="delete-mapping-modal" class="hc-modal" style="display:none;">
+            <div class="hc-modal-backdrop" onclick="closeDeleteMappingModal()"></div>
+            <div class="hc-modal-content" style="max-width:420px;">
+                <div class="hc-modal-header">
+                    <h3>Delete Mapping?</h3>
+                    <button class="hc-modal-close" onclick="closeDeleteMappingModal()" aria-label="Close">
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round">
+                            <path d="M1 1l12 12M13 1L1 13" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="hc-modal-body">
+                    <p class="confirm-modal-message">
+                        Do you also want to delete the mapping and all cached files for this book?
+                    </p>
+                </div>
+                <div class="hc-modal-footer">
+                    <button class="btn btn-md btn-secondary hc-btn-cancel" onclick="closeDeleteMappingModal()">Cancel</button>
+                    <button class="btn btn-md btn-accent hc-btn-link" onclick="_dmNoKeepMapping()">No, Keep Mapping</button>
+                    <button onclick="_dmYesDelete()" class="btn btn-danger">Yes, Delete</button>
+                </div>
+            </div>
+        </div>
+        <script src="/static/js/dashboard.js"></script>
+        <script>initDashboard();</script>
+</body>
+
+</html>

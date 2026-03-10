@@ -1,0 +1,1175 @@
+"""
+Hardcover.app GraphQL API Client
+
+Handles book tracking, progress updates, and reading dates for Hardcover.app integration.
+
+Key features:
+- Auto-sets started_at when creating a new read
+- Auto-sets finished_at when marking as finished (>99% progress)
+- Supports ISBN and title/author search for book matching
+
+
+"""
+
+import logging
+import os
+import threading
+import time
+from datetime import date
+
+import requests
+
+from src.utils.string_utils import calculate_similarity, clean_book_title
+
+logger = logging.getLogger(__name__)
+
+
+class HardcoverClient:
+    def __init__(self):
+        self.api_url = "https://api.hardcover.app/v1/graphql"
+        self.user_id = None
+
+        # Rate limiter: 1 req/sec gives comfortable headroom under 60 req/min limit
+        self._last_request_time = 0.0
+        self._rate_lock = threading.Lock()
+        self._min_interval = 1.0
+
+    @property
+    def token(self) -> str | None:
+        raw = os.environ.get("HARDCOVER_TOKEN", "").strip()
+        if raw.lower().startswith("bearer "):
+            raw = raw[7:].strip()
+        return raw or None
+
+    @property
+    def headers(self) -> dict:
+        return {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.token}",
+            "User-Agent": "PageKeeper/1.0",
+        }
+
+    def is_configured(self):
+        enabled_val = os.environ.get("HARDCOVER_ENABLED", "").lower()
+        if enabled_val == "false":
+            return False
+        return bool(self.token)
+
+    def check_connection(self):
+        """Test connection to Hardcover API by trying to get user ID."""
+        if not self.is_configured():
+            raise Exception("Hardcover not configured - HARDCOVER_TOKEN not set")
+
+        user_id = self.get_user_id()
+        if not user_id:
+            raise Exception("Failed to fetch user ID from Hardcover API")
+
+        logger.info(f"Hardcover client connection verified, user id: {user_id}")
+        return True
+
+    def _rate_limit(self):
+        """Enforce minimum interval between API requests."""
+        wait = 0.0
+        with self._rate_lock:
+            now = time.monotonic()
+            elapsed = now - self._last_request_time
+            if elapsed < self._min_interval:
+                wait = self._min_interval - elapsed
+                self._last_request_time = now + wait
+            else:
+                self._last_request_time = now
+        if wait > 0:
+            time.sleep(wait)
+
+    def query(self, query: str, variables: dict | None = None) -> dict | None:
+        if not self.token:
+            return None
+
+        self._rate_limit()
+
+        try:
+            r = requests.post(
+                self.api_url,
+                json={"query": query, "variables": variables or {}},
+                headers=self.headers,
+                timeout=10,
+            )
+
+            # Handle rate limiting (429) with exponential backoff
+            max_retries = 3
+            backoff = 5
+            attempt = 0
+            while r.status_code == 429 and attempt < max_retries:
+                attempt += 1
+                logger.warning(
+                    f"Hardcover rate limit hit (429), retry {attempt}/{max_retries} after {backoff}s"
+                )
+                time.sleep(backoff)
+                with self._rate_lock:
+                    self._last_request_time = time.monotonic()
+                r = requests.post(
+                    self.api_url,
+                    json={"query": query, "variables": variables or {}},
+                    headers=self.headers,
+                    timeout=10,
+                )
+                backoff *= 2
+
+            if r.status_code == 429:
+                logger.error(
+                    f"Hardcover rate limit persisted after {max_retries} retries, giving up"
+                )
+                return None
+
+            if r.status_code == 200:
+                data = r.json()
+                if data.get("data"):
+                    return data["data"]
+                elif data.get("errors"):
+                    logger.error(f"GraphQL errors: {data['errors']}")
+            else:
+                logger.error(f"HTTP {r.status_code}: {r.text}")
+        except Exception as e:
+            logger.error(f"Hardcover query failed: {e}")
+
+        return None
+
+    def get_user_id(self) -> int | None:
+        if self.user_id:
+            return self.user_id
+
+        result = self.query("{ me { id } }")
+        if result and result.get("me"):
+            self.user_id = result["me"][0]["id"]
+        return self.user_id
+
+    def get_user_book(self, book_id):
+        """Fetch the user's specific entry (UserBook) for a generic book_id."""
+        # FIX: Prevent crash if book_id is None
+        if not book_id:
+            return None
+
+        # Ensure we query for the current user as well as the book
+        user_id = self.get_user_id()
+        if not user_id:
+            return None
+
+        query = """
+        query GetUserBook($book_id: Int!, $user_id: Int!) {
+            user_books(where: {book_id: {_eq: $book_id}, user_id: {_eq: $user_id}}) {
+                id
+                status_id
+            }
+        }
+        """
+        try:
+            response = self.query(
+                query, {"book_id": int(book_id), "user_id": int(user_id)}
+            )
+
+            if response and "user_books" in response:
+                books = response["user_books"]
+                if books:
+                    return books[0]
+
+        except Exception as e:
+            logger.error(f"Error fetching user book: {e}")
+
+        return None
+
+    def _extract_cover_url(self, cached_image) -> str | None:
+        """Extract a cover image URL from the cached_image jsonb field.
+        The field is a JSON object like {"url": "https://..."} or similar.
+        """
+        if not cached_image:
+            return None
+        if isinstance(cached_image, dict):
+            return cached_image.get("url")
+        if isinstance(cached_image, str):
+            return cached_image
+        return None
+
+    def _extract_authors_from_cached(self, cached_contributors) -> list[str]:
+        """
+        Parses the JSON list of contributors from Hardcover API.
+        Handles both formats: {'author': {'name': '...'}} or {'name': '...'}
+        """
+        if not cached_contributors or not isinstance(cached_contributors, list):
+            return []
+
+        authors = []
+        for item in cached_contributors:
+            if not isinstance(item, dict):
+                continue
+
+            # Case 1: {'author': {'name': 'Author Name'}}
+            if "author" in item and isinstance(item["author"], dict):
+                name = item["author"].get("name")
+                if name:
+                    authors.append(name)
+            # Case 2: {'name': 'Author Name'}
+            elif "name" in item:
+                authors.append(item["name"])
+
+        return authors
+
+    def search_by_isbn(self, isbn: str) -> dict | None:
+        """Search by ISBN-13 or ISBN-10."""
+        isbn_key = "isbn_13" if len(str(isbn)) == 13 else "isbn_10"
+
+        query = f"""
+        query ($isbn: String!) {{
+            editions(where: {{ {isbn_key}: {{ _eq: $isbn }} }}) {{
+                id
+                pages
+                book {{
+                    id
+                    title
+                    slug
+                    cached_image
+                }}
+            }}
+        }}
+        """
+
+        result = self.query(query, {"isbn": str(isbn)})
+        if result and result.get("editions") and len(result["editions"]) > 0:
+            edition = result["editions"][0]
+            return {
+                "book_id": edition["book"]["id"],
+                "slug": edition["book"].get("slug"),
+                "edition_id": edition["id"],
+                "pages": edition["pages"],
+                "title": edition["book"]["title"],
+                "cached_image": self._extract_cover_url(edition["book"].get("cached_image")),
+            }
+        return None
+
+    def search_by_title_author(self, title: str, author: str | None = None) -> dict | None:
+        """Search by title and author, returning the best fuzzy match."""
+        # Clean the input title for better matching comparison
+        clean_input_title = clean_book_title(title)
+        clean_input_author = author.lower().strip() if author else ""
+
+        # Construct search query
+        search_query = f"{clean_input_title} {author or ''}".strip()
+
+        query = """
+        query ($query: String!) {
+            search(
+                query: $query,
+                per_page: 10,
+                page: 1,
+                query_type: "Book"
+            ) {
+                ids
+            }
+        }
+        """
+
+        result = self.query(query, {"query": search_query})
+        if not result or not result.get("search") or not result["search"].get("ids"):
+            return None
+
+        book_ids = result["search"]["ids"]
+        if not book_ids:
+            return None
+
+        # Fetch details for up to 10 books to compare
+        book_query = """
+        query ($ids: [Int!]) {
+            books(where: { id: { _in: $ids }}) {
+                id
+                title
+                slug
+                cached_image
+                cached_contributors
+            }
+        }
+        """
+
+        book_result = self.query(book_query, {"ids": book_ids})
+        if not book_result or not book_result.get("books"):
+            return None
+
+        candidates = book_result["books"]
+        best_match = None
+        best_score = 0.0
+
+        for book in candidates:
+            # Score match
+            candidate_title = clean_book_title(book["title"])
+            title_score = calculate_similarity(clean_input_title, candidate_title)
+
+            # Author Score
+            author_score = 0.0
+            if clean_input_author:
+                # Get all authors for this book from cached_contributors
+                authors = [
+                    a.lower().strip()
+                    for a in self._extract_authors_from_cached(book.get("cached_contributors"))
+                ]
+                if authors:
+                    # Find best similarity among all authors
+                    author_score = max(
+                        calculate_similarity(clean_input_author, a) for a in authors
+                    )
+                else:
+                    # If book has no authors and we provided one, penalize?
+                    # For now, let's keep it 0.0
+                    author_score = 0.0
+            else:
+                # If no author provided, author matching shouldn't hurt or help disproportionally
+                author_score = 1.0
+
+            # Combined Score logic:
+            # Title is primary, but author acts as a strong multiplier/filter.
+            # If author matches well (>0.8), we trust the match more.
+            # If author is way off (<0.4), it's likely a different book with same title.
+
+            if clean_input_author:
+                # Weights: 60% Title, 40% Author
+                score = (title_score * 0.6) + (author_score * 0.4)
+
+                # Boost if author is an excellent match
+                if author_score > 0.9:
+                    score += 0.1
+            else:
+                score = title_score
+
+            logger.debug(
+                f"Matches for '{title}' by '{author}': '{book['title']}' (Score: {score:.2f}, Title: {title_score:.2f}, Author: {author_score:.2f})"
+            )
+
+            if score > best_score:
+                best_score = score
+                best_match = book
+
+        # Threshold check
+        if best_match and best_score > 0.5:
+            logger.info(
+                f"Selected best match: '{best_match['title']}' (Score: {best_score:.2f})"
+            )
+
+            edition = self.get_default_edition(best_match["id"])
+
+            return {
+                "book_id": best_match["id"],
+                "slug": best_match.get("slug"),
+                "edition_id": edition.get("id") if edition else None,
+                "pages": edition.get("pages") if edition else None,
+                "title": best_match["title"],
+                "cached_image": self._extract_cover_url(best_match.get("cached_image")),
+            }
+
+        return None
+
+    def get_default_edition(self, book_id: int) -> dict | None:
+        """Get default edition for a book. Tries ebook, physical, then audiobook."""
+        query = """
+        query ($bookId: Int!) {
+            books_by_pk(id: $bookId) {
+                default_ebook_edition {
+                    id
+                    pages
+                }
+                default_physical_edition {
+                    id
+                    pages
+                }
+                default_audio_edition {
+                    id
+                    audio_seconds
+                }
+            }
+        }
+        """
+
+        result = self.query(query, {"bookId": book_id})
+        if result and result.get("books_by_pk"):
+            book = result["books_by_pk"]
+            if book.get("default_ebook_edition"):
+                return book["default_ebook_edition"]
+            elif book.get("default_physical_edition"):
+                return book["default_physical_edition"]
+            elif book.get("default_audio_edition"):
+                return book["default_audio_edition"]
+
+        return None
+
+    def get_book_author(self, book_id: int) -> str | None:
+        """Fetch the primary author name for a book."""
+        query = """
+        query ($bookId: Int!) {
+            books_by_pk(id: $bookId) {
+                cached_contributors
+            }
+        }
+        """
+        result = self.query(query, {"bookId": book_id})
+        if result and result.get("books_by_pk"):
+            cached_contributors = result["books_by_pk"].get("cached_contributors", [])
+            authors = self._extract_authors_from_cached(cached_contributors)
+            if authors:
+                return authors[0]
+        return None
+
+    def get_book_editions(self, book_id: int) -> list:
+        """Fetch all editions for a book with format, pages, duration, and year."""
+        query = """
+        query ($bookId: Int!) {
+            editions(where: { book_id: { _eq: $bookId } }) {
+                id
+                pages
+                audio_seconds
+                edition_format
+                physical_format
+                release_date
+            }
+        }
+        """
+        result = self.query(query, {"bookId": book_id})
+        if result and result.get("editions"):
+            editions = []
+            for ed in result["editions"]:
+                # Determine format label: prefer edition_format, fall back to physical_format
+                format_label = ed.get("edition_format") or ed.get("physical_format")
+                if not format_label:
+                    # Infer format from available data
+                    if ed.get("audio_seconds") and ed.get("audio_seconds") > 0:
+                        format_label = "Audiobook"
+                    elif ed.get("pages") and ed.get("pages") > 0:
+                        format_label = "Book"
+                    else:
+                        format_label = "Unknown"
+                # Normalize format label
+                if format_label and format_label != "Unknown":
+                    format_lower = format_label.lower()
+                    if format_lower == "ebook":
+                        format_label = "eBook"
+                    else:
+                        format_label = format_label.capitalize()
+                # Extract year from release_date (format: "YYYY-MM-DD")
+                release_date = ed.get("release_date")
+                year = (
+                    int(release_date[:4])
+                    if release_date and len(release_date) >= 4
+                    else None
+                )
+
+                editions.append(
+                    {
+                        "id": ed.get("id"),
+                        "format": format_label,
+                        "pages": ed.get("pages"),
+                        "audio_seconds": ed.get("audio_seconds"),
+                        "year": year,
+                    }
+                )
+            return editions
+        return []
+
+    def resolve_book_from_input(self, input_str: str) -> dict | None:
+        """
+        Resolve a Hardcover book from a URL, numeric ID, or slug.
+        Returns dict: { 'book_id', 'edition_id', 'pages', 'title' } or None.
+        """
+        if not input_str:
+            return None
+
+        from urllib.parse import urlparse
+
+        s = input_str.strip()
+        # If it's a URL, try to extract the last segment of the path
+        try:
+            parsed = urlparse(s)
+            if parsed.scheme and parsed.netloc and parsed.path:
+                path = parsed.path.rstrip("/")
+                if "/" in path:
+                    s = path.split("/")[-1]
+                else:
+                    s = path
+        except Exception:
+            pass
+
+        # If it looks numeric, treat as book ID
+        book = None
+        if s.isdigit():
+            try:
+                book_id = int(s)
+                query = """
+                query ($id: Int!) {
+                    books_by_pk(id: $id) {
+                        id
+                        title
+                        slug
+                        cached_image
+                        default_ebook_edition {
+                            id
+                            pages
+                        }
+                        default_physical_edition {
+                            id
+                            pages
+                        }
+                        default_audio_edition {
+                            id
+                            audio_seconds
+                        }
+                    }
+                }
+                """
+                result = self.query(query, {"id": book_id})
+                if result and result.get("books_by_pk"):
+                    book = result["books_by_pk"]
+                else:
+                    return None
+            except Exception as e:
+                logger.error(f"resolve_book_from_input error (id): {e}")
+                return None
+        else:
+            # Treat as slug
+            slug = s
+            query = """
+            query ($slug: String!) {
+                books(where: { slug: { _eq: $slug }}, limit: 1) {
+                    id
+                    title
+                    slug
+                    cached_image
+                    default_ebook_edition {
+                        id
+                        pages
+                    }
+                    default_physical_edition {
+                        id
+                        pages
+                    }
+                    default_audio_edition {
+                        id
+                        audio_seconds
+                    }
+                }
+            }
+            """
+            result = self.query(query, {"slug": slug})
+            if result and result.get("books") and len(result["books"]) > 0:
+                book = result["books"][0]
+            else:
+                return None
+
+        edition = None
+        audio_seconds = None
+        if book.get("default_ebook_edition"):
+            edition = book["default_ebook_edition"]
+        elif book.get("default_physical_edition"):
+            edition = book["default_physical_edition"]
+        elif book.get("default_audio_edition"):
+            edition = book["default_audio_edition"]
+            audio_seconds = edition.get("audio_seconds")
+
+        return {
+            "book_id": book.get("id"),
+            "slug": book.get("slug"),
+            "edition_id": edition.get("id") if edition else None,
+            "pages": edition.get("pages") if edition else None,
+            "audio_seconds": audio_seconds,
+            "title": book.get("title"),
+            "cached_image": self._extract_cover_url(book.get("cached_image")),
+        }
+
+    def find_user_book(self, book_id: int) -> dict | None:
+        """Find existing user_book with read info."""
+        query = """
+        query ($bookId: Int!, $userId: Int!) {
+            user_books(where: { book_id: { _eq: $bookId }, user_id: { _eq: $userId }}) {
+                id
+                status_id
+                edition_id
+                user_book_reads(order_by: {id: desc}, limit: 1) {
+                    id
+                    started_at
+                    finished_at
+                    progress_pages
+                    progress_seconds
+                }
+            }
+        }
+        """
+
+        result = self.query(query, {"bookId": book_id, "userId": self.get_user_id()})
+        if result and result.get("user_books") and len(result["user_books"]) > 0:
+            return result["user_books"][0]
+        return None
+
+    def update_status(
+        self, book_id: int, status_id: int, edition_id: int | None = None
+    ) -> dict | None:
+        """
+        Create/update user_book status.
+
+        Status IDs:
+        - 1: Want to Read
+        - 2: Currently Reading
+        - 3: Read (Finished)
+        - 4: Paused
+        - 5: Did Not Finish
+        """
+        query = """
+        mutation ($object: UserBookCreateInput!) {
+            insert_user_book(object: $object) {
+                error
+                user_book {
+                    id
+                    status_id
+                    edition_id
+                }
+            }
+        }
+        """
+
+        update_args = {
+            "book_id": int(book_id),
+            "status_id": status_id,
+            "privacy_setting_id": 1,
+        }
+
+        if edition_id:
+            update_args["edition_id"] = int(edition_id)
+
+        result = self.query(query, {"object": update_args})
+        if result and result.get("insert_user_book"):
+            error = result["insert_user_book"].get("error")
+            if error:
+                logger.error(f"Hardcover update_status error: {error}")
+            return result["insert_user_book"].get("user_book")
+        return None
+
+    def update_user_book(self, user_book_id: int, updates: dict) -> dict | None:
+        """Update user_book metadata such as rating or status."""
+        query = """
+        mutation ($id: Int!, $object: UserBookUpdateInput!) {
+            update_user_book(id: $id, object: $object) {
+                error
+                user_book {
+                    id
+                    rating
+                    review
+                    review_has_spoilers
+                    status_id
+                    read_count
+                }
+            }
+        }
+        """
+
+        result = self.query(query, {"id": int(user_book_id), "object": updates})
+        if result and result.get("update_user_book"):
+            error = result["update_user_book"].get("error")
+            if error:
+                logger.error(f"Hardcover update_user_book error: {error}")
+                return None
+            return result["update_user_book"].get("user_book")
+        return None
+
+    def _get_today_date(self) -> str:
+        """Get today's date in YYYY-MM-DD format for Hardcover API."""
+        return date.today().isoformat()
+
+    def update_progress(
+        self,
+        user_book_id: int,
+        page: int,
+        edition_id: int = None,
+        is_finished: bool = False,
+        current_percentage: float = 0.0,
+        audio_seconds: int = None,
+        started_at: str = None,
+        finished_at: str = None,
+        force_dates: bool = False,
+    ) -> bool:
+        """
+        Update reading progress.
+        Uses current_percentage > 0.02 (2%) to decide when to set 'started_at'.
+        For audiobook editions, pass audio_seconds to use progress_seconds instead of progress_pages.
+
+        Optional started_at/finished_at (YYYY-MM-DD strings) override the default
+        of using today's date when filling missing dates on the Hardcover read.
+
+        When force_dates is True, provided started_at/finished_at will overwrite
+        existing dates on the Hardcover read (used for user-initiated date edits).
+        """
+        # First check if there's an existing read
+        read_query = """
+        query ($userBookId: Int!) {
+            user_book_reads(where: { user_book_id: { _eq: $userBookId }}, order_by: {id: desc}, limit: 1) {
+                id
+                started_at
+                finished_at
+            }
+        }
+        """
+
+        read_result = self.query(read_query, {"userBookId": user_book_id})
+        today = self._get_today_date()
+
+        # LOGIC: Only set started date if we are past 2%
+        should_start = current_percentage > 0.02
+
+        if (
+            read_result
+            and read_result.get("user_book_reads")
+            and len(read_result["user_book_reads"]) > 0
+        ):
+            # --- UPDATE EXISTING READ ---
+            existing_read = read_result["user_book_reads"][0]
+            read_id = existing_read["id"]
+
+            # Preserve existing dates unless force_dates is set
+            started_at_val = existing_read.get("started_at")
+            finished_at_val = existing_read.get("finished_at")
+
+            if force_dates:
+                # User explicitly edited dates — overwrite HC values
+                if started_at is not None:
+                    started_at_val = started_at
+                    logger.info(f"Hardcover: Force-setting started_at to '{started_at_val}'")
+                if finished_at is not None:
+                    finished_at_val = finished_at
+                    logger.info(f"Hardcover: Force-setting finished_at to '{finished_at_val}'")
+            else:
+                # If no start date exists, and we passed 2%, fill it in
+                if not started_at_val and should_start:
+                    started_at_val = started_at or today
+                    logger.info(
+                        f"Hardcover: Setting started_at to '{started_at_val}' (Progress: {current_percentage:.1%})"
+                    )
+
+                if is_finished and not finished_at_val:
+                    finished_at_val = finished_at or today
+                    logger.info(f"Hardcover: Setting finished_at to '{finished_at_val}'")
+
+            # Use progress_seconds for audiobooks, progress_pages for page-based editions
+            if audio_seconds and audio_seconds > 0:
+                progress_seconds = int(audio_seconds * current_percentage)
+                query = """
+                mutation UpdateBookProgress($id: Int!, $seconds: Int, $editionId: Int, $startedAt: date, $finishedAt: date) {
+                    update_user_book_read(id: $id, object: {
+                        progress_seconds: $seconds,
+                        progress_pages: null,
+                        edition_id: $editionId,
+                        started_at: $startedAt,
+                        finished_at: $finishedAt
+                    }) {
+                        error
+                        user_book_read { id }
+                    }
+                }
+                """
+                variables = {
+                    "id": read_id,
+                    "seconds": progress_seconds,
+                    "editionId": int(edition_id) if edition_id else None,
+                    "startedAt": started_at_val,
+                    "finishedAt": finished_at_val,
+                }
+            else:
+                query = """
+                mutation UpdateBookProgress($id: Int!, $pages: Int, $editionId: Int, $startedAt: date, $finishedAt: date) {
+                    update_user_book_read(id: $id, object: {
+                        progress_pages: $pages,
+                        progress_seconds: null,
+                        edition_id: $editionId,
+                        started_at: $startedAt,
+                        finished_at: $finishedAt
+                    }) {
+                        error
+                        user_book_read { id }
+                    }
+                }
+                """
+                variables = {
+                    "id": read_id,
+                    "pages": page,
+                    "editionId": int(edition_id) if edition_id else None,
+                    "startedAt": started_at_val,
+                    "finishedAt": finished_at_val,
+                }
+
+            result = self.query(query, variables)
+
+            if result and result.get("update_user_book_read"):
+                if result["update_user_book_read"].get("error"):
+                    return False
+                return True
+            return False
+
+        else:
+            # --- CREATE NEW READ ---
+            # Apply logic to new reads too
+            started_at_val = (started_at or today) if should_start else None
+            finished_at_val = (finished_at or today) if is_finished else None
+
+            # Use progress_seconds for audiobooks, progress_pages for page-based editions
+            if audio_seconds and audio_seconds > 0:
+                progress_seconds = int(audio_seconds * current_percentage)
+                query = """
+                mutation InsertUserBookRead($id: Int!, $seconds: Int, $editionId: Int, $startedAt: date, $finishedAt: date) {
+                    insert_user_book_read(user_book_id: $id, user_book_read: {
+                        progress_seconds: $seconds,
+                        progress_pages: null,
+                        edition_id: $editionId,
+                        started_at: $startedAt,
+                        finished_at: $finishedAt
+                    }) {
+                        error
+                        user_book_read { id }
+                    }
+                }
+                """
+                variables = {
+                    "id": user_book_id,
+                    "seconds": progress_seconds,
+                    "editionId": int(edition_id) if edition_id else None,
+                    "startedAt": started_at_val,
+                    "finishedAt": finished_at_val,
+                }
+            else:
+                query = """
+                mutation InsertUserBookRead($id: Int!, $pages: Int, $editionId: Int, $startedAt: date, $finishedAt: date) {
+                    insert_user_book_read(user_book_id: $id, user_book_read: {
+                        progress_pages: $pages,
+                        progress_seconds: null,
+                        edition_id: $editionId,
+                        started_at: $startedAt,
+                        finished_at: $finishedAt
+                    }) {
+                        error
+                        user_book_read { id }
+                    }
+                }
+                """
+                variables = {
+                    "id": user_book_id,
+                    "pages": page,
+                    "editionId": int(edition_id) if edition_id else None,
+                    "startedAt": started_at_val,
+                    "finishedAt": finished_at_val,
+                }
+
+            result = self.query(query, variables)
+
+            if result and result.get("insert_user_book_read"):
+                if result["insert_user_book_read"].get("error"):
+                    return False
+                return True
+            return False
+
+    def get_book_metadata(self, book_id: int) -> dict | None:
+        """Fetch enrichment metadata (description, tags, subtitle, release_year) for a book."""
+        query = """
+        query ($bookId: Int!) {
+            books_by_pk(id: $bookId) {
+                description
+                cached_tags
+                release_year
+                subtitle
+            }
+        }
+        """
+        result = self.query(query, {"bookId": book_id})
+        if not result or not result.get("books_by_pk"):
+            return None
+        book = result["books_by_pk"]
+
+        def _normalize_tag_name(value):
+            if isinstance(value, str):
+                return value.strip()
+            return ""
+
+        ignored_category_labels = {
+            "genre",
+            "genres",
+            "mood",
+            "moods",
+            "content warning",
+            "content warnings",
+            "tag",
+            "tags",
+        }
+
+        def _normalize_category_label(value):
+            normalized = _normalize_tag_name(value).lower()
+            singular_map = {
+                'genres': 'genre',
+                'moods': 'mood',
+                'content warnings': 'content warning',
+                'tags': 'tag',
+            }
+            return singular_map.get(normalized, normalized)
+
+        def _normalize_category(raw_tag):
+            if not isinstance(raw_tag, dict):
+                return ""
+
+            category = raw_tag.get("tag_category")
+            if isinstance(category, dict):
+                return _normalize_category_label(
+                    category.get("slug")
+                    or category.get("category")
+                    or category.get("name")
+                    or ""
+                )
+
+            if isinstance(category, str):
+                return _normalize_category_label(category)
+
+            return _normalize_category_label(
+                raw_tag.get("category")
+                or raw_tag.get("tag_category_slug")
+                or raw_tag.get("tag_category_name")
+                or raw_tag.get("type")
+                or ""
+            )
+
+        genres = []
+        tags = []
+        source_tags = book.get("cached_tags") or []
+
+        def _append_tag(name, category=""):
+            clean_name = _normalize_tag_name(name)
+            if not clean_name:
+                return
+            if clean_name.lower() in ignored_category_labels:
+                return
+            if _normalize_category_label(category) == "genre":
+                genres.append(clean_name)
+            else:
+                tags.append(clean_name)
+
+        if isinstance(source_tags, dict):
+            for raw_category, values in source_tags.items():
+                category = _normalize_category_label(raw_category)
+                if isinstance(values, list):
+                    for value in values:
+                        if isinstance(value, dict):
+                            _append_tag(
+                                value.get("tag")
+                                or value.get("name")
+                                or value.get("label")
+                                or value.get("value"),
+                                category,
+                            )
+                        else:
+                            _append_tag(value, category)
+                elif isinstance(values, dict):
+                    _append_tag(
+                        values.get("tag")
+                        or values.get("name")
+                        or values.get("label")
+                        or values.get("value"),
+                        category,
+                    )
+                else:
+                    _append_tag(values, category)
+        else:
+            for t in source_tags:
+                if isinstance(t, dict):
+                    name = _normalize_tag_name(
+                        t.get("tag")
+                        or t.get("name")
+                        or t.get("label")
+                        or t.get("value")
+                    )
+                    category = _normalize_category(t)
+                    if not name:
+                        continue
+                    if name.strip().lower() in ignored_category_labels:
+                        continue
+                    if _normalize_category_label(category) == "genre":
+                        genres.append(name)
+                    else:
+                        tags.append(name)
+                elif isinstance(t, str):
+                    name = t.strip()
+                    if name and name.lower() not in ignored_category_labels:
+                        tags.append(name)
+
+        genres = list(dict.fromkeys(t for t in genres if t))
+        tags = list(dict.fromkeys(t for t in tags if t))
+        return {
+            "description": book.get("description"),
+            "genres": genres,
+            "tags": tags,
+            "release_year": book.get("release_year"),
+            "subtitle": book.get("subtitle"),
+        }
+
+    def search_books_with_covers(self, query_str: str, limit: int = 5) -> list[dict]:
+        """Search for books and return results with cover images (for cover picker)."""
+        search_query = """
+        query ($query: String!) {
+            search(
+                query: $query,
+                per_page: 10,
+                page: 1,
+                query_type: "Book"
+            ) {
+                ids
+            }
+        }
+        """
+
+        result = self.query(search_query, {"query": query_str})
+        if not result or not result.get("search") or not result["search"].get("ids"):
+            return []
+
+        book_ids = result["search"]["ids"][:limit]
+        if not book_ids:
+            return []
+
+        book_query = """
+        query ($ids: [Int!]) {
+            books(where: { id: { _in: $ids }}) {
+                id
+                title
+                slug
+                cached_image
+                cached_contributors
+            }
+        }
+        """
+
+        book_result = self.query(book_query, {"ids": book_ids})
+        if not book_result or not book_result.get("books"):
+            return []
+
+        # Create lookup for quick access
+        books_by_id = {book["id"]: book for book in book_result["books"]}
+
+        results = []
+        for book_id in book_ids:
+            book = books_by_id.get(book_id)
+            if not book:
+                continue
+            authors = self._extract_authors_from_cached(book.get("cached_contributors"))
+            results.append({
+                "book_id": book["id"],
+                "title": book.get("title", ""),
+                "author": authors[0] if authors else "",
+                "cached_image": self._extract_cover_url(book.get("cached_image")),
+                "slug": book.get("slug"),
+            })
+        return results
+
+    def get_currently_reading(self) -> dict:
+        """Bulk-fetch all user_books with Want to Read (1), Currently Reading (2), or Paused (4) status.
+
+        Returns dict keyed by book_id for quick lookup.
+        """
+        query = """
+        query {
+            me {
+                user_books(where: {status_id: {_in: [1, 2, 4]}}) {
+                    id
+                    status_id
+                    book_id
+                    edition_id
+                    user_book_reads(order_by: {id: desc}, limit: 1) {
+                        id
+                        started_at
+                        finished_at
+                        progress_pages
+                        progress_seconds
+                    }
+                }
+            }
+        }
+        """
+        result = self.query(query)
+        if not result or not result.get("me"):
+            return {}
+
+        me = result["me"]
+        if isinstance(me, list):
+            me = me[0] if me else {}
+
+        user_books = me.get("user_books", [])
+        return {ub["book_id"]: ub for ub in user_books}
+
+    def get_all_editions(self, book_id: int) -> dict:
+        """Fetch all default editions for a book, keyed by format type.
+
+        Returns dict like {'ebook': {...}, 'audio': {...}, 'physical': {...}}.
+        """
+        query = """
+        query ($bookId: Int!) {
+            books_by_pk(id: $bookId) {
+                default_ebook_edition {
+                    id
+                    pages
+                }
+                default_physical_edition {
+                    id
+                    pages
+                }
+                default_audio_edition {
+                    id
+                    audio_seconds
+                }
+            }
+        }
+        """
+        result = self.query(query, {"bookId": book_id})
+        editions = {}
+        if result and result.get("books_by_pk"):
+            book = result["books_by_pk"]
+            if book.get("default_ebook_edition"):
+                editions['ebook'] = book["default_ebook_edition"]
+            if book.get("default_physical_edition"):
+                editions['physical'] = book["default_physical_edition"]
+            if book.get("default_audio_edition"):
+                editions['audio'] = book["default_audio_edition"]
+        return editions
+
+    def create_reading_journal(self, book_id: int, edition_id: int | None,
+                               event: str, action_at: str | None = None,
+                               entry: str | None = None,
+                               privacy_setting_id: int = 3) -> bool:
+        """Create a reading journal entry on Hardcover.
+
+        Events: 'started_reading', 'finished_reading', 'note', etc.
+        entry: optional text content for notes/highlights.
+        privacy_setting_id: 1=public, 2=followers, 3=private (default).
+        """
+        query = """
+        mutation ($object: ReadingJournalCreateType!) {
+            insert_reading_journal(object: $object) {
+                error
+                reading_journal { id }
+            }
+        }
+        """
+        obj = {
+            "book_id": int(book_id),
+            "event": event,
+            "privacy_setting_id": privacy_setting_id,
+            "tags": [],
+        }
+        if edition_id:
+            obj["edition_id"] = int(edition_id)
+        if action_at:
+            obj["action_at"] = action_at
+        if entry:
+            obj["entry"] = entry
+
+        result = self.query(query, {"object": obj})
+        if result and result.get("insert_reading_journal"):
+            errors = result["insert_reading_journal"].get("errors")
+            if errors:
+                logger.error(f"Hardcover create_reading_journal error: {errors}")
+                return False
+            if result["insert_reading_journal"].get("reading_journal"):
+                return True
+            logger.error("Hardcover create_reading_journal: no reading_journal in response")
+        return False

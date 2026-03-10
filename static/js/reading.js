@@ -1,0 +1,943 @@
+/* PageKeeper — Reading Tab */
+
+// Attach cover-fallback logic via event delegation (no inline onerror needed)
+document.addEventListener('error', function (e) {
+  const img = e.target;
+  if (!img || !img.classList.contains('r-cover-img')) return;
+
+  const fallbackId = (img.dataset.fallbackId || '').trim();
+  if (fallbackId && !img.dataset.fallbackAttempted) {
+    img.dataset.fallbackAttempted = '1';
+    img.src = '/covers/' + encodeURIComponent(fallbackId) + '.jpg';
+    return;
+  }
+
+  img.style.display = 'none';
+  var placeholder = img.nextElementSibling;
+  if (placeholder) {
+    placeholder.classList.remove('hidden');
+  }
+}, true);
+
+function initReadingPage(currentYear) {
+  const sectionsRoot = document.getElementById('reading-sections');
+  if (!sectionsRoot) return;
+
+  const cards = () => Array.from(sectionsRoot.querySelectorAll('.r-book-card'));
+  const searchInput = document.getElementById('reading-search');
+  const mobileSearchInput = document.getElementById('reading-search-mobile');
+  const sortSelect = document.getElementById('reading-sort');
+  const mobileSortSelect = document.getElementById('reading-sort-mobile');
+  const filterChips = document.querySelectorAll('.r-filter-chip');
+  const viewBtns = document.querySelectorAll('.r-view-btn');
+  const resultsInfo = document.getElementById('results-info');
+  const resultsText = document.getElementById('results-text');
+  const emptyTab = document.getElementById('empty-tab');
+  const sections = Array.from(sectionsRoot.querySelectorAll('.r-section'));
+  const controlsModal = document.getElementById('reading-controls-modal');
+  const controlsOpen = document.getElementById('reading-controls-open');
+  const controlsClose = document.getElementById('reading-controls-close');
+  const mainTabs = Array.from(document.querySelectorAll('.r-main-tab-btn'));
+  const mainPanels = Array.from(document.querySelectorAll('.r-main-panel'));
+  const statsShell = document.getElementById('reading-stats-shell');
+  const statsYearSelect = document.getElementById('reading-stats-year');
+
+  let activeFilter = 'all';
+  let currentView = 'list';
+  const desktopMedia = window.matchMedia('(min-width: 961px)');
+
+  function setMainTab(tabName) {
+    mainTabs.forEach(tab => {
+      const active = tab.dataset.mainTab === tabName;
+      tab.classList.toggle('active', active);
+      tab.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+    mainPanels.forEach(panel => {
+      panel.hidden = panel.dataset.mainPanel !== tabName;
+    });
+  }
+
+  mainTabs.forEach(tab => {
+    tab.addEventListener('click', () => setMainTab(tab.dataset.mainTab));
+  });
+  setMainTab('log');
+
+  function syncSearchInputs(source) {
+    const value = source ? source.value : '';
+    if (searchInput && source !== searchInput) searchInput.value = value;
+    if (mobileSearchInput && source !== mobileSearchInput) mobileSearchInput.value = value;
+  }
+
+  function syncSortInputs(source) {
+    const value = source ? source.value : 'activity-desc';
+    if (sortSelect && source !== sortSelect) sortSelect.value = value;
+    if (mobileSortSelect && source !== mobileSortSelect) mobileSortSelect.value = value;
+  }
+
+  function showControlsModal() {
+    if (controlsModal) controlsModal.style.display = 'flex';
+  }
+
+  function hideControlsModal() {
+    if (controlsModal) controlsModal.style.display = 'none';
+  }
+
+  filterChips.forEach(chip => {
+    chip.addEventListener('click', () => {
+      filterChips.forEach(item => {
+        item.classList.remove('active');
+        item.setAttribute('aria-selected', 'false');
+      });
+      chip.classList.add('active');
+      chip.setAttribute('aria-selected', 'true');
+      activeFilter = chip.dataset.filter;
+      applyFiltersAndSort();
+    });
+  });
+
+  [searchInput, mobileSearchInput].forEach(input => {
+    if (!input) return;
+    input.addEventListener('input', () => {
+      syncSearchInputs(input);
+      applyFiltersAndSort();
+    });
+  });
+
+  [sortSelect, mobileSortSelect].forEach(select => {
+    if (!select) return;
+    select.addEventListener('change', () => {
+      syncSortInputs(select);
+      applyFiltersAndSort();
+    });
+  });
+
+  if (controlsOpen) controlsOpen.addEventListener('click', showControlsModal);
+  if (controlsClose) controlsClose.addEventListener('click', hideControlsModal);
+  if (controlsModal) {
+    controlsModal.addEventListener('click', e => {
+      if (e.target === controlsModal) hideControlsModal();
+    });
+  }
+
+  function setView(view, persist) {
+    const forcedView = desktopMedia.matches ? view : 'list';
+    currentView = forcedView;
+    sectionsRoot.classList.toggle('r-grid-view', forcedView === 'grid');
+    viewBtns.forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.view === forcedView);
+      btn.disabled = !desktopMedia.matches;
+    });
+    if (persist && desktopMedia.matches) {
+      try { localStorage.setItem('pk-reading-view', forcedView); } catch (e) {}
+    }
+  }
+
+  viewBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      setView(btn.dataset.view, true);
+    });
+  });
+
+  try {
+    const savedView = localStorage.getItem('pk-reading-view');
+    setView(savedView === 'grid' ? 'grid' : 'list', false);
+  } catch (e) {}
+  if (!currentView) setView('list', false);
+
+  const onDesktopChange = () => setView(currentView, false);
+  if (desktopMedia.addEventListener) {
+    desktopMedia.addEventListener('change', onDesktopChange);
+  } else if (desktopMedia.addListener) {
+    desktopMedia.addListener(onDesktopChange);
+  }
+
+  function compareCards(a, b) {
+    const sortValue = sortSelect ? sortSelect.value : 'activity-desc';
+    switch (sortValue) {
+      case 'title-asc':
+        return (a.dataset.title || '').localeCompare(b.dataset.title || '');
+      case 'progress-desc':
+        return (
+          (parseFloat(b.dataset.progress) || 0) - (parseFloat(a.dataset.progress) || 0)
+          || (a.dataset.title || '').localeCompare(b.dataset.title || '')
+        );
+      case 'finished-desc':
+        return (
+          (b.dataset.finished || '').localeCompare(a.dataset.finished || '')
+          || (b.dataset.activity || '').localeCompare(a.dataset.activity || '')
+          || (a.dataset.title || '').localeCompare(b.dataset.title || '')
+        );
+      case 'activity-desc':
+      default:
+        return (
+          (b.dataset.activity || '').localeCompare(a.dataset.activity || '')
+          || (b.dataset.finished || '').localeCompare(a.dataset.finished || '')
+          || (parseFloat(b.dataset.progress) || 0) - (parseFloat(a.dataset.progress) || 0)
+          || (a.dataset.title || '').localeCompare(b.dataset.title || '')
+        );
+    }
+  }
+
+  function getMatches(card, term) {
+    const haystack = [
+      (card.dataset.title || '').toLowerCase(),
+      (card.dataset.author || '').toLowerCase(),
+    ].join(' ');
+    const matchesSearch = !term || haystack.includes(term);
+    const matchesFilter = activeFilter === 'all' || card.dataset.status === activeFilter;
+    return matchesSearch && matchesFilter;
+  }
+
+  function rebuildFinishedSection(section) {
+    const allCards = Array.from(section.querySelectorAll('.r-book-card'));
+    section.querySelectorAll('.r-year-group').forEach(group => group.remove());
+    const existingStack = section.querySelector('.r-book-stack');
+    if (existingStack) existingStack.remove();
+
+    if (allCards.length === 0) return;
+
+    const byYear = new Map();
+    allCards.forEach(card => {
+      const year = card.dataset.year || 'Unknown';
+      if (!byYear.has(year)) byYear.set(year, []);
+      byYear.get(year).push(card);
+    });
+
+    Array.from(byYear.keys()).sort((a, b) => b.localeCompare(a)).forEach(year => {
+      const group = document.createElement('div');
+      group.className = 'r-year-group';
+      group.dataset.yearGroup = year;
+
+      const heading = document.createElement('div');
+      heading.className = 'r-year-heading';
+      const text = document.createElement('span');
+      text.textContent = year;
+      heading.appendChild(text);
+      group.appendChild(heading);
+
+      const stack = document.createElement('div');
+      stack.className = 'r-book-stack';
+      byYear.get(year).forEach(card => stack.appendChild(card));
+      group.appendChild(stack);
+      section.appendChild(group);
+    });
+  }
+
+  function sortSection(section) {
+    const allCards = Array.from(section.querySelectorAll('.r-book-card'));
+    allCards.sort(compareCards);
+
+    if (section.dataset.section === 'finished') {
+      allCards.forEach(card => section.appendChild(card));
+      rebuildFinishedSection(section);
+      return;
+    }
+
+    let stack = section.querySelector('.r-book-stack');
+    if (!stack) {
+      stack = document.createElement('div');
+      stack.className = 'r-book-stack';
+      section.appendChild(stack);
+    }
+    allCards.forEach(card => stack.appendChild(card));
+  }
+
+  function applyFiltersAndSort() {
+    const term = ((searchInput && searchInput.value) || '').toLowerCase().trim();
+    let visibleCount = 0;
+    let filterTotal = 0;
+
+    cards().forEach(card => {
+      if (activeFilter === 'all' || card.dataset.status === activeFilter) {
+        filterTotal++;
+      }
+    });
+
+    sections.forEach(section => {
+      sortSection(section);
+      const sectionCards = Array.from(section.querySelectorAll('.r-book-card'));
+      let sectionVisibleCount = 0;
+
+      sectionCards.forEach(card => {
+        const visible = getMatches(card, term);
+        card.style.display = visible ? '' : 'none';
+        if (visible) {
+          visibleCount++;
+          sectionVisibleCount++;
+        }
+      });
+
+      if (section.dataset.section === 'finished') {
+        section.querySelectorAll('.r-year-group').forEach(group => {
+          const hasVisibleCards = Array.from(group.querySelectorAll('.r-book-card')).some(card => card.style.display !== 'none');
+          group.style.display = hasVisibleCards ? '' : 'none';
+        });
+      }
+
+      const emptyState = section.querySelector('.r-section-empty');
+      if (emptyState) emptyState.hidden = sectionVisibleCount !== 0;
+      section.style.display = sectionVisibleCount === 0 ? 'none' : '';
+    });
+
+    if (resultsInfo && resultsText) {
+      if (term || activeFilter !== 'all') {
+        resultsInfo.hidden = false;
+        resultsText.textContent = `Showing ${visibleCount} of ${filterTotal} books`;
+      } else {
+        resultsInfo.hidden = true;
+      }
+    }
+
+    if (emptyTab) emptyTab.hidden = visibleCount !== 0;
+    sectionsRoot.style.display = visibleCount === 0 ? 'none' : '';
+  }
+
+  syncSortInputs(sortSelect || mobileSortSelect);
+  syncSearchInputs(searchInput || mobileSearchInput);
+  applyFiltersAndSort();
+
+  function updateGoalCard(stats, year) {
+    const goalCount = document.getElementById('stats-goal-count');
+    const goalLabel = document.getElementById('stats-goal-label');
+    const goalProgress = document.getElementById('stats-goal-progress');
+    const goalRing = document.querySelector('.r-goal-widget--stats .r-goal-ring circle:last-child');
+    const yearLabel = document.getElementById('stats-year-label');
+    const totalTracked = document.getElementById('stats-total-tracked');
+
+    if (goalCount) {
+      goalCount.textContent = stats.goal_target ? `${stats.goal_completed}/${stats.goal_target}` : '+';
+    }
+    if (goalLabel) {
+      goalLabel.textContent = stats.goal_target ? `${year} goal` : 'Set goal';
+    }
+    if (goalProgress) {
+      goalProgress.textContent = `${Math.round(stats.goal_percent || 0)}%`;
+    }
+    if (yearLabel) {
+      yearLabel.textContent = year;
+    }
+    if (totalTracked) {
+      totalTracked.textContent = `${stats.total_tracked} tracked books total`;
+    }
+    if (goalRing) {
+      const dash = Math.min((stats.goal_percent || 0) * 1.257, 125.7);
+      goalRing.setAttribute('stroke-dasharray', `${dash} 125.7`);
+    }
+  }
+
+  function renderStatsChart(stats) {
+    const chart = document.getElementById('stats-chart');
+    if (!chart) return;
+    const values = stats.monthly_finished || [];
+    const labels = stats.monthly_labels || ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const maxValue = values.reduce((acc, value) => Math.max(acc, value), 0);
+
+    chart.querySelectorAll('.r-stats-bar-group').forEach((group, idx) => {
+      const value = values[idx] || 0;
+      const fill = group.querySelector('.r-stats-bar-fill');
+      const valueEl = group.querySelector('.r-stats-bar-value');
+      const labelEl = group.querySelector('.r-stats-bar-label');
+      if (fill) {
+        fill.style.height = `${maxValue > 0 ? ((value / maxValue) * 100).toFixed(1) : 0}%`;
+      }
+      if (valueEl) valueEl.textContent = value;
+      if (labelEl) labelEl.textContent = labels[idx] || '';
+    });
+  }
+
+  function renderStats(stats) {
+    const finished = document.getElementById('stats-books-finished');
+    const current = document.getElementById('stats-currently-reading');
+    const average = document.getElementById('stats-average-rating');
+    if (finished) finished.textContent = stats.books_finished;
+    if (current) current.textContent = stats.currently_reading;
+    if (average) average.textContent = stats.average_rating == null ? '\u2014' : Number(stats.average_rating).toFixed(2);
+    updateGoalCard(stats, stats.year);
+    renderStatsChart(stats);
+  }
+
+  function loadStats(year) {
+    return fetch(`/api/reading/stats/${year}`)
+      .then(r => {
+        if (!r.ok) throw new Error('Failed to load stats');
+        return r.json();
+      })
+      .then(data => {
+        renderStats(data);
+      })
+      .catch(err => console.debug('Stats load failed:', err));
+  }
+
+  if (statsYearSelect) {
+    statsYearSelect.addEventListener('change', () => {
+      const year = parseInt(statsYearSelect.value, 10) || currentYear;
+      loadStats(year);
+    });
+  }
+
+  // ── Goal modal ─────────────────────────────────────────────
+
+  const goalCard = document.getElementById('goal-card');
+  const goalModal = document.getElementById('goal-modal');
+  const goalClose = document.getElementById('goal-modal-close');
+  const goalCancel = document.getElementById('goal-cancel');
+  const goalSave = document.getElementById('goal-save');
+  const goalInput = document.getElementById('goal-input');
+
+  function showModal()  { if (goalModal) goalModal.style.display = 'flex'; }
+  function hideModal()  { if (goalModal) goalModal.style.display = 'none'; }
+
+  if (goalCard) goalCard.addEventListener('click', showModal);
+  if (goalClose) goalClose.addEventListener('click', hideModal);
+  if (goalCancel) goalCancel.addEventListener('click', hideModal);
+  if (goalModal) goalModal.addEventListener('click', e => { if (e.target === goalModal) hideModal(); });
+
+  if (goalSave) {
+    goalSave.addEventListener('click', () => {
+      const activeYear = parseInt(statsYearSelect?.value, 10) || currentYear;
+      const target = parseInt(goalInput?.value, 10);
+      if (!target || target < 1) return;
+      goalSave.disabled = true;
+      fetch(`/api/reading/goal/${activeYear}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target_books: target }),
+      })
+        .then(r => {
+          if (!r.ok) throw new Error('Failed to save goal');
+          return r.json();
+        })
+        .then(data => {
+          if (data.success) {
+            return loadStats(activeYear).then(() => {
+              hideModal();
+              goalSave.disabled = false;
+            });
+          }
+          goalSave.disabled = false;
+        })
+        .catch(() => { goalSave.disabled = false; });
+    });
+  }
+
+  if (statsShell && statsYearSelect) {
+    loadStats(parseInt(statsYearSelect.value, 10) || currentYear);
+  }
+}
+
+
+function initReadingDetail() {
+  // ── Rating stars (5 stars, half-star support) ──
+  const rc = document.getElementById('rating-stars');
+  if (rc) {
+    const absId = rc.dataset.absId;
+    const hardcoverSyncAvailable = rc.dataset.hardcoverSyncAvailable === 'true';
+    const stars = rc.querySelectorAll('.r-star-btn');
+    const label = document.getElementById('rating-label');
+    const syncStatus = document.getElementById('rating-sync-status');
+
+    function formatRating(value) {
+      return Number(value).toFixed(value % 1 === 0 ? 0 : 1) + '/5';
+    }
+
+    function applyRatingState(value) {
+      const numeric = Number(value) || 0;
+      stars.forEach(star => {
+        const idx = parseInt(star.dataset.index, 10);
+        star.classList.remove('r-star-full', 'r-star-half', 'r-star-empty');
+        if (numeric >= idx) {
+          star.classList.add('r-star-full');
+        } else if (numeric >= idx - 0.5) {
+          star.classList.add('r-star-half');
+        } else {
+          star.classList.add('r-star-empty');
+        }
+      });
+      rc.dataset.rating = String(numeric);
+      if (label) label.textContent = numeric > 0 ? formatRating(numeric) : 'Rate';
+    }
+
+    function setSyncStatus(state, message) {
+      if (!syncStatus) return;
+      syncStatus.hidden = false;
+      syncStatus.className = `r-rating-sync r-rating-sync--${state}`;
+      syncStatus.textContent = message;
+    }
+
+    function submitRating(value) {
+      fetch(`/api/reading/book/${absId}/rating`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rating: value }),
+      })
+        .then(r => {
+          if (!r.ok) throw new Error('Failed to save rating');
+          return r.json();
+        })
+        .then(data => {
+          if (data.success) {
+            applyRatingState(data.rating);
+            if (!hardcoverSyncAvailable) {
+              if (syncStatus) syncStatus.hidden = true;
+            } else if (data.hardcover_synced) {
+              setSyncStatus('success', 'Synced to Hardcover');
+            } else if (data.hardcover_error) {
+              setSyncStatus('warning', 'Saved locally, Hardcover sync failed');
+            } else {
+              if (syncStatus) syncStatus.hidden = true;
+            }
+          }
+        })
+        .catch(() => {
+          setSyncStatus('error', 'Save failed — rating not saved');
+        });
+    }
+
+    function getStarValue(star, clientX) {
+      const idx = parseInt(star.dataset.index, 10);
+      const rect = star.getBoundingClientRect();
+      const isLeftHalf = (clientX - rect.left) < rect.width / 2;
+      return isLeftHalf ? idx - 0.5 : idx;
+    }
+
+    stars.forEach(star => {
+      // Click / tap: left half → half star, right half → full star
+      star.addEventListener('click', (e) => {
+        submitRating(getStarValue(star, e.clientX));
+      });
+
+      // Touch: use touch coordinates for half-star detection
+      star.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        const touch = e.changedTouches[0];
+        submitRating(getStarValue(star, touch.clientX));
+      });
+
+      // Hover preview (desktop)
+      star.addEventListener('mousemove', (e) => {
+        const previewValue = getStarValue(star, e.clientX);
+        applyRatingState(previewValue);
+        if (label) label.textContent = formatRating(previewValue);
+      });
+    });
+
+    // Restore actual rating when mouse leaves the rating area
+    rc.addEventListener('mouseleave', () => {
+      applyRatingState(parseFloat(rc.dataset.rating || '0'));
+    });
+
+    applyRatingState(parseFloat(rc.dataset.rating || '0'));
+  }
+
+  // ── Date fields ──
+  function flashDateFeedback(input, ok, msg) {
+    const color = ok ? 'var(--color-success, #22c55e)' : 'var(--color-danger, red)';
+    input.style.outline = `2px solid ${color}`;
+    input.title = msg || '';
+    setTimeout(() => { input.style.outline = ''; input.title = ''; }, 2500);
+  }
+
+  function bindDate(field, inputId) {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    input.addEventListener('change', () => {
+      const payload = {};
+      payload[field] = input.value || null;
+      fetch(`/api/reading/book/${input.dataset.absId}/dates`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+        .then(r => r.json())
+        .then(data => {
+          if (!data.success) {
+            flashDateFeedback(input, false, data.error || 'Save failed');
+          } else {
+            flashDateFeedback(input, true, 'Saved');
+          }
+        })
+        .catch(() => {
+          flashDateFeedback(input, false, 'Save failed');
+        });
+    });
+  }
+  bindDate('started_at', 'started-at');
+  bindDate('finished_at', 'finished-at');
+
+  // ── Sync Dates to Hardcover button ──
+  const hcSyncBtn = document.getElementById('hc-date-sync');
+  const hcSyncStatus = document.getElementById('hc-date-sync-status');
+  if (hcSyncBtn) {
+    hcSyncBtn.addEventListener('click', () => {
+      hcSyncBtn.disabled = true;
+      if (hcSyncStatus) { hcSyncStatus.hidden = true; }
+      fetch(`/api/reading/book/${hcSyncBtn.dataset.absId}/dates/sync-hardcover`, {
+        method: 'POST',
+      })
+        .then(r => {
+          if (!r.ok) return r.text().then(t => { throw new Error(t || 'Sync failed'); });
+          return r.json();
+        })
+        .then(data => {
+          hcSyncBtn.disabled = false;
+          if (hcSyncStatus) {
+            hcSyncStatus.hidden = false;
+            hcSyncStatus.className = `r-hc-date-sync-status ${data.success ? 'success' : 'error'}`;
+            hcSyncStatus.textContent = data.success ? 'Dates synced to Hardcover' : (data.error || 'Sync failed');
+            setTimeout(() => { hcSyncStatus.hidden = true; }, 4000);
+          }
+        })
+        .catch(() => {
+          hcSyncBtn.disabled = false;
+          if (hcSyncStatus) {
+            hcSyncStatus.hidden = false;
+            hcSyncStatus.className = 'r-hc-date-sync-status error';
+            hcSyncStatus.textContent = 'Sync failed';
+            setTimeout(() => { hcSyncStatus.hidden = true; }, 4000);
+          }
+        });
+    });
+  }
+
+  // ── About This Book description expand/collapse ──
+  const descWrap = document.getElementById('about-book-desc-wrap');
+  const descMoreBtn = document.getElementById('about-book-more');
+  if (descWrap && descMoreBtn) {
+    descMoreBtn.addEventListener('click', () => {
+      const collapsed = descWrap.classList.toggle('is-collapsed');
+      descMoreBtn.textContent = collapsed ? 'Read More' : 'Show Less';
+      descMoreBtn.setAttribute('aria-expanded', String(!collapsed));
+    });
+  }
+
+  // ── Journal ──
+  const form = document.getElementById('journal-form');
+  if (form) {
+    const absId = form.dataset.absId;
+    const textarea = document.getElementById('journal-entry');
+    const timeline = document.getElementById('journal-timeline');
+    const submitBtn = document.getElementById('journal-submit');
+    const cancelBtn = document.getElementById('journal-cancel');
+
+    function resetJournalForm() {
+      form.dataset.editJournalId = '';
+      if (submitBtn) submitBtn.textContent = 'Add Note';
+      if (cancelBtn) cancelBtn.classList.add('hidden');
+      if (textarea) textarea.value = '';
+    }
+
+    form.addEventListener('submit', e => {
+      e.preventDefault();
+      const entry = textarea.value.trim();
+      if (!entry) return;
+      const editJournalId = form.dataset.editJournalId;
+      const method = editJournalId ? 'PATCH' : 'POST';
+      const url = editJournalId
+        ? `/api/reading/journal/${editJournalId}`
+        : `/api/reading/book/${absId}/journal`;
+
+      fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entry }),
+      })
+        .then(r => {
+          if (!r.ok) throw new Error('Failed to save');
+          return r.json();
+        })
+        .then(data => {
+          if (!data.success) return;
+          if (timeline) {
+            if (editJournalId) {
+              const item = timeline.querySelector(`.r-tl-item[data-journal-id="${editJournalId}"]`);
+              const text = item?.querySelector('.r-tl-text');
+              if (text) text.textContent = data.journal.entry;
+              if (item) item.dataset.entry = data.journal.entry;
+            } else {
+              const empty = timeline.querySelector('.r-journal-empty');
+              if (empty) empty.remove();
+              timeline.prepend(buildJournalNode(data.journal));
+            }
+          }
+          resetJournalForm();
+        })
+        .catch(() => {
+          // Show error feedback to user
+        });
+    });
+
+    if (cancelBtn) cancelBtn.addEventListener('click', () => {
+      resetJournalForm();
+    });
+
+    // Delete (event delegation)
+    if (timeline) timeline.addEventListener('click', e => {
+      const trigger = e.target.closest('.r-tl-menu-trigger');
+      if (trigger) {
+        const menu = trigger.closest('.r-tl-menu');
+        const isOpen = menu.classList.contains('open');
+        timeline.querySelectorAll('.r-tl-menu.open').forEach(item => {
+          item.classList.remove('open');
+          const btn = item.querySelector('.r-tl-menu-trigger');
+          if (btn) btn.setAttribute('aria-expanded', 'false');
+        });
+        if (!isOpen) {
+          menu.classList.add('open');
+          trigger.setAttribute('aria-expanded', 'true');
+        }
+        return;
+      }
+
+      const actionBtn = e.target.closest('.r-tl-menu-item');
+      if (!actionBtn) return;
+      const menu = actionBtn.closest('.r-tl-menu');
+      if (!menu) return;
+      const journalId = menu.dataset.journalId;
+      const eventType = menu.dataset.journalEvent;
+      const item = menu.closest('.r-tl-item');
+
+      if (actionBtn.dataset.action === 'edit') {
+        if (eventType !== 'note') return;
+        const text = item?.querySelector('.r-tl-text')?.textContent || '';
+        form.dataset.editJournalId = journalId;
+        textarea.value = text;
+        if (submitBtn) submitBtn.textContent = 'Save Note';
+        if (cancelBtn) cancelBtn.classList.remove('hidden');
+        textarea.focus();
+        menu.classList.remove('open');
+        const triggerBtn = menu.querySelector('.r-tl-menu-trigger');
+        if (triggerBtn) triggerBtn.setAttribute('aria-expanded', 'false');
+        form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+
+      if (actionBtn.dataset.action === 'push-hardcover') {
+        openHcPushModal(journalId, item);
+        menu.classList.remove('open');
+        return;
+      }
+
+      if (actionBtn.dataset.action !== 'delete') return;
+      if (!confirm('Delete this journal entry?')) return;
+      function flashError() {
+        menu.style.outline = '2px solid var(--color-danger, red)';
+        setTimeout(() => { menu.style.outline = ''; }, 2000);
+      }
+      fetch(`/api/reading/journal/${journalId}`, { method: 'DELETE' })
+        .then(r => {
+          if (!r.ok) throw new Error('Delete failed');
+          return r.json();
+        })
+        .then(data => {
+          if (!data.success) { flashError(); return; }
+          if (item) {
+            item.style.transition = 'opacity 0.3s';
+            item.style.opacity = '0';
+            setTimeout(() => item.remove(), 300);
+          }
+        })
+        .catch(() => flashError());
+    });
+
+    document.addEventListener('click', e => {
+      if (!e.target.closest('.r-tl-menu')) {
+        timeline.querySelectorAll('.r-tl-menu.open').forEach(item => {
+          item.classList.remove('open');
+          const btn = item.querySelector('.r-tl-menu-trigger');
+          if (btn) btn.setAttribute('aria-expanded', 'false');
+        });
+      }
+    });
+  }
+
+  // ── Hardcover Push Modal ──
+  const hcPushModal = document.getElementById('hc-push-modal');
+  const hcPushPreview = document.getElementById('hc-push-preview');
+  const hcPushPrivacy = document.getElementById('hc-push-privacy-select');
+  const hcPushConfirm = document.getElementById('hc-push-confirm');
+  let _hcPushJournalId = null;
+  let _hcPushItem = null;
+
+  function openHcPushModal(journalId, item) {
+    if (!hcPushModal) return;
+    _hcPushJournalId = journalId;
+    _hcPushItem = item;
+    const entry = item?.dataset.entry || item?.querySelector('.r-tl-text')?.textContent || '';
+    if (hcPushPreview) hcPushPreview.textContent = entry.length > 200 ? entry.slice(0, 200) + '...' : entry;
+    if (hcPushPrivacy) hcPushPrivacy.value = hcPushModal.dataset.privacyDefault || '3';
+    if (hcPushConfirm) {
+      hcPushConfirm.disabled = false;
+      hcPushConfirm.textContent = 'Push';
+    }
+    hcPushModal.style.display = 'flex';
+  }
+  window.openHcPushModal = openHcPushModal;
+
+  function closeHcPushModal() {
+    if (hcPushModal) hcPushModal.style.display = 'none';
+    _hcPushJournalId = null;
+    _hcPushItem = null;
+  }
+  window.closeHcPushModal = closeHcPushModal;
+
+  if (hcPushConfirm) {
+    hcPushConfirm.addEventListener('click', () => {
+      if (!_hcPushJournalId) return;
+      const privacy = parseInt(hcPushPrivacy?.value, 10) || 3;
+      hcPushConfirm.disabled = true;
+      hcPushConfirm.textContent = 'Pushing...';
+
+      fetch(`/api/reading/journal/${_hcPushJournalId}/push-hardcover`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ privacy }),
+      })
+        .then(r => {
+          if (!r.ok) return r.text().then(t => { throw new Error(t || 'Push failed'); });
+          return r.json();
+        })
+        .then(data => {
+          if (data.success) {
+            // Update the menu button in the timeline to show success
+            if (_hcPushItem) {
+              const pushBtn = _hcPushItem.querySelector('[data-action="push-hardcover"]');
+              if (pushBtn) {
+                pushBtn.textContent = 'Pushed \u2713';
+                pushBtn.classList.add('r-tl-menu-item--success');
+                pushBtn.disabled = true;
+              }
+            }
+            closeHcPushModal();
+          } else {
+            hcPushConfirm.textContent = data.error || 'Failed';
+            hcPushConfirm.disabled = false;
+            setTimeout(() => { hcPushConfirm.textContent = 'Push'; }, 2500);
+          }
+        })
+        .catch(() => {
+          hcPushConfirm.textContent = 'Failed';
+          hcPushConfirm.disabled = false;
+          setTimeout(() => { hcPushConfirm.textContent = 'Push'; }, 2500);
+        });
+    });
+  }
+
+  // ── Journal Sync Toggle ──
+  const syncToggle = document.getElementById('journal-sync-toggle');
+  if (syncToggle) {
+    syncToggle.addEventListener('change', () => {
+      const absId = syncToggle.dataset.absId;
+      const value = syncToggle.checked ? 'on' : 'off';
+      fetch(`/api/reading/book/${absId}/journal-sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ journal_sync: value }),
+      })
+        .then(r => {
+          if (!r.ok) throw new Error('Request failed');
+          return r.json();
+        })
+        .then(data => {
+          if (!data.success) syncToggle.checked = !syncToggle.checked;
+        })
+        .catch(() => {
+          syncToggle.checked = !syncToggle.checked;
+        });
+    });
+  }
+}
+
+
+/** Build a journal timeline node using safe DOM methods. */
+function buildJournalNode(j) {
+  const item = document.createElement('div');
+  item.className = 'r-tl-item';
+  item.dataset.journalId = j.id;
+  item.dataset.entry = j.entry || '';
+
+  const line = document.createElement('div');
+  line.className = 'r-tl-line';
+  item.appendChild(line);
+
+  const dot = document.createElement('div');
+  dot.className = `r-tl-dot r-tl-dot-${j.event || 'note'}`;
+  item.appendChild(dot);
+
+  const body = document.createElement('div');
+  body.className = 'r-tl-body';
+
+  const head = document.createElement('div');
+  head.className = 'r-tl-head';
+
+  const evtSpan = document.createElement('span');
+  const eventName = j.event || 'note';
+  evtSpan.className = `r-tl-event r-tl-event-${eventName}`;
+  evtSpan.textContent = eventName.charAt(0).toUpperCase() + eventName.slice(1);
+  head.appendChild(evtSpan);
+
+  if (j.created_at) {
+    const dateSpan = document.createElement('span');
+    dateSpan.className = 'r-tl-date';
+    dateSpan.textContent = new Date(j.created_at).toLocaleDateString('en-US', {
+      month: 'short', day: 'numeric', year: 'numeric'
+    });
+    head.appendChild(dateSpan);
+  }
+
+  if (j.percentage != null) {
+    const pct = document.createElement('span');
+    pct.className = 'r-tl-pct';
+    pct.textContent = Math.round(j.percentage * 100) + '%';
+    head.appendChild(pct);
+  }
+
+  body.appendChild(head);
+
+  if (j.entry) {
+    const text = document.createElement('p');
+    text.className = 'r-tl-text';
+    text.textContent = j.entry;
+    body.appendChild(text);
+  }
+
+  if (eventName === 'note' || eventName === 'highlight') {
+    const menu = document.createElement('div');
+    menu.className = 'r-tl-menu';
+    menu.dataset.journalId = j.id;
+    menu.dataset.journalEvent = eventName;
+
+    const trigger = document.createElement('button');
+    trigger.className = 'r-tl-menu-trigger';
+    trigger.type = 'button';
+    trigger.title = 'More actions';
+    trigger.setAttribute('aria-label', 'More actions');
+    trigger.setAttribute('aria-expanded', 'false');
+    trigger.textContent = '\u22ef';
+    menu.appendChild(trigger);
+
+    const dropdown = document.createElement('div');
+    dropdown.className = 'r-tl-menu-dropdown';
+
+    if (eventName === 'note') {
+      const edit = document.createElement('button');
+      edit.className = 'r-tl-menu-item';
+      edit.type = 'button';
+      edit.dataset.action = 'edit';
+      edit.textContent = 'Edit';
+      dropdown.appendChild(edit);
+    }
+
+    const del = document.createElement('button');
+    del.className = 'r-tl-menu-item r-tl-menu-item--danger';
+    del.type = 'button';
+    del.dataset.action = 'delete';
+    del.textContent = 'Delete';
+    dropdown.appendChild(del);
+
+    menu.appendChild(dropdown);
+    body.appendChild(menu);
+  }
+
+  item.appendChild(body);
+  return item;
+}
