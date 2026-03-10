@@ -23,6 +23,7 @@ from src.services.alignment_service import AlignmentService
 from src.services.background_job_service import BackgroundJobService
 from src.services.library_service import LibraryService
 from src.services.migration_service import MigrationService
+from src.services.storyteller_submission_service import StorytellerSubmissionService
 from src.services.suggestion_service import SuggestionService
 from src.sync_clients.abs_ebook_sync_client import ABSEbookSyncClient
 from src.sync_clients.abs_sync_client import ABSSyncClient
@@ -38,6 +39,7 @@ from src.utils.transcriber import AudioTranscriber
 
 logger = logging.getLogger(__name__)
 
+
 class Container(containers.DeclarativeContainer):
     """Main dependency injection container using dependency-injector library."""
 
@@ -45,50 +47,32 @@ class Container(containers.DeclarativeContainer):
     config = providers.Configuration()
 
     # Configuration values from environment (Lazy evaluation)
-    data_dir = providers.Factory(
-        lambda: Path(os.environ.get("DATA_DIR", "/data"))
-    )
+    data_dir = providers.Factory(lambda: Path(os.environ.get("DATA_DIR", "/data")))
 
-    books_dir = providers.Factory(
-        lambda: Path(os.environ.get("BOOKS_DIR", "/books"))
-    )
+    books_dir = providers.Factory(lambda: Path(os.environ.get("BOOKS_DIR", "/books")))
 
-    db_file = providers.Factory(
-        lambda data_dir: data_dir / "mapping_db.json",
-        data_dir=data_dir
-    )
-    state_file = providers.Factory(
-        lambda data_dir: data_dir / "last_state.json",
-        data_dir=data_dir
-    )
-    epub_cache_dir = providers.Factory(
-        lambda data_dir: data_dir / "epub_cache",
-        data_dir=data_dir
-    )
+    db_file = providers.Factory(lambda data_dir: data_dir / "mapping_db.json", data_dir=data_dir)
+    state_file = providers.Factory(lambda data_dir: data_dir / "last_state.json", data_dir=data_dir)
+    epub_cache_dir = providers.Factory(lambda data_dir: data_dir / "epub_cache", data_dir=data_dir)
 
     # Lazy load specific config values
     delta_abs_thresh = providers.Factory(lambda: float(os.getenv("SYNC_DELTA_ABS_SECONDS", 60)))
     delta_kosync_thresh = providers.Factory(lambda: float(os.getenv("SYNC_DELTA_KOSYNC_PERCENT", 1)) / 100.0)
-    kosync_use_percentage_from_server = providers.Factory(lambda: os.getenv("KOSYNC_USE_PERCENTAGE_FROM_SERVER", "false").lower() == "true")
+    kosync_use_percentage_from_server = providers.Factory(
+        lambda: os.getenv("KOSYNC_USE_PERCENTAGE_FROM_SERVER", "false").lower() == "true"
+    )
 
     # API Clients
     abs_client = providers.Singleton(ABSClient)
 
     # ABS Service (guarded wrapper)
-    abs_service = providers.Singleton(
-        ABSService,
-        abs_client
-    )
+    abs_service = providers.Singleton(ABSService, abs_client)
 
     kosync_client = providers.Singleton(KoSyncClient)
 
     # SQLAlchemy Database Service - Moved up for dependency injection
     database_service = providers.Singleton(
-        DatabaseService,
-        providers.Factory(
-            lambda data_dir: str(data_dir / "database.db"),
-            data_dir=data_dir
-        )
+        DatabaseService, providers.Factory(lambda data_dir: str(data_dir / "database.db"), data_dir=data_dir)
     )
 
     booklore_client = providers.Singleton(
@@ -103,26 +87,14 @@ class Container(containers.DeclarativeContainer):
     bookfusion_client = providers.Singleton(BookFusionClient)
 
     # Ebook parser
-    ebook_parser = providers.Singleton(
-        EbookParser,
-        books_dir,
-        epub_cache_dir=epub_cache_dir
-    )
+    ebook_parser = providers.Singleton(EbookParser, books_dir, epub_cache_dir=epub_cache_dir)
 
     # Smil Extractor Provider
-    smil_extractor = providers.Singleton(
-        SmilExtractor
-    )
+    smil_extractor = providers.Singleton(SmilExtractor)
 
-    polisher = providers.Singleton(
-        Polisher
-    )
+    polisher = providers.Singleton(Polisher)
 
-    alignment_service = providers.Singleton(
-        AlignmentService,
-        database_service=database_service,
-        polisher=polisher
-    )
+    alignment_service = providers.Singleton(AlignmentService, database_service=database_service, polisher=polisher)
 
     library_service = providers.Singleton(
         LibraryService,
@@ -130,71 +102,49 @@ class Container(containers.DeclarativeContainer):
         booklore_client=booklore_client,
         cwa_client=cwa_client,
         abs_client=abs_client,
-        epub_cache_dir=epub_cache_dir
+        epub_cache_dir=epub_cache_dir,
     )
 
     migration_service = providers.Singleton(
-        MigrationService,
-        database_service=database_service,
-        alignment_service=alignment_service,
-        data_dir=data_dir
+        MigrationService, database_service=database_service, alignment_service=alignment_service, data_dir=data_dir
     )
 
     # Storyteller client with factory
-    storyteller_client = providers.Singleton(
-        StorytellerAPIClient
+    storyteller_client = providers.Singleton(StorytellerAPIClient)
+
+    # Storyteller Submission Service
+    storyteller_import_dir = providers.Callable(lambda: os.environ.get("STORYTELLER_IMPORT_DIR", "").strip() or None)
+
+    storyteller_submission_service = providers.Singleton(
+        StorytellerSubmissionService,
+        storyteller_client=storyteller_client,
+        abs_client=abs_client,
+        database_service=database_service,
+        import_dir=storyteller_import_dir,
     )
 
     # Transcriber
-    transcriber = providers.Singleton(
-        AudioTranscriber,
-        data_dir,
-        smil_extractor,
-        polisher
-    )
+    transcriber = providers.Singleton(AudioTranscriber, data_dir, smil_extractor, polisher)
 
     # Sync clients
     abs_sync_client = providers.Singleton(
-        ABSSyncClient,
-        abs_client,
-        transcriber,
-        ebook_parser,
-        alignment_service,
-        data_dir
+        ABSSyncClient, abs_client, transcriber, ebook_parser, alignment_service, data_dir
     )
 
-    kosync_sync_client = providers.Singleton(
-        KoSyncSyncClient,
-        kosync_client,
-        ebook_parser
-    )
+    kosync_sync_client = providers.Singleton(KoSyncSyncClient, kosync_client, ebook_parser)
 
     storyteller_sync_client = providers.Singleton(
-        StorytellerSyncClient,
-        storyteller_client,
-        ebook_parser,
-        database_service
+        StorytellerSyncClient, storyteller_client, ebook_parser, database_service
     )
 
     booklore_sync_client = providers.Singleton(
-        BookloreSyncClient,
-        booklore_client,
-        ebook_parser,
-        client_name="BookLore"
+        BookloreSyncClient, booklore_client, ebook_parser, client_name="BookLore"
     )
 
-    abs_ebook_sync_client = providers.Singleton(
-        ABSEbookSyncClient,
-        abs_client,
-        ebook_parser
-    )
+    abs_ebook_sync_client = providers.Singleton(ABSEbookSyncClient, abs_client, ebook_parser)
 
     hardcover_sync_client = providers.Singleton(
-        HardcoverSyncClient,
-        hardcover_client,
-        ebook_parser,
-        abs_client,
-        database_service
+        HardcoverSyncClient, hardcover_client, ebook_parser, abs_client, database_service
     )
 
     # Suggestion Service
@@ -220,6 +170,7 @@ class Container(containers.DeclarativeContainer):
         alignment_service=alignment_service,
         library_service=library_service,
         storyteller_client=storyteller_client,
+        storyteller_submission_service=storyteller_submission_service,
         epub_cache_dir=epub_cache_dir,
         data_dir=data_dir,
         books_dir=books_dir,
@@ -232,7 +183,7 @@ class Container(containers.DeclarativeContainer):
         KoSync=kosync_sync_client,
         Storyteller=storyteller_sync_client,
         BookLore=booklore_sync_client,
-        Hardcover=hardcover_sync_client
+        Hardcover=hardcover_sync_client,
     )
 
     # Sync Manager
@@ -246,21 +197,20 @@ class Container(containers.DeclarativeContainer):
         ebook_parser=ebook_parser,
         database_service=database_service,
         sync_clients=sync_clients,
-
         alignment_service=alignment_service,
         library_service=library_service,
         migration_service=migration_service,
         suggestion_service=suggestion_service,
         background_job_service=background_job_service,
-
         epub_cache_dir=epub_cache_dir,
         data_dir=data_dir,
-        books_dir=books_dir
+        books_dir=books_dir,
     )
 
 
 # Global container instance
 container = Container()
+
 
 def create_container() -> Container:
     """Create and configure the DI container with all application dependencies."""

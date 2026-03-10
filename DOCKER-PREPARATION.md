@@ -60,6 +60,14 @@ Currently `faster-whisper==1.2.1` is always installed even if the user picks Dee
 
 **Approach**: Split into `requirements.txt` (core) and `requirements-whisper.txt` (local whisper) with a Dockerfile build arg. This lets Pi/ARM users skip ctranslate2 entirely when using an external transcription provider.
 
+### Planned Change: Slim Docker Image (no Whisper)
+
+For users who exclusively use Storyteller for alignment (with `STORYTELLER_FORCE_MODE=true`) or an external transcription provider (Deepgram, whisper.cpp server), `faster-whisper` and its ~200MB+ of dependencies (`ctranslate2`, `tokenizers`, `huggingface_hub`) are dead weight in the image.
+
+**Approach**: Offer a `slim` Docker image tag built without `faster-whisper`. This would use a separate Dockerfile target or build arg (`BUILD_WHISPER=false`) that skips `requirements-whisper.txt`. The `AudioTranscriber` class would need graceful `ImportError` handling in `transcription_providers.py` to raise a clear error if local Whisper is requested but not installed.
+
+**Depends on**: The `requirements-whisper.txt` split above. Implement that first, then the slim image is just a build flag change.
+
 ---
 
 ## 3. Current Resource Consumption

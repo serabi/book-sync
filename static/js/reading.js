@@ -37,10 +37,30 @@ function initReadingPage(currentYear) {
   const controlsModal = document.getElementById('reading-controls-modal');
   const controlsOpen = document.getElementById('reading-controls-open');
   const controlsClose = document.getElementById('reading-controls-close');
+  const mainTabs = Array.from(document.querySelectorAll('.r-main-tab-btn'));
+  const mainPanels = Array.from(document.querySelectorAll('.r-main-panel'));
+  const statsShell = document.getElementById('reading-stats-shell');
+  const statsYearSelect = document.getElementById('reading-stats-year');
 
   let activeFilter = 'all';
   let currentView = 'list';
   const desktopMedia = window.matchMedia('(min-width: 961px)');
+
+  function setMainTab(tabName) {
+    mainTabs.forEach(tab => {
+      const active = tab.dataset.mainTab === tabName;
+      tab.classList.toggle('active', active);
+      tab.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+    mainPanels.forEach(panel => {
+      panel.hidden = panel.dataset.mainPanel !== tabName;
+    });
+  }
+
+  mainTabs.forEach(tab => {
+    tab.addEventListener('click', () => setMainTab(tab.dataset.mainTab));
+  });
+  setMainTab('log');
 
   function syncSearchInputs(source) {
     const value = source ? source.value : '';
@@ -276,6 +296,85 @@ function initReadingPage(currentYear) {
   syncSearchInputs(searchInput || mobileSearchInput);
   applyFiltersAndSort();
 
+  function updateGoalCard(stats, year) {
+    const goalCount = document.getElementById('stats-goal-count');
+    const goalLabel = document.getElementById('stats-goal-label');
+    const goalProgress = document.getElementById('stats-goal-progress');
+    const goalRing = document.querySelector('.r-goal-widget--stats .r-goal-ring circle:last-child');
+    const yearLabel = document.getElementById('stats-year-label');
+    const totalTracked = document.getElementById('stats-total-tracked');
+
+    if (goalCount) {
+      goalCount.textContent = stats.goal_target ? `${stats.goal_completed}/${stats.goal_target}` : '+';
+    }
+    if (goalLabel) {
+      goalLabel.textContent = stats.goal_target ? `${year} goal` : 'Set goal';
+    }
+    if (goalProgress) {
+      goalProgress.textContent = `${Math.round(stats.goal_percent || 0)}%`;
+    }
+    if (yearLabel) {
+      yearLabel.textContent = year;
+    }
+    if (totalTracked) {
+      totalTracked.textContent = `${stats.total_tracked} tracked books total`;
+    }
+    if (goalRing) {
+      const dash = Math.min((stats.goal_percent || 0) * 1.257, 125.7);
+      goalRing.setAttribute('stroke-dasharray', `${dash} 125.7`);
+    }
+  }
+
+  function renderStatsChart(stats) {
+    const chart = document.getElementById('stats-chart');
+    if (!chart) return;
+    const values = stats.monthly_finished || [];
+    const labels = stats.monthly_labels || ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const maxValue = values.reduce((acc, value) => Math.max(acc, value), 0);
+
+    chart.querySelectorAll('.r-stats-bar-group').forEach((group, idx) => {
+      const value = values[idx] || 0;
+      const fill = group.querySelector('.r-stats-bar-fill');
+      const valueEl = group.querySelector('.r-stats-bar-value');
+      const labelEl = group.querySelector('.r-stats-bar-label');
+      if (fill) {
+        fill.style.height = `${maxValue > 0 ? ((value / maxValue) * 100).toFixed(1) : 0}%`;
+      }
+      if (valueEl) valueEl.textContent = value;
+      if (labelEl) labelEl.textContent = labels[idx] || '';
+    });
+  }
+
+  function renderStats(stats) {
+    const finished = document.getElementById('stats-books-finished');
+    const current = document.getElementById('stats-currently-reading');
+    const average = document.getElementById('stats-average-rating');
+    if (finished) finished.textContent = stats.books_finished;
+    if (current) current.textContent = stats.currently_reading;
+    if (average) average.textContent = stats.average_rating == null ? '\u2014' : Number(stats.average_rating).toFixed(2);
+    updateGoalCard(stats, stats.year);
+    renderStatsChart(stats);
+  }
+
+  function loadStats(year) {
+    return fetch(`/api/reading/stats/${year}`)
+      .then(r => {
+        if (!r.ok) throw new Error('Failed to load stats');
+        return r.json();
+      })
+      .then(data => {
+        renderStats(data);
+      })
+      .catch(err => console.debug('Stats load failed:', err));
+  }
+
+  if (statsYearSelect) {
+    statsYearSelect.addEventListener('change', () => {
+      const year = parseInt(statsYearSelect.value, 10) || currentYear;
+      loadStats(year);
+    });
+  }
+
   // ── Goal modal ─────────────────────────────────────────────
 
   const goalCard = document.getElementById('goal-card');
@@ -295,10 +394,11 @@ function initReadingPage(currentYear) {
 
   if (goalSave) {
     goalSave.addEventListener('click', () => {
+      const activeYear = parseInt(statsYearSelect?.value, 10) || currentYear;
       const target = parseInt(goalInput?.value, 10);
       if (!target || target < 1) return;
       goalSave.disabled = true;
-      fetch(`/api/reading/goal/${currentYear}`, {
+      fetch(`/api/reading/goal/${activeYear}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ target_books: target }),
@@ -309,54 +409,134 @@ function initReadingPage(currentYear) {
         })
         .then(data => {
           if (data.success) {
-            window.location.reload();
-            return;
+            return loadStats(activeYear).then(() => {
+              hideModal();
+              goalSave.disabled = false;
+            });
           }
           goalSave.disabled = false;
         })
         .catch(() => { goalSave.disabled = false; });
     });
   }
+
+  if (statsShell && statsYearSelect) {
+    loadStats(parseInt(statsYearSelect.value, 10) || currentYear);
+  }
 }
 
 
 function initReadingDetail() {
-  // ── Rating stars ──
+  // ── Rating stars (5 stars, half-star support) ──
   const rc = document.getElementById('rating-stars');
   if (rc) {
     const absId = rc.dataset.absId;
+    const hardcoverSyncAvailable = rc.dataset.hardcoverSyncAvailable === 'true';
     const stars = rc.querySelectorAll('.r-star-btn');
     const label = document.getElementById('rating-label');
+    const syncStatus = document.getElementById('rating-sync-status');
+
+    function formatRating(value) {
+      return Number(value).toFixed(value % 1 === 0 ? 0 : 1) + '/5';
+    }
+
+    function applyRatingState(value) {
+      const numeric = Number(value) || 0;
+      stars.forEach(star => {
+        const idx = parseInt(star.dataset.index, 10);
+        star.classList.remove('r-star-full', 'r-star-half', 'r-star-empty');
+        if (numeric >= idx) {
+          star.classList.add('r-star-full');
+        } else if (numeric >= idx - 0.5) {
+          star.classList.add('r-star-half');
+        } else {
+          star.classList.add('r-star-empty');
+        }
+      });
+      rc.dataset.rating = String(numeric);
+      if (label) label.textContent = numeric > 0 ? formatRating(numeric) : 'Rate';
+    }
+
+    function setSyncStatus(state, message) {
+      if (!syncStatus) return;
+      syncStatus.hidden = false;
+      syncStatus.className = `r-rating-sync r-rating-sync--${state}`;
+      syncStatus.textContent = message;
+    }
+
+    function submitRating(value) {
+      fetch(`/api/reading/book/${absId}/rating`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rating: value }),
+      })
+        .then(r => {
+          if (!r.ok) throw new Error('Failed to save rating');
+          return r.json();
+        })
+        .then(data => {
+          if (data.success) {
+            applyRatingState(data.rating);
+            if (!hardcoverSyncAvailable) {
+              if (syncStatus) syncStatus.hidden = true;
+            } else if (data.hardcover_synced) {
+              setSyncStatus('success', 'Synced to Hardcover');
+            } else if (data.hardcover_error) {
+              setSyncStatus('warning', 'Saved locally, Hardcover sync failed');
+            } else {
+              if (syncStatus) syncStatus.hidden = true;
+            }
+          }
+        })
+        .catch(() => {
+          setSyncStatus('error', 'Save failed — rating not saved');
+        });
+    }
+
+    function getStarValue(star, clientX) {
+      const idx = parseInt(star.dataset.index, 10);
+      const rect = star.getBoundingClientRect();
+      const isLeftHalf = (clientX - rect.left) < rect.width / 2;
+      return isLeftHalf ? idx - 0.5 : idx;
+    }
 
     stars.forEach(star => {
-      star.addEventListener('click', () => {
-        const value = parseInt(star.dataset.value, 10);
-        fetch(`/api/reading/book/${absId}/rating`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ rating: value }),
-        })
-          .then(r => {
-            if (!r.ok) throw new Error('Failed to save rating');
-            return r.json();
-          })
-          .then(data => {
-            if (data.success) {
-              stars.forEach((s, i) => {
-                s.classList.toggle('filled', i + 1 <= data.rating);
-                s.classList.remove('half');
-              });
-              if (label) label.textContent = data.rating + '/5';
-            }
-          })
-          .catch(() => {
-            // Optionally show user feedback
-          });
+      // Click / tap: left half → half star, right half → full star
+      star.addEventListener('click', (e) => {
+        submitRating(getStarValue(star, e.clientX));
+      });
+
+      // Touch: use touch coordinates for half-star detection
+      star.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        const touch = e.changedTouches[0];
+        submitRating(getStarValue(star, touch.clientX));
+      });
+
+      // Hover preview (desktop)
+      star.addEventListener('mousemove', (e) => {
+        const previewValue = getStarValue(star, e.clientX);
+        applyRatingState(previewValue);
+        if (label) label.textContent = formatRating(previewValue);
       });
     });
+
+    // Restore actual rating when mouse leaves the rating area
+    rc.addEventListener('mouseleave', () => {
+      applyRatingState(parseFloat(rc.dataset.rating || '0'));
+    });
+
+    applyRatingState(parseFloat(rc.dataset.rating || '0'));
   }
 
   // ── Date fields ──
+  function flashDateFeedback(input, ok, msg) {
+    const color = ok ? 'var(--color-success, #22c55e)' : 'var(--color-danger, red)';
+    input.style.outline = `2px solid ${color}`;
+    input.title = msg || '';
+    setTimeout(() => { input.style.outline = ''; input.title = ''; }, 2500);
+  }
+
   function bindDate(field, inputId) {
     const input = document.getElementById(inputId);
     if (!input) return;
@@ -371,14 +551,53 @@ function initReadingDetail() {
         .then(r => r.json())
         .then(data => {
           if (!data.success) {
-            input.style.outline = '2px solid var(--color-danger, red)';
-            setTimeout(() => { input.style.outline = ''; }, 2000);
+            flashDateFeedback(input, false, data.error || 'Save failed');
+          } else {
+            flashDateFeedback(input, true, 'Saved');
           }
+        })
+        .catch(() => {
+          flashDateFeedback(input, false, 'Save failed');
         });
     });
   }
   bindDate('started_at', 'started-at');
   bindDate('finished_at', 'finished-at');
+
+  // ── Sync Dates to Hardcover button ──
+  const hcSyncBtn = document.getElementById('hc-date-sync');
+  const hcSyncStatus = document.getElementById('hc-date-sync-status');
+  if (hcSyncBtn) {
+    hcSyncBtn.addEventListener('click', () => {
+      hcSyncBtn.disabled = true;
+      if (hcSyncStatus) { hcSyncStatus.hidden = true; }
+      fetch(`/api/reading/book/${hcSyncBtn.dataset.absId}/dates/sync-hardcover`, {
+        method: 'POST',
+      })
+        .then(r => {
+          if (!r.ok) return r.text().then(t => { throw new Error(t || 'Sync failed'); });
+          return r.json();
+        })
+        .then(data => {
+          hcSyncBtn.disabled = false;
+          if (hcSyncStatus) {
+            hcSyncStatus.hidden = false;
+            hcSyncStatus.className = `r-hc-date-sync-status ${data.success ? 'success' : 'error'}`;
+            hcSyncStatus.textContent = data.success ? 'Dates synced to Hardcover' : (data.error || 'Sync failed');
+            setTimeout(() => { hcSyncStatus.hidden = true; }, 4000);
+          }
+        })
+        .catch(() => {
+          hcSyncBtn.disabled = false;
+          if (hcSyncStatus) {
+            hcSyncStatus.hidden = false;
+            hcSyncStatus.className = 'r-hc-date-sync-status error';
+            hcSyncStatus.textContent = 'Sync failed';
+            setTimeout(() => { hcSyncStatus.hidden = true; }, 4000);
+          }
+        });
+    });
+  }
 
   // ── About This Book description expand/collapse ──
   const descWrap = document.getElementById('about-book-desc-wrap');
@@ -492,6 +711,12 @@ function initReadingDetail() {
         return;
       }
 
+      if (actionBtn.dataset.action === 'push-hardcover') {
+        openHcPushModal(journalId, item);
+        menu.classList.remove('open');
+        return;
+      }
+
       if (actionBtn.dataset.action !== 'delete') return;
       if (!confirm('Delete this journal entry?')) return;
       function flashError() {
@@ -522,6 +747,102 @@ function initReadingDetail() {
           if (btn) btn.setAttribute('aria-expanded', 'false');
         });
       }
+    });
+  }
+
+  // ── Hardcover Push Modal ──
+  const hcPushModal = document.getElementById('hc-push-modal');
+  const hcPushPreview = document.getElementById('hc-push-preview');
+  const hcPushPrivacy = document.getElementById('hc-push-privacy-select');
+  const hcPushConfirm = document.getElementById('hc-push-confirm');
+  let _hcPushJournalId = null;
+  let _hcPushItem = null;
+
+  function openHcPushModal(journalId, item) {
+    if (!hcPushModal) return;
+    _hcPushJournalId = journalId;
+    _hcPushItem = item;
+    const entry = item?.dataset.entry || item?.querySelector('.r-tl-text')?.textContent || '';
+    if (hcPushPreview) hcPushPreview.textContent = entry.length > 200 ? entry.slice(0, 200) + '...' : entry;
+    if (hcPushPrivacy) hcPushPrivacy.value = hcPushModal.dataset.privacyDefault || '3';
+    if (hcPushConfirm) {
+      hcPushConfirm.disabled = false;
+      hcPushConfirm.textContent = 'Push';
+    }
+    hcPushModal.style.display = 'flex';
+  }
+  window.openHcPushModal = openHcPushModal;
+
+  function closeHcPushModal() {
+    if (hcPushModal) hcPushModal.style.display = 'none';
+    _hcPushJournalId = null;
+    _hcPushItem = null;
+  }
+  window.closeHcPushModal = closeHcPushModal;
+
+  if (hcPushConfirm) {
+    hcPushConfirm.addEventListener('click', () => {
+      if (!_hcPushJournalId) return;
+      const privacy = parseInt(hcPushPrivacy?.value, 10) || 3;
+      hcPushConfirm.disabled = true;
+      hcPushConfirm.textContent = 'Pushing...';
+
+      fetch(`/api/reading/journal/${_hcPushJournalId}/push-hardcover`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ privacy }),
+      })
+        .then(r => {
+          if (!r.ok) return r.text().then(t => { throw new Error(t || 'Push failed'); });
+          return r.json();
+        })
+        .then(data => {
+          if (data.success) {
+            // Update the menu button in the timeline to show success
+            if (_hcPushItem) {
+              const pushBtn = _hcPushItem.querySelector('[data-action="push-hardcover"]');
+              if (pushBtn) {
+                pushBtn.textContent = 'Pushed \u2713';
+                pushBtn.classList.add('r-tl-menu-item--success');
+                pushBtn.disabled = true;
+              }
+            }
+            closeHcPushModal();
+          } else {
+            hcPushConfirm.textContent = data.error || 'Failed';
+            hcPushConfirm.disabled = false;
+            setTimeout(() => { hcPushConfirm.textContent = 'Push'; }, 2500);
+          }
+        })
+        .catch(() => {
+          hcPushConfirm.textContent = 'Failed';
+          hcPushConfirm.disabled = false;
+          setTimeout(() => { hcPushConfirm.textContent = 'Push'; }, 2500);
+        });
+    });
+  }
+
+  // ── Journal Sync Toggle ──
+  const syncToggle = document.getElementById('journal-sync-toggle');
+  if (syncToggle) {
+    syncToggle.addEventListener('change', () => {
+      const absId = syncToggle.dataset.absId;
+      const value = syncToggle.checked ? 'on' : 'off';
+      fetch(`/api/reading/book/${absId}/journal-sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ journal_sync: value }),
+      })
+        .then(r => {
+          if (!r.ok) throw new Error('Request failed');
+          return r.json();
+        })
+        .then(data => {
+          if (!data.success) syncToggle.checked = !syncToggle.checked;
+        })
+        .catch(() => {
+          syncToggle.checked = !syncToggle.checked;
+        });
     });
   }
 }

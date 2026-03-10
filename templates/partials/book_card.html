@@ -68,7 +68,9 @@ else 0 %}
             <span>Queued for processing</span>
         </div>
         {% elif mapping.status == 'failed_retry_later' %}
+        {% if mapping.storyteller_submission_status not in ['queued', 'processing'] %}
         <div class="retry-status-text">Retry scheduled{% if mapping.retry_count|default(0) > 0 %} (attempt {{ mapping.retry_count }}){% endif %}</div>
+        {% endif %}
         {% elif mapping.status in ['active', 'paused', 'dnf', 'not_started'] %}
         <div class="book-progress {% if mapping.status == 'paused' %}progress-paused{% elif mapping.status == 'dnf' %}progress-dnf{% endif %}">
             <div class="progress-bar">
@@ -89,6 +91,24 @@ else 0 %}
         {% endif %}
         {% endif %}
 
+        {# Storyteller submission status badge #}
+        {% if mapping.storyteller_submission_status in ['queued', 'processing'] %}
+        <div class="storyteller-status-text st-pending">
+            <span class="st-pending-dot"></span>
+            <span>Awaiting Storyteller processing</span>
+        </div>
+        {% elif mapping.storyteller_submission_status == 'ready' %}
+        <div class="storyteller-status-text st-ready">
+            <span class="st-ready-icon">✦</span>
+            <span>Storyteller aligned</span>
+        </div>
+        {% elif mapping.storyteller_submission_status == 'failed' %}
+        <div class="storyteller-status-text st-failed">
+            <span>⚠</span>
+            <span>Storyteller submission failed</span>
+        </div>
+        {% endif %}
+
         {# Attach action buttons for incomplete book types #}
         {% if bt == 'audio-only' %}
         <div class="attach-action">
@@ -107,7 +127,7 @@ else 0 %}
         {% endif %}
 
         <div class="card-footer">
-            <div class="last-sync">{% if mapping.status == 'processing' %}Processing...{% elif mapping.status == 'pending' %}Queued{% elif mapping.status == 'failed_retry_later' %}Retry pending{% else %}Synced {{ mapping.last_sync }}{% endif %}</div>
+            <div class="last-sync">{% if mapping.status == 'processing' %}Processing...{% elif mapping.status == 'pending' %}Queued{% elif mapping.status == 'failed_retry_later' %}{% if mapping.storyteller_submission_status in ['queued', 'processing'] %}Awaiting Storyteller{% else %}Retry pending{% endif %}{% else %}Synced {{ mapping.last_sync }}{% endif %}</div>
             <div class="card-menu">
                 <button class="card-menu-trigger" aria-label="Actions" aria-expanded="false">⋮</button>
                 <div class="card-menu-dropdown">
@@ -238,12 +258,17 @@ else 0 %}
                             {# Hardcover #}
                             {% if integrations.hardcover %}
                             <div class="service-item progress-item-hc">
-                                <a href="{{ mapping.hardcover_url|default('https://hardcover.app') }}" target="_blank"
+                                <a href="{{ mapping.hardcover_url or 'https://hardcover.app' }}" target="_blank"
                                     rel="noopener noreferrer"
                                     title="{% if mapping.hardcover_book_id %}Open {{ mapping.hardcover_title }} in Hardcover{% else %}Not linked to Hardcover{% endif %}"
                                     class="hc-link {% if not mapping.hardcover_book_id %}pe-none{% endif %}">
-                                    <img src="/static/hardcover.svg" alt="HC"
-                                        class="service-icon {% if not mapping.hardcover_book_id %}grayscale-muted{% endif %}">
+                                    <span class="service-icon-wrap">
+                                        <img src="/static/hardcover.svg" alt="HC"
+                                            class="service-icon {% if not mapping.hardcover_book_id %}grayscale-muted{% endif %}">
+                                        {% if mapping.hardcover_status_mismatch %}
+                                        <span class="hc-mismatch-dot" title="Hardcover status differs from local"></span>
+                                        {% endif %}
+                                    </span>
                                 </a>
                                 <span class="service-name">Hardcover</span>
                                 <span class="service-value cursor-pointer color-inherit" title="Click to edit Hardcover link"

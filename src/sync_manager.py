@@ -112,6 +112,7 @@ class SyncManager:
                 alignment_service=alignment_service,
                 library_service=library_service,
                 storyteller_client=storyteller_client,
+                storyteller_submission_service=None,
                 epub_cache_dir=self.epub_cache_dir,
                 data_dir=data_dir,
                 books_dir=books_dir,
@@ -136,6 +137,7 @@ class SyncManager:
 
         self.startup_checks()
         self.background_job_service.cleanup_stale_jobs()
+        self.background_job_service.prune_hardcover_sync_logs()
 
 
     def _setup_sync_clients(self, clients: dict[str, SyncClient]):

@@ -13,6 +13,8 @@ Key features:
 
 import logging
 import os
+import threading
+import time
 from datetime import date
 
 import requests
@@ -25,19 +27,23 @@ logger = logging.getLogger(__name__)
 class HardcoverClient:
     def __init__(self):
         self.api_url = "https://api.hardcover.app/v1/graphql"
-        self.token = os.environ.get("HARDCOVER_TOKEN")
         self.user_id = None
 
-        if self.token:
-            self.token = self.token.strip()
-            if self.token.lower().startswith("bearer "):
-                self.token = self.token[7:].strip()
+        # Rate limiter: 1 req/sec gives comfortable headroom under 60 req/min limit
+        self._last_request_time = 0.0
+        self._rate_lock = threading.Lock()
+        self._min_interval = 1.0
 
-        if not self.token:
-            logger.info("HARDCOVER_TOKEN not set")
-            return
+    @property
+    def token(self) -> str | None:
+        raw = os.environ.get("HARDCOVER_TOKEN", "").strip()
+        if raw.lower().startswith("bearer "):
+            raw = raw[7:].strip()
+        return raw or None
 
-        self.headers = {
+    @property
+    def headers(self) -> dict:
+        return {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.token}",
             "User-Agent": "PageKeeper/1.0",
@@ -61,9 +67,25 @@ class HardcoverClient:
         logger.info(f"Hardcover client connection verified, user id: {user_id}")
         return True
 
+    def _rate_limit(self):
+        """Enforce minimum interval between API requests."""
+        wait = 0.0
+        with self._rate_lock:
+            now = time.monotonic()
+            elapsed = now - self._last_request_time
+            if elapsed < self._min_interval:
+                wait = self._min_interval - elapsed
+                self._last_request_time = now + wait
+            else:
+                self._last_request_time = now
+        if wait > 0:
+            time.sleep(wait)
+
     def query(self, query: str, variables: dict | None = None) -> dict | None:
         if not self.token:
             return None
+
+        self._rate_limit()
 
         try:
             r = requests.post(
@@ -72,6 +94,32 @@ class HardcoverClient:
                 headers=self.headers,
                 timeout=10,
             )
+
+            # Handle rate limiting (429) with exponential backoff
+            max_retries = 3
+            backoff = 5
+            attempt = 0
+            while r.status_code == 429 and attempt < max_retries:
+                attempt += 1
+                logger.warning(
+                    f"Hardcover rate limit hit (429), retry {attempt}/{max_retries} after {backoff}s"
+                )
+                time.sleep(backoff)
+                with self._rate_lock:
+                    self._last_request_time = time.monotonic()
+                r = requests.post(
+                    self.api_url,
+                    json={"query": query, "variables": variables or {}},
+                    headers=self.headers,
+                    timeout=10,
+                )
+                backoff *= 2
+
+            if r.status_code == 429:
+                logger.error(
+                    f"Hardcover rate limit persisted after {max_retries} retries, giving up"
+                )
+                return None
 
             if r.status_code == 200:
                 data = r.json()
@@ -597,6 +645,33 @@ class HardcoverClient:
             return result["insert_user_book"].get("user_book")
         return None
 
+    def update_user_book(self, user_book_id: int, updates: dict) -> dict | None:
+        """Update user_book metadata such as rating or status."""
+        query = """
+        mutation ($id: Int!, $object: UserBookUpdateInput!) {
+            update_user_book(id: $id, object: $object) {
+                error
+                user_book {
+                    id
+                    rating
+                    review
+                    review_has_spoilers
+                    status_id
+                    read_count
+                }
+            }
+        }
+        """
+
+        result = self.query(query, {"id": int(user_book_id), "object": updates})
+        if result and result.get("update_user_book"):
+            error = result["update_user_book"].get("error")
+            if error:
+                logger.error(f"Hardcover update_user_book error: {error}")
+                return None
+            return result["update_user_book"].get("user_book")
+        return None
+
     def _get_today_date(self) -> str:
         """Get today's date in YYYY-MM-DD format for Hardcover API."""
         return date.today().isoformat()
@@ -609,11 +684,20 @@ class HardcoverClient:
         is_finished: bool = False,
         current_percentage: float = 0.0,
         audio_seconds: int = None,
+        started_at: str = None,
+        finished_at: str = None,
+        force_dates: bool = False,
     ) -> bool:
         """
         Update reading progress.
         Uses current_percentage > 0.02 (2%) to decide when to set 'started_at'.
         For audiobook editions, pass audio_seconds to use progress_seconds instead of progress_pages.
+
+        Optional started_at/finished_at (YYYY-MM-DD strings) override the default
+        of using today's date when filling missing dates on the Hardcover read.
+
+        When force_dates is True, provided started_at/finished_at will overwrite
+        existing dates on the Hardcover read (used for user-initiated date edits).
         """
         # First check if there's an existing read
         read_query = """
@@ -641,20 +725,29 @@ class HardcoverClient:
             existing_read = read_result["user_book_reads"][0]
             read_id = existing_read["id"]
 
-            # Preserve existing dates
+            # Preserve existing dates unless force_dates is set
             started_at_val = existing_read.get("started_at")
             finished_at_val = existing_read.get("finished_at")
 
-            # If no start date exists, and we passed 2%, set it to today
-            if not started_at_val and should_start:
-                started_at_val = today
-                logger.info(
-                    f"Hardcover: Setting started_at to '{today}' (Progress: {current_percentage:.1%})"
-                )
+            if force_dates:
+                # User explicitly edited dates — overwrite HC values
+                if started_at is not None:
+                    started_at_val = started_at
+                    logger.info(f"Hardcover: Force-setting started_at to '{started_at_val}'")
+                if finished_at is not None:
+                    finished_at_val = finished_at
+                    logger.info(f"Hardcover: Force-setting finished_at to '{finished_at_val}'")
+            else:
+                # If no start date exists, and we passed 2%, fill it in
+                if not started_at_val and should_start:
+                    started_at_val = started_at or today
+                    logger.info(
+                        f"Hardcover: Setting started_at to '{started_at_val}' (Progress: {current_percentage:.1%})"
+                    )
 
-            if is_finished and not finished_at_val:
-                finished_at_val = today
-                logger.info(f"Hardcover: Setting finished_at to '{today}'")
+                if is_finished and not finished_at_val:
+                    finished_at_val = finished_at or today
+                    logger.info(f"Hardcover: Setting finished_at to '{finished_at_val}'")
 
             # Use progress_seconds for audiobooks, progress_pages for page-based editions
             if audio_seconds and audio_seconds > 0:
@@ -714,8 +807,8 @@ class HardcoverClient:
         else:
             # --- CREATE NEW READ ---
             # Apply logic to new reads too
-            started_at_val = today if should_start else None
-            finished_at_val = today if is_finished else None
+            started_at_val = (started_at or today) if should_start else None
+            finished_at_val = (finished_at or today) if is_finished else None
 
             # Use progress_seconds for audiobooks, progress_pages for page-based editions
             if audio_seconds and audio_seconds > 0:
@@ -968,3 +1061,115 @@ class HardcoverClient:
                 "slug": book.get("slug"),
             })
         return results
+
+    def get_currently_reading(self) -> dict:
+        """Bulk-fetch all user_books with Want to Read (1), Currently Reading (2), or Paused (4) status.
+
+        Returns dict keyed by book_id for quick lookup.
+        """
+        query = """
+        query {
+            me {
+                user_books(where: {status_id: {_in: [1, 2, 4]}}) {
+                    id
+                    status_id
+                    book_id
+                    edition_id
+                    user_book_reads(order_by: {id: desc}, limit: 1) {
+                        id
+                        started_at
+                        finished_at
+                        progress_pages
+                        progress_seconds
+                    }
+                }
+            }
+        }
+        """
+        result = self.query(query)
+        if not result or not result.get("me"):
+            return {}
+
+        me = result["me"]
+        if isinstance(me, list):
+            me = me[0] if me else {}
+
+        user_books = me.get("user_books", [])
+        return {ub["book_id"]: ub for ub in user_books}
+
+    def get_all_editions(self, book_id: int) -> dict:
+        """Fetch all default editions for a book, keyed by format type.
+
+        Returns dict like {'ebook': {...}, 'audio': {...}, 'physical': {...}}.
+        """
+        query = """
+        query ($bookId: Int!) {
+            books_by_pk(id: $bookId) {
+                default_ebook_edition {
+                    id
+                    pages
+                }
+                default_physical_edition {
+                    id
+                    pages
+                }
+                default_audio_edition {
+                    id
+                    audio_seconds
+                }
+            }
+        }
+        """
+        result = self.query(query, {"bookId": book_id})
+        editions = {}
+        if result and result.get("books_by_pk"):
+            book = result["books_by_pk"]
+            if book.get("default_ebook_edition"):
+                editions['ebook'] = book["default_ebook_edition"]
+            if book.get("default_physical_edition"):
+                editions['physical'] = book["default_physical_edition"]
+            if book.get("default_audio_edition"):
+                editions['audio'] = book["default_audio_edition"]
+        return editions
+
+    def create_reading_journal(self, book_id: int, edition_id: int | None,
+                               event: str, action_at: str | None = None,
+                               entry: str | None = None,
+                               privacy_setting_id: int = 3) -> bool:
+        """Create a reading journal entry on Hardcover.
+
+        Events: 'started_reading', 'finished_reading', 'note', etc.
+        entry: optional text content for notes/highlights.
+        privacy_setting_id: 1=public, 2=followers, 3=private (default).
+        """
+        query = """
+        mutation ($object: ReadingJournalCreateType!) {
+            insert_reading_journal(object: $object) {
+                error
+                reading_journal { id }
+            }
+        }
+        """
+        obj = {
+            "book_id": int(book_id),
+            "event": event,
+            "privacy_setting_id": privacy_setting_id,
+            "tags": [],
+        }
+        if edition_id:
+            obj["edition_id"] = int(edition_id)
+        if action_at:
+            obj["action_at"] = action_at
+        if entry:
+            obj["entry"] = entry
+
+        result = self.query(query, {"object": obj})
+        if result and result.get("insert_reading_journal"):
+            errors = result["insert_reading_journal"].get("errors")
+            if errors:
+                logger.error(f"Hardcover create_reading_journal error: {errors}")
+                return False
+            if result["insert_reading_journal"].get("reading_journal"):
+                return True
+            logger.error("Hardcover create_reading_journal: no reading_journal in response")
+        return False

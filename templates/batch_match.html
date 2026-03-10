@@ -156,6 +156,20 @@
                                 </button>
                                 {% endfor %}
                             </div>
+                            {% if storyteller_submit_available %}
+                            <label class="storyteller-submit-option">
+                                {% if storyteller_force_mode %}
+                                <input type="checkbox" name="storyteller_submit" value="1" checked disabled>
+                                <input type="hidden" name="storyteller_submit" value="1">
+                                Use Storyteller for alignment
+                                <span class="storyteller-submit-note">(forced via Settings &rarr; Audiobooks)</span>
+                                {% else %}
+                                <input type="checkbox" name="storyteller_submit" value="1">
+                                Use Storyteller for alignment
+                                {% endif %}
+                            </label>
+                            <div class="storyteller-submit-detail">PageKeeper will send this book to Storyteller and wait for it to finish before syncing. No processing will happen inside the PageKeeper container.</div>
+                            {% endif %}
                         </div>
                     </div>
 

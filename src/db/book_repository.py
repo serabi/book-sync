@@ -14,6 +14,7 @@ from .models import (
     KosyncDocument,
     ReadingJournal,
     State,
+    StorytellerSubmission,
 )
 
 logger = logging.getLogger(__name__)
@@ -62,6 +63,9 @@ class BookRepository(BaseRepository):
             session.query(KosyncDocument).filter(
                 KosyncDocument.linked_abs_id == abs_id
             ).update({KosyncDocument.linked_abs_id: None})
+            session.query(StorytellerSubmission).filter(
+                StorytellerSubmission.abs_id == abs_id
+            ).delete()
             book = session.query(Book).filter(Book.abs_id == abs_id).first()
             if book:
                 session.delete(book)

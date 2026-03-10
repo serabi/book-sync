@@ -182,6 +182,13 @@ class HardcoverDetails(Base):
     matched_by = Column(String(50))  # 'isbn', 'asin', 'title_author', 'title'
     hardcover_cover_url = Column(String(500), nullable=True)
 
+    # Cached bidirectional sync columns
+    hardcover_user_book_id = Column(Integer, nullable=True)
+    hardcover_user_book_read_id = Column(Integer, nullable=True)
+    hardcover_status_id = Column(Integer, nullable=True)
+    hardcover_audio_edition_id = Column(String(255), nullable=True)
+    journal_sync = Column(String(10), nullable=True)  # 'on', 'off', or None (use global default)
+
     # Relationship
     book = relationship("Book", back_populates="hardcover_details")
 
@@ -189,7 +196,10 @@ class HardcoverDetails(Base):
                  hardcover_edition_id: str = None,
                  hardcover_pages: int = None, hardcover_audio_seconds: int = None,
                  isbn: str = None, asin: str = None, matched_by: str = None,
-                 hardcover_cover_url: str = None):
+                 hardcover_cover_url: str = None,
+                 hardcover_user_book_id: int = None, hardcover_user_book_read_id: int = None,
+                 hardcover_status_id: int = None, hardcover_audio_edition_id: str = None,
+                 journal_sync: str = None):
         self.abs_id = abs_id
         self.hardcover_book_id = hardcover_book_id
         self.hardcover_slug = hardcover_slug
@@ -200,9 +210,73 @@ class HardcoverDetails(Base):
         self.asin = asin
         self.matched_by = matched_by
         self.hardcover_cover_url = hardcover_cover_url
+        self.hardcover_user_book_id = hardcover_user_book_id
+        self.hardcover_user_book_read_id = hardcover_user_book_read_id
+        self.hardcover_status_id = hardcover_status_id
+        self.hardcover_audio_edition_id = hardcover_audio_edition_id
+        self.journal_sync = journal_sync
 
     def __repr__(self):
         return f"<HardcoverDetails(abs_id='{self.abs_id}', hardcover_book_id='{self.hardcover_book_id}')>"
+
+
+class HardcoverSyncLog(Base):
+    """Log of Hardcover sync actions for debugging and visibility."""
+    __tablename__ = 'hardcover_sync_logs'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    abs_id = Column(String(255), ForeignKey('books.abs_id', ondelete='SET NULL'), nullable=True, index=True)
+    book_title = Column(String(500), nullable=True)
+    direction = Column(String(4), nullable=False)   # 'push' or 'pull'
+    action = Column(String(30), nullable=False, index=True)
+    detail = Column(Text, nullable=True)             # JSON blob
+    success = Column(Boolean, default=True)
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    book = relationship("Book", backref="hardcover_sync_logs")
+
+    def __init__(self, abs_id=None, book_title=None, direction='push', action='',
+                 detail=None, success=True, error_message=None, created_at=None):
+        self.abs_id = abs_id
+        self.book_title = book_title
+        self.direction = direction
+        self.action = action
+        self.detail = detail
+        self.success = success
+        self.error_message = error_message
+        self.created_at = created_at or datetime.utcnow()
+
+    def __repr__(self):
+        return f"<HardcoverSyncLog(id={self.id}, action='{self.action}', direction='{self.direction}')>"
+
+
+class StorytellerSubmission(Base):
+    """Tracks books submitted to Storyteller for narrated EPUB3 creation."""
+    __tablename__ = 'storyteller_submissions'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    abs_id = Column(String(255), ForeignKey('books.abs_id', ondelete='CASCADE'), nullable=False, index=True)
+    status = Column(String(20), nullable=False, default='queued')  # queued, processing, ready, failed
+    submission_dir = Column(String(500), nullable=True)
+    storyteller_uuid = Column(String(36), nullable=True)
+    error = Column(Text, nullable=True)
+    submitted_at = Column(DateTime, default=datetime.utcnow)
+    last_checked_at = Column(DateTime, nullable=True)
+
+    book = relationship("Book", backref="storyteller_submissions")
+
+    def __init__(self, abs_id: str, status: str = 'queued', submission_dir: str = None,
+                 storyteller_uuid: str = None, error: str = None):
+        self.abs_id = abs_id
+        self.status = status
+        self.submission_dir = submission_dir
+        self.storyteller_uuid = storyteller_uuid
+        self.error = error
+        self.submitted_at = datetime.utcnow()
+
+    def __repr__(self):
+        return f"<StorytellerSubmission(id={self.id}, abs_id='{self.abs_id}', status='{self.status}')>"
 
 
 class State(Base):

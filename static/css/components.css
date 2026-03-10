@@ -667,6 +667,45 @@ select:focus {
   margin-bottom: 6px;
 }
 
+.storyteller-waiting-text {
+  font-size: 11px;
+  color: var(--color-warning, #e0a030);
+  margin-bottom: 6px;
+}
+
+/* Storyteller submission status */
+.storyteller-status-text {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  margin-bottom: 6px;
+}
+
+.storyteller-status-text.st-pending {
+  color: var(--color-storyteller);
+}
+
+.storyteller-status-text.st-ready {
+  color: var(--color-success);
+}
+
+.storyteller-status-text.st-failed {
+  color: var(--color-error);
+}
+
+.st-pending-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-storyteller);
+  animation: pending-pulse 1.5s ease-in-out infinite;
+}
+
+.st-ready-icon {
+  font-size: 12px;
+}
+
 .activity-notification {
   display: flex;
   align-items: center;

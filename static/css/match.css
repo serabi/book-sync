@@ -401,6 +401,34 @@ input[type="radio"] {
   padding: 18px;
 }
 
+.storyteller-submit-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  margin-top: 8px;
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+
+.storyteller-submit-option input[type="checkbox"] {
+  accent-color: var(--color-primary);
+}
+
+.storyteller-submit-note {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  font-style: italic;
+}
+
+.storyteller-submit-detail {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  margin-top: 0.25rem;
+  padding-left: 1.5rem;
+}
+
 .batch-select-card {
   width: 100%;
   border: 2px solid var(--color-border-light);

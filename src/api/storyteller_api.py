@@ -13,12 +13,6 @@ logger = logging.getLogger(__name__)
 
 class StorytellerAPIClient:
     def __init__(self):
-        raw_url = os.environ.get("STORYTELLER_API_URL", "http://localhost:8001").rstrip('/')
-        if raw_url and not raw_url.lower().startswith(('http://', 'https://')):
-            raw_url = f"http://{raw_url}"
-        self.base_url = raw_url
-        self.username = os.environ.get("STORYTELLER_USER")
-        self.password = os.environ.get("STORYTELLER_PASSWORD")
         self._book_cache: dict[str, dict] = {}
         self._cache_timestamp = 0
         self._token = None
@@ -26,6 +20,21 @@ class StorytellerAPIClient:
         self._token_max_age = 30
         self.session = requests.Session()
         self.session.headers.update({"Content-Type": "application/json"})
+
+    @property
+    def base_url(self) -> str:
+        raw_url = os.environ.get("STORYTELLER_API_URL", "http://localhost:8001").rstrip('/')
+        if raw_url and not raw_url.lower().startswith(('http://', 'https://')):
+            raw_url = f"http://{raw_url}"
+        return raw_url
+
+    @property
+    def username(self) -> str | None:
+        return os.environ.get("STORYTELLER_USER")
+
+    @property
+    def password(self) -> str | None:
+        return os.environ.get("STORYTELLER_PASSWORD")
 
     def clear_cache(self):
         """Call at start of each sync cycle to refresh."""
@@ -60,29 +69,19 @@ class StorytellerAPIClient:
 
     def _make_request(self, method: str, endpoint: str, json_data: dict = None) -> requests.Response | None:
         token = self._get_fresh_token()
-        if not token: return None
+        if not token:
+            return None
         headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
         try:
             url = f"{self.base_url}{endpoint}"
-            if method.upper() == "GET":
-                response = self.session.get(url, headers=headers, timeout=10)
-            elif method.upper() == "POST":
-                response = self.session.post(url, headers=headers, json=json_data, timeout=10)
-            elif method.upper() == "PUT":
-                response = self.session.put(url, headers=headers, json=json_data, timeout=10)
-            else: return None
-
+            response = self.session.request(method, url, headers=headers, json=json_data, timeout=10)
             if response.status_code == 401:
                 self._token = None
                 token = self._get_fresh_token()
-                if not token: return None
+                if not token:
+                    return None
                 headers["Authorization"] = f"Bearer {token}"
-                if method.upper() == "GET":
-                    response = self.session.get(url, headers=headers, timeout=10)
-                elif method.upper() == "POST":
-                    response = self.session.post(url, headers=headers, json=json_data, timeout=10)
-                elif method.upper() == "PUT":
-                    response = self.session.put(url, headers=headers, json=json_data, timeout=10)
+                response = self.session.request(method, url, headers=headers, json=json_data, timeout=10)
             return response
         except Exception as e:
             logger.error(f"Storyteller API request failed ('{method}' '{endpoint}'): {e}")
@@ -218,6 +217,20 @@ class StorytellerAPIClient:
             else:
                 logger.warning(f"Storyteller API error: {response.status_code} - {response.text[:100]}")
 
+        return False
+
+    def trigger_processing(self, book_uuid: str) -> bool:
+        """Trigger Storyteller to start processing a book (alignment/transcription).
+
+        Must be called after files are placed in the import directory and
+        Storyteller has detected them. Without this call, books sit idle.
+        """
+        response = self._make_request("POST", f"/api/v2/books/{book_uuid}/process")
+        if response and response.status_code == 204:
+            logger.info(f"Storyteller: triggered processing for {book_uuid[:8]}...")
+            return True
+        status = response.status_code if response else "no response"
+        logger.warning(f"Storyteller: failed to trigger processing for {book_uuid[:8]}... (status: {status})")
         return False
 
     def search_books(self, query: str) -> list:
