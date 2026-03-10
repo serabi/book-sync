@@ -253,10 +253,15 @@ class StorytellerSubmissionService:
         except Exception:
             pass
 
-        # Poll for the book to appear in Storyteller (up to ~30 seconds)
+        # Poll for the book to appear in Storyteller.
+        # Storyteller's import watcher may take a while to detect new files,
+        # especially after large audio downloads.
+        timeout_secs = int(os.environ.get("STORYTELLER_IMPORT_DETECT_TIMEOUT", "120"))
+        poll_interval = 10
+        max_attempts = max(timeout_secs // poll_interval, 1)
         storyteller_uuid = None
-        for attempt in range(6):
-            time.sleep(5)
+        for attempt in range(max_attempts):
+            time.sleep(poll_interval)
             try:
                 results = self.storyteller_client.search_books(title)
                 for result in results:
@@ -275,7 +280,10 @@ class StorytellerSubmissionService:
                 logger.debug(f"Storyteller search attempt {attempt + 1} failed: {e}")
 
         if not storyteller_uuid:
-            logger.warning(f"Storyteller did not detect '{title}' within 30s — processing must be triggered manually")
+            logger.warning(
+                f"Storyteller did not detect '{title}' within {timeout_secs}s — "
+                "will retry on next status check"
+            )
             return None
 
         # Trigger processing
