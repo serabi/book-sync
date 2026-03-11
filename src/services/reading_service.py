@@ -8,7 +8,6 @@ from src.db.models import State
 from src.services.reading_date_service import (
     pull_reading_dates,
     push_booklore_read_status,
-    push_completion_to_clients,
 )
 from src.utils.logging_utils import sanitize_log_data
 
@@ -99,11 +98,17 @@ class ReadingService:
                 self.database_service.add_reading_journal(abs_id, event='started')
             else:
                 self.database_service.add_reading_journal(abs_id, event='resumed')
-        elif new_status == 'completed' and not book.finished_at:
-            updates = {'finished_at': today}
-            if not book.started_at:
-                updates['started_at'] = self.pull_started_at(abs_id, container)
-            self.database_service.update_book_reading_fields(abs_id, **updates)
+        elif new_status == 'completed':
+            updates = {}
+            if not book.finished_at:
+                updates['finished_at'] = today
+                if not book.started_at:
+                    updates['started_at'] = self.pull_started_at(abs_id, container)
+            else:
+                # Reread — increment read count
+                updates['read_count'] = (book.read_count or 1) + 1
+            if updates:
+                self.database_service.update_book_reading_fields(abs_id, **updates)
 
         if new_status in ('active', 'paused', 'dnf', 'completed'):
             logger.info(f"Book status changed to '{new_status}': "
