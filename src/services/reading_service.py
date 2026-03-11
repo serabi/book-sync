@@ -127,7 +127,7 @@ class ReadingService:
             if new_status == 'active' and old_status in ('dnf', 'paused', 'not_started', 'completed'):
                 push_booklore_read_status(book, container, 'READING')
             elif new_status == 'completed':
-                push_booklore_read_status(book, container, 'COMPLETED')
+                push_booklore_read_status(book, container, 'READ')
 
         return {'success': True, 'status': new_status, 'previous_status': old_status}
 
