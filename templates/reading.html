@@ -119,21 +119,22 @@
             </div>
         </div>
 
+        {% set effective_tab = active_tab if (active_tab == 'tbr' or total_books > 0) else 'tbr' %}
         <div class="r-main-tab-bar" role="tablist" aria-label="Reading sections">
             {% if total_books > 0 %}
-            <button class="r-main-tab-btn active" type="button" id="tab-log" role="tab" data-main-tab="log" aria-selected="true" aria-controls="panel-log">Log</button>
+            <button class="r-main-tab-btn{% if effective_tab == 'log' %} active{% endif %}" type="button" id="tab-log" role="tab" data-main-tab="log" aria-selected="{{ 'true' if effective_tab == 'log' else 'false' }}" aria-controls="panel-log">Log</button>
             {% endif %}
-            <button class="r-main-tab-btn{% if total_books == 0 %} active{% endif %}" type="button" id="tab-tbr" role="tab" data-main-tab="tbr" aria-selected="{% if total_books == 0 %}true{% else %}false{% endif %}" aria-controls="panel-tbr">
+            <button class="r-main-tab-btn{% if effective_tab == 'tbr' %} active{% endif %}" type="button" id="tab-tbr" role="tab" data-main-tab="tbr" aria-selected="{{ 'true' if effective_tab == 'tbr' else 'false' }}" aria-controls="panel-tbr">
                 Want to Read{% if tbr_count %} <span class="r-tab-badge">{{ tbr_count }}</span>{% endif %}
             </button>
             {% if total_books > 0 %}
-            <button class="r-main-tab-btn" type="button" id="tab-stats" role="tab" data-main-tab="stats" aria-selected="false" aria-controls="panel-stats">Stats</button>
+            <button class="r-main-tab-btn{% if effective_tab == 'stats' %} active{% endif %}" type="button" id="tab-stats" role="tab" data-main-tab="stats" aria-selected="{{ 'true' if effective_tab == 'stats' else 'false' }}" aria-controls="panel-stats">Stats</button>
             {% endif %}
         </div>
 
         {% if total_books > 0 %}
 
-        <div class="r-main-panel" id="panel-log" data-main-panel="log" role="tabpanel" aria-labelledby="tab-log">
+        <div class="r-main-panel" id="panel-log" data-main-panel="log" role="tabpanel" aria-labelledby="tab-log"{% if effective_tab != 'log' %} hidden{% endif %}>
         <div class="r-toolbar" id="reading-toolbar">
             <div class="r-toolbar-top">
                 <div class="r-filter-bar" role="tablist" aria-label="Reading status filters">
@@ -246,7 +247,7 @@
         </div>
         {% endif %}
 
-        <div class="r-main-panel" id="panel-tbr" data-main-panel="tbr" role="tabpanel" aria-labelledby="tab-tbr"{% if total_books > 0 %} hidden{% endif %}>
+        <div class="r-main-panel" id="panel-tbr" data-main-panel="tbr" role="tabpanel" aria-labelledby="tab-tbr"{% if effective_tab != 'tbr' %} hidden{% endif %}>
             <div class="r-tbr-header">
                 <div>
                     <p class="r-page-kicker">To Be Read</p>
@@ -319,7 +320,7 @@
             </div>
         </div>
 
-        <div class="r-main-panel" id="panel-stats" data-main-panel="stats" role="tabpanel" aria-labelledby="tab-stats" hidden>
+        <div class="r-main-panel" id="panel-stats" data-main-panel="stats" role="tabpanel" aria-labelledby="tab-stats"{% if effective_tab != 'stats' %} hidden{% endif %}>
             <section class="r-stats-shell" id="reading-stats-shell"
                      data-current-year="{{ current_year }}"
                      data-goal-default="{{ goal.target_books if goal else 12 }}">
@@ -431,7 +432,7 @@
 
     <script src="/static/js/reading.js?v=6"></script>
     <script>
-        initReadingPage({{ current_year }}, '{{ active_tab if total_books > 0 else 'tbr' }}');
+        initReadingPage({{ current_year }}, '{{ effective_tab }}');
         initTbrTab({{ 'true' if hc_configured else 'false' }});
     </script>
 </body>
