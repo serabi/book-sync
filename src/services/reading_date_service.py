@@ -2,7 +2,7 @@
 
 import logging
 import time
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 
 from src.db.models import State
 from src.services.hardcover_log_service import log_hardcover_action

@@ -6,8 +6,6 @@ from urllib.parse import urlparse
 
 from flask import Blueprint, flash, jsonify, redirect, request, url_for
 
-from src.services.hardcover_service import HC_WANT_TO_READ
-
 logger = logging.getLogger(__name__)
 
 # Create Blueprint for Hardcover endpoints

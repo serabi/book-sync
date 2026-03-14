@@ -252,8 +252,9 @@ class DatabaseService:
             unmatched = self._integrations.get_unmatched_bookfusion_highlights()
             if not unmatched:
                 return
-            from src.utils.title_utils import normalize_title, clean_book_title
             import difflib
+
+            from src.utils.title_utils import clean_book_title, normalize_title
             norm_book = normalize_title(book.abs_title)
             for hl in unmatched:
                 bf_title = clean_book_title(hl.book_title or '')

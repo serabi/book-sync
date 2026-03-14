@@ -13,11 +13,9 @@ from src.services.hardcover_log_service import log_hardcover_action
 from src.services.hardcover_service import (
     HC_CURRENTLY_READING,
     HC_DNF,
-    HC_IGNORED,
     HC_PAUSED,
     HC_READ,
     HC_WANT_TO_READ,
-    LOCAL_TO_HC_STATUS,
     PROGRESS_COMPLETE_THRESHOLD,
     PROGRESS_START_THRESHOLD,
 )
