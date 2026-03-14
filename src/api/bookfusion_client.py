@@ -385,6 +385,7 @@ class BookFusionClient:
         """
         cursor = db_service.get_bookfusion_sync_cursor()
         total_new = 0
+        all_new_ids = []
         all_books = {}
         seen_cursors = set()
         last_next_sync_cursor = None
@@ -430,7 +431,7 @@ class BookFusionClient:
                 for hl in (page.get('highlights') or []):
                     if not isinstance(hl, dict):
                         continue
-                    highlight_id = hl.get('id', '')
+                    highlight_id = str(hl.get('id', '')).strip()
                     if not highlight_id:
                         continue
                     content = hl.get('content') or ''
@@ -445,7 +446,9 @@ class BookFusionClient:
                     })
 
             if highlights_batch:
-                total_new += db_service.save_bookfusion_highlights(highlights_batch)
+                result = db_service.save_bookfusion_highlights(highlights_batch)
+                total_new += result['saved']
+                all_new_ids.extend(result['new_ids'])
 
             next_page = data.get('cursor')
             if next_page is None:
@@ -493,4 +496,4 @@ class BookFusionClient:
         if all_books:
             books_saved = db_service.save_bookfusion_books(list(all_books.values()))
 
-        return {'new_highlights': total_new, 'books_saved': books_saved}
+        return {'new_highlights': total_new, 'books_saved': books_saved, 'new_ids': all_new_ids}

@@ -1,6 +1,7 @@
 import logging
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import requests
 
@@ -104,9 +105,9 @@ class ABSClient:
                 return []
             libraries = r.json().get('libraries', [])
             all_audiobooks = []
-            for lib in libraries:
-                r_items = self.get_audiobooks_for_lib(lib['id'])
-                all_audiobooks.extend(r_items)
+            with ThreadPoolExecutor(max_workers=min(len(libraries) or 1, 4)) as pool:
+                for items in pool.map(self.get_audiobooks_for_lib, [lib['id'] for lib in libraries]):
+                    all_audiobooks.extend(items)
             self._audiobooks_cache = all_audiobooks
             self._audiobooks_cache_time = time.time()
             return all_audiobooks

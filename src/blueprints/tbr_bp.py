@@ -6,6 +6,7 @@ import logging
 from flask import Blueprint, jsonify, request
 
 from src.blueprints.helpers import get_container, get_database_service
+from src.services.hardcover_service import HC_IGNORED, HC_WANT_TO_READ
 
 logger = logging.getLogger(__name__)
 
@@ -96,8 +97,7 @@ def _enrich_tbr_item(item, data, database_service):
 
 def _pull_started_at(abs_id):
     """Pull started_at from Hardcover/ABS before falling back to today."""
-    from src.services.reading_date_service import pull_reading_dates
-    dates = pull_reading_dates(abs_id, get_container(), get_database_service())
+    dates = get_container().reading_date_service().pull_reading_dates(abs_id)
     return dates.get('started_at')
 
 
@@ -110,6 +110,34 @@ def get_tbr_items():
     database_service = get_database_service()
     items = database_service.get_tbr_items()
     return jsonify([_serialize_tbr_item(item) for item in items])
+
+
+@tbr_bp.route('/api/reading/tbr/from-library', methods=['POST'])
+def add_tbr_from_library():
+    """Create a TBR item pre-linked to an existing library book."""
+    database_service = get_database_service()
+    data = request.json or {}
+    abs_id = (data.get('abs_id') or '').strip()
+    if not abs_id:
+        return jsonify({"success": False, "error": "abs_id is required"}), 400
+
+    book = database_service.get_book(abs_id)
+    if not book:
+        return jsonify({"success": False, "error": "Book not found"}), 404
+
+    # Dedup: if TBR item already linked to this abs_id, return it
+    existing = database_service.find_tbr_by_abs_id(abs_id)
+    if existing:
+        return jsonify({"success": True, "created": False, "item": _serialize_tbr_item(existing)})
+
+    item, created = database_service.add_tbr_item(
+        title=book.abs_title or abs_id,
+        author=getattr(book, 'author', None),
+        source='library',
+        book_abs_id=abs_id,
+    )
+
+    return jsonify({"success": True, "created": created, "item": _serialize_tbr_item(item)})
 
 
 @tbr_bp.route('/api/reading/tbr/enrich', methods=['POST'])
@@ -203,7 +231,7 @@ def add_tbr_item():
         try:
             hc_client = get_container().hardcover_client()
             if hc_client.is_configured():
-                hc_client.update_status(hc_book_id, 1)  # 1 = Want to Read
+                hc_client.update_status(hc_book_id, HC_WANT_TO_READ)
         except Exception as e:
             logger.debug(f"Could not push Want to Read to Hardcover: {e}")
 
@@ -240,7 +268,7 @@ def delete_tbr_item(item_id):
         try:
             hc_client = get_container().hardcover_client()
             if hc_client.is_configured():
-                result = hc_client.update_status(int(item.hardcover_book_id), 6)  # 6 = Ignored
+                result = hc_client.update_status(int(item.hardcover_book_id), HC_IGNORED)
                 hc_removed = result is not None
                 if hc_removed:
                     logger.info(f"Hardcover: set book {item.hardcover_book_id} to Ignored (removed from Want to Read)")
@@ -266,7 +294,8 @@ def update_tbr_item(item_id):
         return jsonify({"success": False, "error": "No fields to update"}), 400
 
     allowed = {'notes', 'priority', 'title', 'author', 'cover_url', 'description',
-               'page_count', 'release_year', 'subtitle'}
+               'page_count', 'release_year', 'subtitle',
+               'hardcover_book_id', 'hardcover_slug'}
 
     updates = {}
     for key, value in data.items():
@@ -275,6 +304,13 @@ def update_tbr_item(item_id):
 
     if not updates:
         return jsonify({"success": False, "error": "No valid fields to update"}), 400
+
+    # Dedupe check: prevent reassigning hardcover_book_id to a duplicate
+    new_hc_id = updates.get('hardcover_book_id')
+    if new_hc_id and str(new_hc_id) != str(item.hardcover_book_id or ''):
+        existing = database_service.find_tbr_by_hardcover_id(new_hc_id)
+        if existing and existing.id != item_id:
+            return jsonify({"success": False, "error": "Another TBR item already has this Hardcover ID"}), 409
 
     updated = database_service.update_tbr_item(item_id, **updates)
     if not updated:
@@ -311,9 +347,9 @@ def start_tbr_item(item_id):
     # Push to Hardcover
     try:
         container = get_container()
-        hc_sync = container.hardcover_sync_client()
-        if hc_sync.is_configured():
-            hc_sync.push_local_status(book, 'active')
+        hc_service = container.hardcover_service()
+        if hc_service.is_configured():
+            hc_service.push_local_status(book, 'active')
     except Exception as e:
         logger.debug(f"Could not push active status to Hardcover: {e}")
 
@@ -417,11 +453,23 @@ def import_hardcover_wtr():
         if hc.hardcover_book_id:
             hc_id_to_abs[str(hc.hardcover_book_id)] = hc.abs_id
 
+    # Skip books already being read or finished in the local library
+    library_books = {b.abs_id: b for b in database_service.get_all_books()}
+    already_reading = {
+        hc_id for hc_id, abs_id in hc_id_to_abs.items()
+        if abs_id in library_books and library_books[abs_id].status in ('active', 'completed', 'paused', 'dnf')
+    }
+
     imported = 0
     skipped = 0
+    filtered = 0
     for book in wtr_books:
         hc_book_id = book.get('book_id')
         if not hc_book_id:
+            continue
+
+        if str(hc_book_id) in already_reading:
+            filtered += 1
             continue
 
         book_abs_id = hc_id_to_abs.get(str(hc_book_id))
@@ -443,7 +491,7 @@ def import_hardcover_wtr():
         else:
             skipped += 1
 
-    return jsonify({"success": True, "imported": imported, "skipped": skipped})
+    return jsonify({"success": True, "imported": imported, "skipped": skipped, "filtered": filtered})
 
 
 @tbr_bp.route('/api/reading/tbr/hardcover-lists', methods=['GET'])
@@ -502,11 +550,23 @@ def import_hardcover_list():
         if hc.hardcover_book_id:
             hc_id_to_abs[str(hc.hardcover_book_id)] = hc.abs_id
 
+    # Skip books already being read or finished in the local library
+    library_books = {b.abs_id: b for b in database_service.get_all_books()}
+    already_reading = {
+        hc_id for hc_id, abs_id in hc_id_to_abs.items()
+        if abs_id in library_books and library_books[abs_id].status in ('active', 'completed', 'paused', 'dnf')
+    }
+
     imported = 0
     skipped = 0
+    filtered = 0
     for book in list_data.get('books', []):
         hc_book_id = book.get('book_id')
         if not hc_book_id:
+            continue
+
+        if str(hc_book_id) in already_reading:
+            filtered += 1
             continue
 
         book_abs_id = hc_id_to_abs.get(str(hc_book_id))
@@ -534,6 +594,7 @@ def import_hardcover_list():
         "success": True,
         "imported": imported,
         "skipped": skipped,
+        "filtered": filtered,
         "list_name": list_name,
     })
 

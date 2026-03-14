@@ -33,6 +33,9 @@ def delete_mapping(abs_id):
         cleanup_mapping_resources(book)
 
     database_service.delete_book(abs_id)
+    next_url = request.args.get('next') or request.form.get('next')
+    if next_url and next_url.startswith('/'):
+        return redirect(next_url)
     return redirect(url_for('dashboard.index'))
 
 
@@ -87,9 +90,8 @@ def sync_now(abs_id):
         return jsonify({"success": False, "error": "Book not found"}), 404
 
     if book.status == 'completed':
-        from src.services.reading_date_service import push_completion_to_clients
         container = get_container()
-        push_completion_to_clients(book, container, database_service)
+        _get_reading_service().mark_complete_with_sync(abs_id, container)
         return jsonify({"success": True, "reload": True})
     else:
         threading.Thread(target=manager.sync_cycle, kwargs={'target_abs_id': abs_id}, daemon=True).start()

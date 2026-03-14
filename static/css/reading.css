@@ -1038,11 +1038,16 @@
 .r-hero-cover img,
 .r-hero-cover .r-cover-placeholder {
   width: 100%;
-  aspect-ratio: 2 / 3;
+  aspect-ratio: 1 / 1;
   object-fit: cover;
   border-radius: var(--radius);
   display: block;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.r-hero-cover--ebook img,
+.r-hero-cover--ebook .r-cover-placeholder {
+  aspect-ratio: 2 / 3;
 }
 
 .r-change-cover-btn {
@@ -1202,20 +1207,17 @@
 .r-detail-rating {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 2px;
   margin-top: 8px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .r-star-btn {
-  position: relative;
   background: none;
   border: none;
-  padding: 4px 2px;
-  min-width: 28px;
-  min-height: 32px;
-  font-size: 22px;
+  padding: 2px 1px;
+  font-size: 24px;
   cursor: pointer;
   transition: transform var(--transition);
   line-height: 1;
@@ -1224,16 +1226,6 @@
   background-clip: text;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
-}
-
-.r-star-btn::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  min-width: 44px;
-  min-height: 44px;
 }
 
 .r-star-btn:hover {
@@ -1256,12 +1248,12 @@
 .r-rating-label {
   font-size: 12px;
   color: var(--color-text-faint);
-  margin-left: 8px;
+  margin-left: 4px;
 }
 
 .r-rating-sync {
   margin-top: 8px;
-  text-align: center;
+  text-align: left;
   min-height: 18px;
   font-size: 12px;
   color: var(--color-text-faint);
@@ -1308,8 +1300,8 @@
   border: 1px solid var(--color-border);
   color: var(--color-text);
   color-scheme: dark;
-  padding: 6px 10px;
-  font-size: 13px;
+  padding: 5px 8px;
+  font-size: 11px;
   border-radius: var(--radius-sm);
   transition: border-color var(--transition);
 }
@@ -1793,15 +1785,17 @@ a.r-service-row-name:hover { text-decoration: underline; }
 }
 
 .r-journal-date-field {
-  padding: 14px 16px;
+  padding: 10px 12px;
   background: rgba(8, 11, 20, 0.28);
   border: 1px solid rgba(255,255,255,0.06);
-  border-radius: 16px;
+  border-radius: 12px;
 }
 
 .r-journal-date-field input[type="date"] {
   width: 100%;
-  margin-top: 8px;
+  margin-top: 6px;
+  font-size: 12px;
+  padding: 5px 8px;
 }
 
 .r-hc-date-sync-btn {
@@ -1960,6 +1954,7 @@ a.r-service-row-name:hover { text-decoration: underline; }
 .r-tl-dot-dnf      { border-color: var(--color-error); }
 .r-tl-dot-note     { border-color: var(--color-primary-hover); background: var(--color-primary-hover); }
 .r-tl-dot-highlight { border-color: var(--color-primary-hover); background: var(--color-primary-hover); }
+.r-tl-dot-progress { border-color: var(--color-info); }
 
 /* Body */
 .r-tl-body {
@@ -2000,6 +1995,7 @@ a.r-service-row-name:hover { text-decoration: underline; }
 .r-tl-event-dnf      { color: var(--color-error); }
 .r-tl-event-note     { color: var(--color-primary-hover); }
 .r-tl-event-highlight { color: var(--color-primary-hover); }
+.r-tl-event-progress { color: var(--color-info); }
 
 .r-tl-date {
   font-size: 12px;
@@ -2254,6 +2250,10 @@ a.r-service-row-name:hover { text-decoration: underline; }
     justify-content: center;
   }
 
+  .r-rating-sync {
+    text-align: center;
+  }
+
   .r-detail-dates {
     justify-content: center;
   }
@@ -2331,6 +2331,12 @@ a.r-service-row-name:hover { text-decoration: underline; }
   .r-journal-date-field .r-date-label {
     font-size: 9px;
     letter-spacing: 0.06em;
+  }
+
+  .r-journal-date-field input[type="date"] {
+    margin-top: 5px;
+    padding: 4px 7px;
+    font-size: 11px;
   }
 
   .r-journal-compose {
@@ -2550,10 +2556,10 @@ a.r-service-row-name:hover { text-decoration: underline; }
   }
 
   .r-journal-date-field input[type="date"] {
-    margin-top: 4px;
-    min-height: 28px;
-    padding: 4px 6px;
-    font-size: 13px;
+    margin-top: 3px;
+    min-height: 24px;
+    padding: 3px 4px;
+    font-size: 11px;
     line-height: 1.2;
     width: 100%;
     max-width: 100%;
@@ -3708,4 +3714,93 @@ a.r-service-row-name:hover { text-decoration: underline; }
   background: rgba(245, 166, 35, 0.15);
   border-color: rgba(245, 166, 35, 0.4);
   color: #f5a623;
+}
+
+/* ── TBR Filter Chips ── */
+.r-tbr-filter-chips {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+/* ── Library Backlog in TBR Tab ── */
+.r-library-backlog {
+  margin-top: 8px;
+}
+
+.r-library-backlog-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.r-tbr-card--library {
+  cursor: default;
+}
+
+.r-library-card-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.r-library-card-actions .btn-sm {
+  padding: 4px 10px;
+  font-size: 11px;
+}
+
+/* ── Highlights Tab Improvements ── */
+.r-highlights-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.r-highlight-chapter-heading {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 20px 0 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.r-highlight-chapter-heading:first-child {
+  margin-top: 0;
+}
+
+/* ── Match page mode selector ── */
+.r-match-mode-bar {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 16px;
+  padding: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 999px;
+  border: 1px solid var(--color-border-light);
+  width: fit-content;
+}
+
+.r-match-mode-btn {
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-muted);
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.r-match-mode-btn.active,
+.r-match-mode-btn:hover {
+  color: var(--color-text);
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.08);
 }

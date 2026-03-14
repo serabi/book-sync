@@ -96,27 +96,141 @@
   // ── Start Reading ──
   var startBtn = document.getElementById('start-reading-btn');
   if (startBtn) {
-    startBtn.addEventListener('click', function () {
-      var absId = startBtn.dataset.absId;
-      startBtn.disabled = true;
-      startBtn.textContent = 'Starting...';
-      fetch('/api/reading/tbr/' + itemId + '/start', { method: 'POST' })
-        .then(function (r) { return r.json(); })
-        .then(function (data) {
-          if (data.success) {
-            window.location.href = '/reading/book/' + absId;
-          } else {
-            showToast(data.error || 'Could not start reading');
-            startBtn.disabled = false;
-            startBtn.textContent = 'Start Reading';
-          }
-        })
-        .catch(function () {
-          showToast('Failed to start reading');
+    if (startBtn.dataset.unlinked === 'true') {
+      // Unlinked: show inline library search, then link + start
+      startBtn.addEventListener('click', function () {
+        showInlineStartSearch();
+      });
+    } else {
+      startBtn.addEventListener('click', function () {
+        doStartReading(startBtn.dataset.absId);
+      });
+    }
+  }
+
+  function doStartReading(absId) {
+    if (!startBtn) return;
+    startBtn.disabled = true;
+    startBtn.textContent = 'Starting...';
+    fetch('/api/reading/tbr/' + itemId + '/start', { method: 'POST' })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.success) {
+          window.location.href = '/reading/book/' + (data.abs_id || absId);
+        } else {
+          showToast(data.error || 'Could not start reading');
           startBtn.disabled = false;
           startBtn.textContent = 'Start Reading';
-        });
+        }
+      })
+      .catch(function () {
+        showToast('Failed to start reading');
+        startBtn.disabled = false;
+        startBtn.textContent = 'Start Reading';
+      });
+  }
+
+  function showInlineStartSearch() {
+    // Check if search UI already shown
+    if (document.getElementById('inline-start-search')) return;
+
+    var container = document.createElement('div');
+    container.id = 'inline-start-search';
+    container.style.cssText = 'margin-top: 12px; padding: 16px; background: rgba(255,255,255,0.04); border-radius: 12px; border: 1px solid var(--color-border-light);';
+
+    var label = document.createElement('p');
+    label.style.cssText = 'margin: 0 0 8px; font-size: 13px; color: var(--color-text-muted);';
+    label.textContent = 'Search your library to link and start reading:';
+    container.appendChild(label);
+
+    var searchRow = document.createElement('div');
+    searchRow.style.cssText = 'display: flex; gap: 8px;';
+    var input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'search-box';
+    input.placeholder = 'Search library by title...';
+    input.style.flex = '1';
+    searchRow.appendChild(input);
+    container.appendChild(searchRow);
+
+    var results = document.createElement('div');
+    results.style.cssText = 'margin-top: 8px;';
+    container.appendChild(results);
+
+    // Insert after the hero actions
+    var heroActions = startBtn.closest('.tbr-hero-actions');
+    if (heroActions) {
+      heroActions.parentNode.insertBefore(container, heroActions.nextSibling);
+    }
+
+    var timer = null;
+    input.addEventListener('input', function () {
+      clearTimeout(timer);
+      var q = input.value.trim();
+      if (q.length < 2) { clearEl(results); return; }
+      timer = setTimeout(function () {
+        makeStatusText(results, 'Searching...');
+        fetch('/api/reading/library-search?q=' + encodeURIComponent(q))
+          .then(function (r) { return r.json(); })
+          .then(function (books) {
+            clearEl(results);
+            if (!books.length) {
+              makeStatusText(results, 'No matching books found.');
+              return;
+            }
+            books.forEach(function (book) {
+              var row = document.createElement('div');
+              row.className = 'tbr-library-result';
+
+              var info = document.createElement('div');
+              info.style.cssText = 'flex: 1; min-width: 0;';
+              var t = document.createElement('div');
+              t.style.cssText = 'font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;';
+              t.textContent = book.title || book.abs_id;
+              info.appendChild(t);
+              row.appendChild(info);
+
+              var linkStartBtn = document.createElement('button');
+              linkStartBtn.className = 'btn btn-primary';
+              linkStartBtn.type = 'button';
+              linkStartBtn.textContent = 'Start Reading';
+              linkStartBtn.style.cssText = 'flex-shrink: 0; padding: 4px 12px; font-size: 12px;';
+              linkStartBtn.addEventListener('click', function () {
+                linkStartBtn.disabled = true;
+                linkStartBtn.textContent = 'Linking...';
+                // Chain: link → start
+                fetch('/api/reading/tbr/' + itemId + '/link', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ abs_id: book.abs_id }),
+                })
+                  .then(function (r) { return r.json(); })
+                  .then(function (data) {
+                    if (data.success) {
+                      doStartReading(book.abs_id);
+                    } else {
+                      showToast(data.error || 'Link failed');
+                      linkStartBtn.disabled = false;
+                      linkStartBtn.textContent = 'Start Reading';
+                    }
+                  })
+                  .catch(function () {
+                    showToast('Failed to link');
+                    linkStartBtn.disabled = false;
+                    linkStartBtn.textContent = 'Start Reading';
+                  });
+              });
+              row.appendChild(linkStartBtn);
+              results.appendChild(row);
+            });
+          })
+          .catch(function () {
+            makeStatusText(results, 'Search failed.', 'var(--color-error)');
+          });
+      }, 350);
     });
+
+    input.focus();
   }
 
   // ── Remove ──
@@ -322,6 +436,22 @@
   // ── HC Linker ──
   var linkHcBtn = document.getElementById('link-hc-btn');
   if (linkHcBtn) linkHcBtn.addEventListener('click', showHcLinker);
+
+  var changeHcBtn = document.getElementById('change-hc-btn');
+  if (changeHcBtn) changeHcBtn.addEventListener('click', showHcLinker);
+
+  var unlinkHcBtn = document.getElementById('unlink-hc-btn');
+  if (unlinkHcBtn) {
+    unlinkHcBtn.addEventListener('click', function () {
+      if (!confirm('Unlink this book from Hardcover?')) return;
+      patchItem({ hardcover_book_id: null, hardcover_slug: null }).then(function (ok) {
+        if (ok) {
+          showToast('Unlinked from Hardcover');
+          location.reload();
+        }
+      });
+    });
+  }
 
   function showHcLinker() {
     var backdrop = document.createElement('div');

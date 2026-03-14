@@ -174,6 +174,7 @@ def api_hardcover_resolve():
             "title": book_data.get("title"),
             "author": hardcover_author or author or "",
             "slug": book_data.get("slug"),
+            "cached_image": book_data.get("cached_image"),
             "editions": editions,
             "linked_edition_id": linked_edition_id,
         }
@@ -201,6 +202,7 @@ def link_hardcover(abs_id):
         audio_seconds = data.get("audio_seconds")
         title = data.get("title")
         slug = data.get("slug")
+        cached_image = data.get("cached_image")
 
         if not book_id:
             return jsonify({"error": "Missing book_id"}), 400
@@ -211,6 +213,13 @@ def link_hardcover(abs_id):
                 pages if pages is not None else (-1 if audio_seconds else None)
             )
 
+            # Determine cover URL: use provided cached_image, or preserve existing
+            cover_url = cached_image
+            if not cover_url:
+                existing = database_service.get_hardcover_details(abs_id)
+                if existing and existing.hardcover_cover_url:
+                    cover_url = existing.hardcover_cover_url
+
             hardcover_details = HardcoverDetails(
                 abs_id=abs_id,
                 hardcover_book_id=str(book_id),
@@ -218,23 +227,31 @@ def link_hardcover(abs_id):
                 hardcover_edition_id=str(edition_id) if edition_id else None,
                 hardcover_pages=hardcover_pages,
                 hardcover_audio_seconds=audio_seconds if audio_seconds else None,
+                hardcover_cover_url=cover_url,
                 matched_by="manual",
             )
 
             database_service.save_hardcover_details(hardcover_details)
-
-            # Force status to 'Want to Read' (1)
-            try:
-                container.hardcover_client().update_status(
-                    int(book_id), 1, int(edition_id) if edition_id else None
-                )
-            except Exception as e:
-                logger.warning(f"Failed to set Hardcover status: {e}")
-
-            return jsonify({"success": True, "title": title})
         except Exception as e:
             logger.error(f"Failed to save hardcover details: {e}")
             return jsonify({"error": "Database update failed"}), 500
+
+        # Post-link setup (non-fatal): resolve editions, create user_book, pull dates, push progress
+        try:
+            hc_service = container.hardcover_service()
+            hc_service.resolve_editions(hardcover_details)
+
+            book = database_service.get_book(abs_id)
+            if book:
+                hc_service._get_or_create_user_book(book, hardcover_details, edition_id)
+                hc_service._pull_dates_at_match(abs_id)
+                # Re-fetch: _pull_dates_at_match may have updated dates in DB
+                book = database_service.get_book(abs_id)
+                hc_service.push_initial_progress(book, container.hardcover_sync_client())
+        except Exception as e:
+            logger.warning(f"Post-link Hardcover setup failed (link saved): {e}")
+
+        return jsonify({"success": True, "title": title})
 
     # Legacy form data flow
     url = request.form.get("hardcover_url", "").strip()
@@ -258,19 +275,27 @@ def link_hardcover(abs_id):
         )
 
         database_service.save_hardcover_details(hardcover_details)
-
-        # Force status to 'Want to Read' (1)
-        try:
-            container.hardcover_client().update_status(
-                book_data["book_id"], 1, book_data.get("edition_id")
-            )
-        except Exception as e:
-            logger.warning(f"Failed to set Hardcover status: {e}")
-
-        flash(f"Linked Hardcover: {book_data.get('title')}", "success")
     except Exception as e:
         logger.error(f"Failed to save hardcover details: {e}")
         flash("Database update failed", "error")
+        return redirect(url_for("dashboard.index"))
+
+    # Post-link setup (non-fatal): resolve editions, create user_book, pull dates, push progress
+    try:
+        hc_service = container.hardcover_service()
+        hc_service.resolve_editions(hardcover_details)
+
+        book = database_service.get_book(abs_id)
+        if book:
+            hc_service._get_or_create_user_book(book, hardcover_details, book_data.get("edition_id"))
+            hc_service._pull_dates_at_match(abs_id)
+            # Re-fetch: _pull_dates_at_match may have updated dates in DB
+            book = database_service.get_book(abs_id)
+            hc_service.push_initial_progress(book, container.hardcover_sync_client())
+    except Exception as e:
+        logger.warning(f"Post-link Hardcover setup failed (link saved): {e}")
+
+    flash(f"Linked Hardcover: {book_data.get('title')}", "success")
 
     return redirect(url_for("dashboard.index"))
 
@@ -343,10 +368,9 @@ def set_book_cover(abs_id):
             )
             database_service.save_hardcover_details(details)
 
-        # Clear custom_cover_url when picking a Hardcover cover
-        if book.custom_cover_url:
-            book.custom_cover_url = None
-            database_service.save_book(book)
+        # Promote to custom_cover_url so it takes highest waterfall priority
+        book.custom_cover_url = cover_url
+        database_service.save_book(book)
 
     elif source == "custom":
         url = (data.get("url") or "").strip()

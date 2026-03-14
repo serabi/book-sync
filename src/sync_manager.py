@@ -25,7 +25,7 @@ from src.sync_clients.sync_client_interface import (
 from src.utils.epub_resolver import get_local_epub
 
 # Logging utilities (placed at top to ensure availability during sync)
-from src.utils.logging_utils import sanitize_log_data
+from src.utils.logging_utils import sanitize_exception, sanitize_log_data
 
 # Silence noisy third-party loggers
 for noisy in ('urllib3', 'requests', 'schedule', 'chardet', 'multipart', 'faster_whisper'):
@@ -83,7 +83,6 @@ class SyncManager:
             logger.warning("Invalid SYNC_DELTA_BETWEEN_CLIENTS_PERCENT value, defaulting to 1")
             val = 1.0
         self.sync_delta_between_clients = val / 100.0
-        self.delta_chars_thresh = 2000  # ~400 words
         self.epub_cache_dir = epub_cache_dir or (self.data_dir / "epub_cache" if self.data_dir else Path("/data/epub_cache"))
 
         # Extracted services — auto-construct if not injected (backward compat for tests)
@@ -161,7 +160,7 @@ class SyncManager:
                     client.check_connection()
                     logger.info(f"'{client_name}' connection verified (retry)")
                 except Exception as e:
-                    logger.warning(f"'{client_name}' connection failed after retry: {e} (first attempt: {first_err})")
+                    logger.warning(f"'{client_name}' connection failed after retry: {sanitize_exception(e)} (first attempt: {sanitize_exception(first_err)})")
 
         # Check CWA Integration Status
         if self.library_service and self.library_service.cwa_client:
@@ -187,12 +186,20 @@ class SyncManager:
                 else:
                     logger.warning("ABS ebook methods missing - ebook search may not work")
             except Exception as e:
-                logger.warning(f"ABS ebook check failed: {e}")
+                logger.warning(f"ABS ebook check failed: {sanitize_exception(e)}")
 
         # Run one-time migration
         if self.migration_service:
             logger.info("Checking for legacy data to migrate...")
             self.migration_service.migrate_legacy_data()
+
+        # Backfill Hardcover state records for linked books missing them
+        hc_client = self.sync_clients.get('Hardcover')
+        if hc_client and getattr(hc_client, 'hardcover_service', None):
+            try:
+                hc_client.hardcover_service.backfill_hardcover_states()
+            except Exception as e:
+                logger.warning(f"Hardcover state backfill failed (non-fatal): {sanitize_exception(e)}")
 
         # Cleanup orphaned cache files
         # DISABLED: Current logic is too aggressive (deletes original_ebook_filename for linked books).
@@ -365,7 +372,7 @@ class SyncManager:
                 # Find equivalent timestamp in audiobook using the precise aligner if available
                 if self.alignment_service:
                     ts_for_text = self.alignment_service.get_time_for_text(
-                        book.abs_id, txt,
+                        book.abs_id,
                         char_offset_hint=char_offset
                     )
                 else:
@@ -378,7 +385,7 @@ class SyncManager:
                 else:
                     logger.debug(f"'{book.abs_id}' Could not find timestamp for '{client_name}' text")
             except Exception as e:
-                logger.warning(f"'{book.abs_id}' Cross-format normalization failed for '{client_name}': {e}")
+                logger.warning(f"'{book.abs_id}' Cross-format normalization failed for '{client_name}': {sanitize_exception(e)}")
 
         # Only return if we successfully normalized at least one ebook client
         if len(normalized) > 1:
@@ -412,7 +419,7 @@ class SyncManager:
                     if state is not None:
                         config[client_name] = state
                 except Exception as e:
-                    logger.warning(f"'{client_name}' state fetch failed: {e}")
+                    logger.warning(f"'{client_name}' state fetch failed: {sanitize_exception(e)}")
 
         return config
 
@@ -607,7 +614,7 @@ class SyncManager:
             try:
                 self._sync_single_book(book, bulk_states_per_client)
             except Exception as e:
-                logger.error(f"Sync error for '{abs_id}': {type(e).__name__}")
+                logger.error(f"Sync error for '{abs_id}': {sanitize_exception(e)}")
                 logger.debug(traceback.format_exc())
 
         logger.debug("End of sync cycle for active books")
@@ -634,7 +641,7 @@ class SyncManager:
                         bulk_states_per_client[client_name] = bulk_data
                         logger.debug(f"Pre-fetched bulk state for {client_name}")
                 except Exception as e:
-                    logger.warning(f"Failed to pre-fetch bulk state for {client_name}: {e}")
+                    logger.warning(f"Failed to pre-fetch bulk state for {client_name}: {sanitize_exception(e)}")
 
             # Check for suggestions (runs even with no active books)
             if 'ABS' in bulk_states_per_client:
@@ -703,12 +710,12 @@ class SyncManager:
             return
 
         # Execute the sync update
-        self._execute_sync_update(book, config, abs_id, title_snip)
+        self._execute_sync_update(book, config, abs_id, title_snip, active_clients)
 
     def _evaluate_sync_significance(self, config, book, abs_id, title_snip, prev_states_by_client):
         """
-        Check deltas, thresholds, character-level checks, and discrepancies
-        to determine if a sync update should proceed.
+        Check deltas and client discrepancies to determine if a sync update
+        should proceed.
 
         Returns True if sync should proceed, False to skip.
         """
@@ -730,52 +737,11 @@ class SyncManager:
             else:
                 logger.debug(f"'{abs_id}' '{title_snip}' Progress difference {progress_diff:.2%} below threshold {self.sync_delta_between_clients:.2%} - skipping sync")
 
-        # Check for Character Delta Threshold
-        char_delta_triggered = False
-        if not significant_diff and hasattr(book, 'ebook_filename') and book.ebook_filename:
-            for client_name_key, client_state in config.items():
-                 if client_state.delta > 0:
-                     try:
-                         epub_path = self._get_local_epub(book.original_ebook_filename or book.ebook_filename)
-                         if not epub_path:
-                             logger.warning(f"Could not locate or download EPUB for '{book.ebook_filename}'")
-                             continue
-
-                         full_text, _ = self.ebook_parser.extract_text_and_map(epub_path)
-                         if full_text:
-                             total_chars = len(full_text)
-                             char_delta = int(client_state.delta * total_chars)
-
-                             if char_delta >= self.delta_chars_thresh:
-                                 logger.info(f"'{abs_id}' '{title_snip}' Significant character change detected for '{client_name_key}': {char_delta} chars (Threshold: {self.delta_chars_thresh})")
-                                 significant_diff = True
-                                 char_delta_triggered = True
-                                 break
-                     except Exception as e:
-                         logger.warning(f"Failed to check char delta for '{client_name_key}': {e}")
-
         deltas_zero = all(round(cfg.delta, 4) == 0 for cfg in config.values())
-        any_significant_delta = any(
-            self._has_significant_delta(k, config, book)
-            for k in config.keys()
-        )
 
         # If nothing changed AND clients are effectively in sync, skip
         if deltas_zero and not significant_diff:
             logger.debug(f"'{abs_id}' '{title_snip}' No changes and clients in sync, skipping")
-            return False
-
-        # Check for discrepancy without activity
-        new_client_in_config = any(
-            client_name.lower() not in prev_states_by_client
-            for client_name in config.keys()
-        )
-        client_needs_catchup = significant_diff and any(
-            (cfg.current.get('pct', 0) or 0) < 0.001 and max_progress > 0.05
-            for cfg in config.values()
-        )
-        if significant_diff and not any_significant_delta and not char_delta_triggered and not new_client_in_config and not client_needs_catchup:
-            logger.debug(f"'{abs_id}' '{title_snip}' Discrepancy exists ({max_progress*100:.1f}% vs {min_progress*100:.1f}%) but no recent client activity detected. Waiting for a new read event to determine true leader")
             return False
 
         if significant_diff:
@@ -815,7 +781,7 @@ class SyncManager:
 
         return True
 
-    def _execute_sync_update(self, book, config, abs_id, title_snip):
+    def _execute_sync_update(self, book, config, abs_id, title_snip, active_clients):
         """Resolve locator from leader, update followers, and save states."""
         leader, leader_pct = self._determine_leader(config, book, abs_id, title_snip)
         if not leader:
@@ -825,7 +791,11 @@ class SyncManager:
         leader_state = config[leader]
 
         # Get canonical text from leader
-        txt = leader_client.get_text_from_current_state(book, leader_state)
+        try:
+            txt = leader_client.get_text_from_current_state(book, leader_state)
+        except Exception as e:
+            logger.warning(f"'{abs_id}' '{title_snip}' Error getting text from leader '{leader}': {sanitize_exception(e)}")
+            txt = None
         if not txt:
             logger.warning(f"'{abs_id}' '{title_snip}' Could not get text from leader '{leader}', persisting leader snapshot")
             # Persist leader state so this delta isn't rediscovered on the next poll
@@ -874,8 +844,19 @@ class SyncManager:
                 result = client.update_progress(book, request)
                 results[client_name] = result
             except Exception as e:
-                logger.warning(f"Failed to update '{client_name}': {e}")
+                logger.warning(f"Failed to update '{client_name}': {sanitize_exception(e)}")
                 results[client_name] = SyncResult(None, False)
+
+        # Push to push-only clients (configured but didn't report state)
+        for client_name, client in active_clients.items():
+            if client_name in config or client_name == leader:
+                continue
+            try:
+                request = UpdateProgressRequest(locator, txt, previous_location=0.0)
+                result = client.update_progress(book, request)
+                results[client_name] = result
+            except Exception as e:
+                logger.warning(f"Failed to update push-only client '{client_name}': {sanitize_exception(e)}")
 
         # Save states to database
         current_time = time.time()

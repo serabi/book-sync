@@ -213,7 +213,7 @@ def link_suggestion_bookfusion(source_id):
         abs_book = Book(
             abs_id=source_id,
             abs_title=metadata.get('title') or suggestion.title or source_id,
-            status='active',
+            status='not_started',
             duration=(item or {}).get('media', {}).get('duration'),
             sync_mode='audiobook',
         )
@@ -235,12 +235,10 @@ def link_suggestion_bookfusion(source_id):
 
 @api_bp.route('/api/sync-reading-dates', methods=['POST'])
 def sync_reading_dates_api():
-    """Pull started_at / finished_at from Hardcover and ABS for books missing them."""
-    from src.services.reading_date_service import sync_reading_dates
-    database_service = get_database_service()
+    """Auto-complete books at 100% progress and fill missing dates."""
     container = get_container()
-    stats = sync_reading_dates(database_service, container)
-    logger.info(f"Sync reading dates: {stats}")
+    stats = container.reading_date_service().auto_complete_finished_books(container)
+    logger.info(f"Auto-complete check: {stats}")
     return jsonify({"success": True, **stats})
 
 
@@ -299,6 +297,11 @@ def get_booklore_libraries():
     """Return available Booklore libraries."""
     return _get_booklore_libraries(lambda c: c.booklore_client(), "Booklore")
 
+
+@api_bp.route('/api/booklore2/libraries', methods=['GET'])
+def get_booklore2_libraries():
+    """Return available Booklore 2 libraries."""
+    return _get_booklore_libraries(lambda c: c.booklore_client_2(), "Booklore 2")
 
 
 @api_bp.route('/api/booklore/search', methods=['GET'])

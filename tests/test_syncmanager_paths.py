@@ -3,6 +3,10 @@
 Quick test to verify SyncManager gets paths from DI container instead of hardcoded values.
 """
 
+import pytest
+
+pytestmark = pytest.mark.docker
+
 import os
 import shutil
 import sys

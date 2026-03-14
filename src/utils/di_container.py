@@ -13,7 +13,7 @@ from dependency_injector import containers, providers
 # Import all the classes we'll be using
 from src.api.api_clients import ABSClient, KoSyncClient
 from src.api.bookfusion_client import BookFusionClient
-from src.api.booklore_client import BookloreClient
+from src.api.booklore_client import BookloreClient, BookloreClientGroup
 from src.api.cwa_client import CWAClient
 from src.api.hardcover_client import HardcoverClient
 from src.api.storyteller_api import StorytellerAPIClient
@@ -21,8 +21,10 @@ from src.db.database_service import DatabaseService
 from src.services.abs_service import ABSService
 from src.services.alignment_service import AlignmentService
 from src.services.background_job_service import BackgroundJobService
+from src.services.hardcover_service import HardcoverService
 from src.services.library_service import LibraryService
 from src.services.migration_service import MigrationService
+from src.services.reading_date_service import ReadingDateService
 from src.services.storyteller_submission_service import StorytellerSubmissionService
 from src.services.suggestion_service import SuggestionService
 from src.sync_clients.abs_ebook_sync_client import ABSEbookSyncClient
@@ -80,6 +82,18 @@ class Container(containers.DeclarativeContainer):
         database_service=database_service,
     )
 
+    booklore_client_2 = providers.Singleton(
+        BookloreClient,
+        database_service=database_service,
+        env_prefix="BOOKLORE_2",
+        instance_id="2",
+    )
+
+    booklore_client_group = providers.Singleton(
+        BookloreClientGroup,
+        clients=providers.List(booklore_client, booklore_client_2),
+    )
+
     hardcover_client = providers.Singleton(HardcoverClient)
 
     cwa_client = providers.Singleton(CWAClient)
@@ -99,7 +113,7 @@ class Container(containers.DeclarativeContainer):
     library_service = providers.Singleton(
         LibraryService,
         database_service=database_service,
-        booklore_client=booklore_client,
+        booklore_client=booklore_client_group,
         cwa_client=cwa_client,
         abs_client=abs_client,
         epub_cache_dir=epub_cache_dir,
@@ -141,10 +155,23 @@ class Container(containers.DeclarativeContainer):
         BookloreSyncClient, booklore_client, ebook_parser, client_name="BookLore"
     )
 
+    booklore_sync_client_2 = providers.Singleton(
+        BookloreSyncClient, booklore_client_2, ebook_parser, client_name="BookLore2"
+    )
+
     abs_ebook_sync_client = providers.Singleton(ABSEbookSyncClient, abs_client, ebook_parser)
 
+    hardcover_service = providers.Singleton(
+        HardcoverService, hardcover_client, database_service, abs_client
+    )
+
+    reading_date_service = providers.Singleton(
+        ReadingDateService, database_service, hardcover_client, abs_client
+    )
+
     hardcover_sync_client = providers.Singleton(
-        HardcoverSyncClient, hardcover_client, ebook_parser, abs_client, database_service
+        HardcoverSyncClient, hardcover_client, ebook_parser, abs_client, database_service,
+        hardcover_service=hardcover_service,
     )
 
     # Suggestion Service
@@ -152,7 +179,7 @@ class Container(containers.DeclarativeContainer):
         SuggestionService,
         database_service=database_service,
         abs_client=abs_client,
-        booklore_client=booklore_client,
+        booklore_client=booklore_client_group,
         storyteller_client=storyteller_client,
         library_service=library_service,
         books_dir=books_dir,
@@ -164,7 +191,7 @@ class Container(containers.DeclarativeContainer):
         BackgroundJobService,
         database_service=database_service,
         abs_client=abs_client,
-        booklore_client=booklore_client,
+        booklore_client=booklore_client_group,
         ebook_parser=ebook_parser,
         transcriber=transcriber,
         alignment_service=alignment_service,
@@ -183,6 +210,7 @@ class Container(containers.DeclarativeContainer):
         KoSync=kosync_sync_client,
         Storyteller=storyteller_sync_client,
         BookLore=booklore_sync_client,
+        BookLore2=booklore_sync_client_2,
         Hardcover=hardcover_sync_client,
     )
 
@@ -190,7 +218,7 @@ class Container(containers.DeclarativeContainer):
     sync_manager = providers.Singleton(
         SyncManager,
         abs_client=abs_client,
-        booklore_client=booklore_client,
+        booklore_client=booklore_client_group,
         hardcover_client=hardcover_client,
         storyteller_client=storyteller_client,
         transcriber=transcriber,

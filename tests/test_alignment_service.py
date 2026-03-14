@@ -3,6 +3,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+pytestmark = pytest.mark.docker
+
 from src.db.models import BookAlignment
 from src.services.alignment_service import AlignmentService
 from src.utils.polisher import Polisher
@@ -85,9 +87,9 @@ def test_get_time_for_text(service, mock_db):
     session.query.return_value.filter_by.return_value.first.return_value = mock_entry
 
     # Test Exact
-    ts = service.get_time_for_text("test_id", "query", char_offset_hint=0)
+    ts = service.get_time_for_text("test_id", char_offset_hint=0)
     assert ts == 0.0
 
     # Test Interpolation (50 chars -> 5.0s)
-    ts = service.get_time_for_text("test_id", "query", char_offset_hint=50)
+    ts = service.get_time_for_text("test_id", char_offset_hint=50)
     assert ts == 5.0

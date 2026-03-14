@@ -67,7 +67,6 @@
             </div>
             <div id="bf-book-list" class="bf-book-list">
                 <div class="bf-empty">
-                    <div class="bf-empty-icon">&#128269;</div>
                     <div class="bf-empty-heading">Search your Booklore library</div>
                     <div class="bf-empty-desc">Type above to find books to upload</div>
                 </div>
@@ -171,8 +170,11 @@
         }
     }
 
+    var _newHighlightIds = [];
+
     /* ── Tab switching ── */
     function switchBFTab(tab) {
+        _newHighlightIds = [];
         document.querySelectorAll('.bf-tab').forEach(t => t.classList.remove('active'));
         document.querySelectorAll('.bf-panel').forEach(p => p.classList.remove('active'));
         document.getElementById('bf-panel-' + tab).classList.add('active');
@@ -197,7 +199,7 @@
         const q = document.getElementById('bf-search-input').value.trim();
         const list = document.getElementById('bf-book-list');
         if (!q) {
-            list.innerHTML = '<div class="bf-empty"><div class="bf-empty-icon">\uD83D\uDD0D</div><div class="bf-empty-heading">Search your Booklore library</div><div class="bf-empty-desc">Type above to find books to upload</div></div>';
+            list.innerHTML = '<div class="bf-empty"><div class="bf-empty-heading">Search your Booklore library</div><div class="bf-empty-desc">Type above to find books to upload</div></div>';
             return;
         }
         fetch('/api/bookfusion/booklore-books?q=' + encodeURIComponent(q))
@@ -311,6 +313,7 @@
                     if (data.new_highlights) parts.push(data.new_highlights + ' new highlight' + (data.new_highlights !== 1 ? 's' : ''));
                     if (data.books_saved) parts.push(data.books_saved + ' book' + (data.books_saved !== 1 ? 's' : '') + ' cataloged');
                     info.textContent = parts.length ? 'Synced: ' + parts.join(', ') : 'Up to date';
+                    _newHighlightIds = data.new_ids || [];
                     loadHighlights();
                 } else {
                     info.textContent = data.error || 'Sync failed';
@@ -366,10 +369,13 @@
                         if (h.chapter_heading) metaParts.push(h.chapter_heading.replace(/^#{1,6}\s*/, ''));
                         if (h.date) metaParts.push(h.date);
                         let metaText = metaParts.map(escapeHtml).join(' &middot; ');
+                        let isNew = _newHighlightIds.length && h.highlight_id && _newHighlightIds.indexOf(h.highlight_id) !== -1;
+                        let newBadge = isNew ? '<span class="bf-new-badge">New</span>' : '';
+                        let newAttr = isNew ? ' data-new-highlight="1"' : '';
 
                         return `
-                            <div class="bf-highlight">
-                                <div class="bf-highlight-content">${escapeHtml(h.quote || '')}</div>
+                            <div class="bf-highlight"${newAttr}>
+                                <div class="bf-highlight-content">${newBadge}${escapeHtml(h.quote || '')}</div>
                                 <div class="bf-highlight-chapter">${metaText}</div>
                             </div>
                         `;
@@ -395,6 +401,23 @@
                     `;
                 }).join('');
                 revealFirstMobileResult('bf-highlights-container');
+
+                // Scroll to first new highlight if any
+                if (_newHighlightIds.length) {
+                    var firstNew = container.querySelector('[data-new-highlight]');
+                    if (firstNew) {
+                        // Expand parent group if collapsed
+                        var group = firstNew.closest('.bf-group-body');
+                        if (group && group.classList.contains('hidden')) {
+                            group.classList.remove('hidden');
+                            var header = group.previousElementSibling;
+                            if (header) header.classList.remove('collapsed');
+                        }
+                        setTimeout(function() {
+                            firstNew.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }, 100);
+                    }
+                }
             })
             .catch(function() {
                 var container = document.getElementById('bf-highlights-container');
@@ -601,7 +624,8 @@
             actionsHtml = `
                 ${comboboxHtml}
                 <button class="bf-upload-btn bf-link-btn" onclick="handleLinkClick(this, ${i})">Link</button>
-                <button class="bf-upload-btn" onclick="handleAddClick(this, ${i})">Add New</button>
+                <button class="bf-upload-btn" onclick="handleAddClick(this, ${i}, 'not_started')">+ Library</button>
+                <button class="bf-upload-btn bf-start-btn" onclick="handleAddClick(this, ${i}, 'active')">Start Reading</button>
             `;
         }
 
@@ -770,9 +794,9 @@
         }
     }
 
-    function handleAddClick(btn, index) {
+    function handleAddClick(btn, index, status) {
         const book = _currentRenderedBooks[index];
-        addToDashboard(btn, book, index);
+        addToDashboard(btn, book, index, status);
     }
 
     function _showDateNote(actionsEl, data) {
@@ -824,14 +848,17 @@
         });
     }
 
-    function addToDashboard(btn, book, index) {
+    function addToDashboard(btn, book, index, status) {
         btn.disabled = true;
-        btn.innerHTML = getSpinnerHtml() + 'Adding...';
+        btn.textContent = 'Adding...';
+
+        var payload = { bookfusion_ids: book.bookfusion_ids || [book.bookfusion_id] };
+        if (status) payload.status = status;
 
         fetch('/api/bookfusion/add-to-dashboard', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ bookfusion_ids: book.bookfusion_ids || [book.bookfusion_id] })
+            body: JSON.stringify(payload)
         })
         .then(function(r) {
             if (!r.ok) throw new Error('Add failed');

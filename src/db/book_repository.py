@@ -173,6 +173,38 @@ class BookRepository(BaseRepository):
                 session.expunge(job)
             return job
 
+    def get_latest_jobs_bulk(self, abs_ids):
+        """Fetch the latest job for each abs_id in one query.
+
+        Returns a dict of {abs_id: Job}.
+        """
+        if not abs_ids:
+            return {}
+        with self.get_session() as session:
+            latest = (
+                session.query(
+                    Job.abs_id,
+                    func.max(Job.last_attempt).label("max_ts"),
+                )
+                .filter(Job.abs_id.in_(abs_ids))
+                .group_by(Job.abs_id)
+                .subquery()
+            )
+            rows = (
+                session.query(Job)
+                .join(
+                    latest,
+                    (Job.abs_id == latest.c.abs_id)
+                    & (Job.last_attempt == latest.c.max_ts),
+                )
+                .all()
+            )
+            result = {}
+            for job in rows:
+                session.expunge(job)
+                result[job.abs_id] = job
+            return result
+
     def get_jobs_for_book(self, abs_id):
         return self._get_all(Job, Job.abs_id == abs_id, order_by=Job.last_attempt.desc())
 

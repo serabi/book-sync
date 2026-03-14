@@ -10,6 +10,10 @@ Tests cover:
 5. StorytellerAPIClient: Search and Download methods
 """
 
+import pytest
+
+pytestmark = pytest.mark.docker
+
 import os
 import sys
 import tempfile

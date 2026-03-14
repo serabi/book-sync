@@ -185,226 +185,87 @@ class DatabaseService:
         finally:
             session.close()
 
-    # ── Settings (delegates to SettingsRepository) ──
+    # ── Auto-delegation to repositories ──
+    # Most methods are pure passthrough to a specific repository.
+    # Only methods with cross-cutting logic are defined explicitly below.
+    # Everything else is resolved via __getattr__.
 
-    def get_setting(self, key, default=None):
-        return self._settings.get_setting(key, default)
+    _REPOS = ('_settings', '_books', '_kosync', '_reading',
+              '_suggestions', '_integrations', '_tbr')
 
-    def set_setting(self, key, value):
-        return self._settings.set_setting(key, value)
+    def __getattr__(self, name):
+        if name.startswith('_'):
+            raise AttributeError(name)
+        for repo_name in DatabaseService._REPOS:
+            repo = object.__getattribute__(self, repo_name)
+            method = getattr(repo, name, None)
+            if method is not None:
+                return method
+        raise AttributeError(f"'{type(self).__name__}' has no attribute '{name}'")
 
-    def get_all_settings(self):
-        return self._settings.get_all_settings()
+    # ── Bulk data helpers (avoid N+1 in views) ──
 
-    def delete_setting(self, key):
-        return self._settings.delete_setting(key)
+    def get_states_by_book(self):
+        """Return all sync states grouped by abs_id: dict[str, list[State]]."""
+        all_states = self._books.get_all_states()
+        result = {}
+        for state in all_states:
+            result.setdefault(state.abs_id, []).append(state)
+        return result
 
-    # ── Books, States, Jobs (delegates to BookRepository) ──
+    def get_booklore_by_filename(self):
+        """Return all Booklore books grouped by lowercase filename: dict[str, list[BookloreBook]]."""
+        all_books = self._integrations.get_all_booklore_books()
+        result = {}
+        for bl_book in all_books:
+            if bl_book.filename:
+                result.setdefault(bl_book.filename.lower(), []).append(bl_book)
+        return result
 
-    def get_book(self, abs_id):
-        return self._books.get_book(abs_id)
+    # ── Methods with cross-cutting logic (not pure passthrough) ──
 
-    def get_book_by_kosync_id(self, kosync_id):
-        return self._books.get_book_by_kosync_id(kosync_id)
+    def save_book(self, book, is_new=False):
+        result = self._books.save_book(book)
+        if is_new and book.abs_title:
+            self._auto_link_tbr(book)
+            self._auto_link_bookfusion(book)
+        return result
 
-    def get_all_books(self):
-        return self._books.get_all_books()
-
-    def get_books_by_status(self, status):
-        return self._books.get_books_by_status(status)
-
-    def search_books(self, query, limit=10):
-        return self._books.search_books(query, limit)
-
-    def get_book_by_ebook_filename(self, filename):
-        return self._books.get_book_by_ebook_filename(filename)
-
-    def create_book(self, book):
-        return self._books.create_book(book)
-
-    def save_book(self, book):
-        return self._books.save_book(book)
-
-    def delete_book(self, abs_id):
-        return self._books.delete_book(abs_id)
-
-    def migrate_book_data(self, old_abs_id, new_abs_id):
-        return self._books.migrate_book_data(old_abs_id, new_abs_id)
-
-    def get_state(self, abs_id, client_name):
-        return self._books.get_state(abs_id, client_name)
-
-    def get_states_for_book(self, abs_id):
-        return self._books.get_states_for_book(abs_id)
-
-    def get_all_states(self):
-        return self._books.get_all_states()
-
-    def save_state(self, state):
-        return self._books.save_state(state)
-
-    def delete_states_for_book(self, abs_id):
-        return self._books.delete_states_for_book(abs_id)
-
-    def get_latest_job(self, abs_id):
-        return self._books.get_latest_job(abs_id)
-
-    def get_jobs_for_book(self, abs_id):
-        return self._books.get_jobs_for_book(abs_id)
-
-    def get_all_jobs(self):
-        return self._books.get_all_jobs()
-
-    def save_job(self, job):
-        return self._books.save_job(job)
-
-    def update_latest_job(self, abs_id, **kwargs):
-        return self._books.update_latest_job(abs_id, **kwargs)
-
-    def delete_jobs_for_book(self, abs_id):
-        return self._books.delete_jobs_for_book(abs_id)
-
-    def get_books_with_recent_activity(self, limit=10):
-        return self._books.get_books_with_recent_activity(limit)
-
-    def get_failed_jobs(self, limit=20):
-        return self._books.get_failed_jobs(limit)
-
-    def get_statistics(self):
-        return self._books.get_statistics()
-
-    # ── KoSync (delegates to KoSyncRepository) ──
-
-    def get_kosync_document(self, document_hash):
-        return self._kosync.get_kosync_document(document_hash)
-
-    def save_kosync_document(self, doc):
-        return self._kosync.save_kosync_document(doc)
-
-    def get_all_kosync_documents(self):
-        return self._kosync.get_all_kosync_documents()
-
-    def get_unlinked_kosync_documents(self):
-        return self._kosync.get_unlinked_kosync_documents()
-
-    def get_linked_kosync_documents(self):
-        return self._kosync.get_linked_kosync_documents()
-
-    def link_kosync_document(self, document_hash, abs_id):
-        return self._kosync.link_kosync_document(document_hash, abs_id)
-
-    def unlink_kosync_document(self, document_hash):
-        return self._kosync.unlink_kosync_document(document_hash)
-
-    def delete_kosync_document(self, document_hash):
-        return self._kosync.delete_kosync_document(document_hash)
-
-    def get_kosync_document_by_linked_book(self, abs_id):
-        return self._kosync.get_kosync_document_by_linked_book(abs_id)
-
-    def get_kosync_documents_for_book(self, abs_id):
-        return self._kosync.get_kosync_documents_for_book(abs_id)
-
-    def get_kosync_doc_by_filename(self, filename):
-        return self._kosync.get_kosync_doc_by_filename(filename)
-
-    def get_kosync_doc_by_booklore_id(self, booklore_id):
-        return self._kosync.get_kosync_doc_by_booklore_id(booklore_id)
-
-    # ── Suggestions (delegates to SuggestionRepository) ──
-
-    def get_pending_suggestion(self, source_id):
-        return self._suggestions.get_pending_suggestion(source_id)
-
-    def get_suggestion(self, source_id):
-        return self._suggestions.get_suggestion(source_id)
-
-    def suggestion_exists(self, source_id):
-        return self._suggestions.suggestion_exists(source_id)
-
-    def is_suggestion_ignored(self, source_id):
-        return self._suggestions.is_suggestion_ignored(source_id)
-
-    def save_pending_suggestion(self, suggestion):
-        return self._suggestions.save_pending_suggestion(suggestion)
-
-    def is_hash_linked_to_device(self, doc_hash):
-        return self._suggestions.is_hash_linked_to_device(doc_hash)
-
-    def get_all_pending_suggestions(self):
-        return self._suggestions.get_all_pending_suggestions()
-
-    def get_all_actionable_suggestions(self):
-        return self._suggestions.get_all_actionable_suggestions()
-
-    def get_hidden_suggestions(self):
-        return self._suggestions.get_hidden_suggestions()
-
-    def delete_pending_suggestion(self, source_id):
-        return self._suggestions.delete_pending_suggestion(source_id)
-
-    def resolve_suggestion(self, source_id):
-        return self._suggestions.resolve_suggestion(source_id)
-
-    def hide_suggestion(self, source_id):
-        return self._suggestions.hide_suggestion(source_id)
-
-    def unhide_suggestion(self, source_id):
-        return self._suggestions.unhide_suggestion(source_id)
-
-    def ignore_suggestion(self, source_id):
-        return self._suggestions.ignore_suggestion(source_id)
-
-    def clear_stale_suggestions(self):
-        return self._suggestions.clear_stale_suggestions()
-
-    def _normalize_dismissed_suggestions(self):
+    def _auto_link_tbr(self, book):
+        """Auto-link unlinked TBR items by normalized title match."""
         try:
-            updated = self._suggestions.normalize_dismissed_suggestions()
-            if updated:
-                logger.info(f"Normalized {updated} dismissed suggestions to hidden")
+            unlinked = self._tbr.get_unlinked_items()
+            if not unlinked:
+                return
+            norm_title = book.abs_title.lower().strip()
+            for item in unlinked:
+                if item.title and item.title.lower().strip() == norm_title:
+                    self._tbr.link_tbr_to_book(item.id, book.abs_id)
+                    logger.info(f"Auto-linked TBR item '{item.title}' to book '{book.abs_id}'")
+                    break
         except Exception as e:
-            logger.debug(f"Suggestion status normalization skipped: {e}")
+            logger.debug(f"TBR auto-link failed: {e}")
 
-    # ── Reading Tracker (delegates to ReadingRepository) ──
+    def _auto_link_bookfusion(self, book):
+        """Auto-link unmatched BookFusion highlights to this specific new book."""
+        try:
+            unmatched = self._integrations.get_unmatched_bookfusion_highlights()
+            if not unmatched:
+                return
+            import difflib
 
-    def update_book_reading_fields(self, abs_id, **kwargs):
-        return self._reading.update_book_reading_fields(abs_id, **kwargs)
-
-    def get_reading_journals(self, abs_id):
-        return self._reading.get_reading_journals(abs_id)
-
-    def get_reading_journal(self, journal_id):
-        return self._reading.get_reading_journal(journal_id)
-
-    def add_reading_journal(self, abs_id, event, entry=None, percentage=None, created_at=None):
-        return self._reading.add_reading_journal(abs_id, event, entry, percentage, created_at)
-
-    def update_reading_journal(self, journal_id, *, entry=None, created_at=None):
-        return self._reading.update_reading_journal(journal_id, entry=entry, created_at=created_at)
-
-    def find_journal_by_event(self, abs_id, event):
-        return self._reading.find_journal_by_event(abs_id, event)
-
-    def cleanup_bookfusion_import_notes(self, abs_id=None):
-        return self._reading.cleanup_bookfusion_import_notes(abs_id)
-
-    def delete_reading_journal(self, journal_id):
-        return self._reading.delete_reading_journal(journal_id)
-
-    def get_reading_goal(self, year):
-        return self._reading.get_reading_goal(year)
-
-    def save_reading_goal(self, year, target_books):
-        return self._reading.save_reading_goal(year, target_books)
-
-    def get_reading_stats(self, year):
-        return self._reading.get_reading_stats(year)
-
-    # ── Integrations: Hardcover (delegates to IntegrationRepository) ──
-
-    def get_hardcover_details(self, abs_id):
-        return self._integrations.get_hardcover_details(abs_id)
+            from src.utils.title_utils import clean_book_title, normalize_title
+            norm_book = normalize_title(book.abs_title)
+            for hl in unmatched:
+                bf_title = clean_book_title(hl.book_title or '')
+                norm_bf = normalize_title(bf_title)
+                if norm_bf == norm_book or difflib.SequenceMatcher(None, norm_bf, norm_book).ratio() > 0.85:
+                    if hl.bookfusion_book_id:
+                        self._integrations.link_bookfusion_book(hl.bookfusion_book_id, book.abs_id)
+                        logger.info(f"Auto-linked BookFusion highlights for '{bf_title}' to '{book.abs_id}'")
+                    break
+        except Exception as e:
+            logger.debug(f"BookFusion auto-link failed: {e}")
 
     def save_hardcover_details(self, details):
         result = self._integrations.save_hardcover_details(details)
@@ -419,76 +280,15 @@ class DatabaseService:
                 pass
         return result
 
-    def delete_hardcover_details(self, abs_id):
-        return self._integrations.delete_hardcover_details(abs_id)
+    def _normalize_dismissed_suggestions(self):
+        try:
+            updated = self._suggestions.normalize_dismissed_suggestions()
+            if updated:
+                logger.info(f"Normalized {updated} dismissed suggestions to hidden")
+        except Exception as e:
+            logger.debug(f"Suggestion status normalization skipped: {e}")
 
-    def get_all_hardcover_details(self):
-        return self._integrations.get_all_hardcover_details()
-
-    # ── Integrations: Hardcover Sync Logs ──
-
-    def add_hardcover_sync_log(self, entry):
-        return self._integrations.add_hardcover_sync_log(entry)
-
-    def get_hardcover_sync_logs(self, page=1, per_page=50, direction=None, action=None, search=None):
-        return self._integrations.get_hardcover_sync_logs(page, per_page, direction, action, search)
-
-    def prune_hardcover_sync_logs(self, before_date):
-        return self._integrations.prune_hardcover_sync_logs(before_date)
-
-    # ── Integrations: Storyteller Submissions ──
-
-    def save_storyteller_submission(self, submission):
-        return self._integrations.save_storyteller_submission(submission)
-
-    def get_active_storyteller_submission(self, abs_id):
-        return self._integrations.get_active_storyteller_submission(abs_id)
-
-    def get_storyteller_submission(self, abs_id):
-        return self._integrations.get_storyteller_submission(abs_id)
-
-    def update_storyteller_submission_status(self, submission_id, status, last_checked_at=None,
-                                               storyteller_uuid=None, submission_dir=None):
-        return self._integrations.update_storyteller_submission_status(
-            submission_id, status, last_checked_at, storyteller_uuid, submission_dir
-        )
-
-    def get_all_storyteller_submissions_latest(self):
-        return self._integrations.get_all_storyteller_submissions_latest()
-
-    # ── Integrations: Booklore (delegates to IntegrationRepository) ──
-
-    def get_booklore_book(self, filename):
-        return self._integrations.get_booklore_book(filename)
-
-    def get_all_booklore_books(self):
-        return self._integrations.get_all_booklore_books()
-
-    def save_booklore_book(self, booklore_book):
-        return self._integrations.save_booklore_book(booklore_book)
-
-    def delete_booklore_book(self, filename):
-        return self._integrations.delete_booklore_book(filename)
-
-    # ── Integrations: BookFusion (delegates to IntegrationRepository) ──
-
-    def save_bookfusion_highlights(self, highlights):
-        return self._integrations.save_bookfusion_highlights(highlights)
-
-    def get_bookfusion_highlights(self):
-        return self._integrations.get_bookfusion_highlights()
-
-    def get_unmatched_bookfusion_highlights(self):
-        return self._integrations.get_unmatched_bookfusion_highlights()
-
-    def link_bookfusion_highlight(self, highlight_id, abs_id):
-        return self._integrations.link_bookfusion_highlight(highlight_id, abs_id)
-
-    def link_bookfusion_book(self, bookfusion_book_id, abs_id):
-        return self._integrations.link_bookfusion_book(bookfusion_book_id, abs_id)
-
-    def get_bookfusion_highlights_for_book(self, abs_id):
-        return self._integrations.get_bookfusion_highlights_for_book(abs_id)
+    # ── Methods with name mismatches or cross-repo delegation ──
 
     def get_bookfusion_sync_cursor(self):
         return self._settings.get_setting("BOOKFUSION_SYNC_CURSOR")
@@ -496,38 +296,14 @@ class DatabaseService:
     def set_bookfusion_sync_cursor(self, cursor):
         return self._settings.set_setting("BOOKFUSION_SYNC_CURSOR", cursor)
 
-    def save_bookfusion_books(self, books):
-        return self._integrations.save_bookfusion_books(books)
+    def find_tbr_by_abs_id(self, abs_id):
+        return self._tbr.find_by_abs_id(abs_id)
 
-    def get_bookfusion_books(self):
-        return self._integrations.get_bookfusion_books()
+    def delete_tbr_by_abs_id(self, abs_id):
+        return self._tbr.delete_by_abs_id(abs_id)
 
-    def is_bookfusion_linked(self, abs_id):
-        return self._integrations.is_bookfusion_linked(abs_id)
-
-    def set_bookfusion_books_hidden(self, bookfusion_ids, hidden):
-        return self._integrations.set_bookfusion_books_hidden(bookfusion_ids, hidden)
-
-    def set_bookfusion_book_match(self, bookfusion_id, abs_id):
-        return self._integrations.set_bookfusion_book_match(bookfusion_id, abs_id)
-
-    def get_bookfusion_book(self, bookfusion_id):
-        return self._integrations.get_bookfusion_book(bookfusion_id)
-
-    def get_bookfusion_book_by_abs_id(self, abs_id):
-        return self._integrations.get_bookfusion_book_by_abs_id(abs_id)
-
-    def unlink_bookfusion_by_abs_id(self, abs_id):
-        return self._integrations.unlink_bookfusion_by_abs_id(abs_id)
-
-    def get_bookfusion_highlight_date_range(self, bookfusion_book_ids):
-        return self._integrations.get_bookfusion_highlight_date_range(bookfusion_book_ids)
-
-    def get_bookfusion_linked_abs_ids(self):
-        return self._integrations.get_bookfusion_linked_abs_ids()
-
-    def get_bookfusion_highlight_counts(self):
-        return self._integrations.get_bookfusion_highlight_counts()
+    def get_unlinked_tbr_items(self):
+        return self._tbr.get_unlinked_items()
 
     # ── TBR (To Be Read) List (delegates to TbrRepository) ──
 

@@ -5,11 +5,8 @@ import time
 from datetime import date
 
 from src.db.models import State
-from src.services.reading_date_service import (
-    pull_reading_dates,
-    push_booklore_read_status,
-)
-from src.utils.logging_utils import sanitize_log_data
+from src.services.reading_date_service import push_booklore_read_status
+from src.services.status_machine import StatusMachine
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +15,7 @@ class ReadingService:
 
     def __init__(self, database_service):
         self.database_service = database_service
+        self.status_machine = StatusMachine(database_service)
 
     @staticmethod
     def max_progress(states, as_percent=False):
@@ -38,98 +36,26 @@ class ReadingService:
     def pull_started_at(self, abs_id, container):
         """Pull started_at from Hardcover/ABS before falling back to today."""
         try:
-            dates = pull_reading_dates(abs_id, container, self.database_service)
+            dates = container.reading_date_service().pull_reading_dates(abs_id)
             return dates.get('started_at', date.today().isoformat())
         except Exception:
             return date.today().isoformat()
 
     def update_status(self, abs_id, new_status, container, *, allowed_from=None):
-        """Consolidate status transition logic.
+        """Transition a book's status with all appropriate side effects.
 
-        Parameters:
-            abs_id: Book identifier.
-            new_status: Target status ('active', 'completed', 'paused', 'dnf', 'not_started').
-            container: DI container for accessing sync clients.
-            allowed_from: If set, a set/tuple of statuses the book must currently be in.
-                          Returns an error result if the current status is not in this set.
+        Delegates to StatusMachine for the actual transition logic.
 
         Returns a dict with 'success', 'status', 'previous_status', and optionally 'error'.
         """
-        valid_statuses = {'active', 'completed', 'paused', 'dnf', 'not_started'}
-        if new_status not in valid_statuses:
-            return {'success': False, 'error': f"Invalid status. Must be one of: {', '.join(sorted(valid_statuses))}"}
-
         book = self.database_service.get_book(abs_id)
         if not book:
             return {'success': False, 'error': 'Book not found'}
 
-        old_status = book.status
-
-        if allowed_from is not None and old_status not in allowed_from:
-            return {'success': False, 'error': f"Cannot change to '{new_status}' from status '{old_status}'"}
-
-        if old_status == new_status:
-            return {'success': True, 'status': new_status, 'previous_status': old_status}
-
-        # Apply status change
-        book.status = new_status
-        if new_status == 'active':
-            book.activity_flag = False
-        self.database_service.save_book(book)
-
-        # Auto-create journal entries for transitions
-        event_map = {
-            'completed': 'finished',
-            'paused': 'paused',
-            'dnf': 'dnf',
-        }
-        event = event_map.get(new_status)
-        if event:
-            pct = 1.0 if event == 'finished' else None
-            self.database_service.add_reading_journal(abs_id, event=event, percentage=pct)
-
-        # Auto-set dates
-        today = date.today().isoformat()
-        if new_status == 'active':
-            if not book.started_at:
-                self.database_service.update_book_reading_fields(
-                    abs_id, started_at=self.pull_started_at(abs_id, container)
-                )
-                self.database_service.add_reading_journal(abs_id, event='started')
-            else:
-                self.database_service.add_reading_journal(abs_id, event='resumed')
-        elif new_status == 'completed':
-            updates = {}
-            if not book.finished_at:
-                updates['finished_at'] = today
-                if not book.started_at:
-                    updates['started_at'] = self.pull_started_at(abs_id, container)
-            else:
-                # Reread — increment read count
-                updates['read_count'] = (book.read_count or 1) + 1
-            if updates:
-                self.database_service.update_book_reading_fields(abs_id, **updates)
-
-        if new_status in ('active', 'paused', 'dnf', 'completed'):
-            logger.info(f"Book status changed to '{new_status}': "
-                        f"'{sanitize_log_data(book.abs_title or abs_id)}'")
-
-        # Push status to Hardcover
-        try:
-            hc_sync = container.hardcover_sync_client()
-            if hc_sync.is_configured():
-                hc_sync.push_local_status(book, new_status)
-        except Exception as e:
-            logger.debug(f"Could not push status to Hardcover: {e}")
-
-        # Push Booklore read status for active/completed transitions
-        if book.ebook_filename:
-            if new_status == 'active' and old_status in ('dnf', 'paused', 'not_started', 'completed'):
-                push_booklore_read_status(book, container, 'READING')
-            elif new_status == 'completed':
-                push_booklore_read_status(book, container, 'READ')
-
-        return {'success': True, 'status': new_status, 'previous_status': old_status}
+        return self.status_machine.transition(
+            book, new_status, 'local',
+            container=container, allowed_from=allowed_from,
+        )
 
     def mark_complete_with_sync(self, abs_id, container, *, perform_delete=False):
         """Full completion flow: push 100% to all clients, record locally, optionally delete.

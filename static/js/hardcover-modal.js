@@ -8,13 +8,15 @@ var hardcoverModalState = {
     absId: null,
     bookData: null,
     selectedEditionId: null,
-    linkedEditionId: null
+    linkedEditionId: null,
+    bookTitle: null
 };
 
 function linkHardcover(event) {
     event.stopPropagation();
     if (typeof closeActionPanel === 'function') closeActionPanel();
     hardcoverModalState.absId = event.currentTarget.dataset.absId;
+    hardcoverModalState.bookTitle = event.currentTarget.dataset.title || '';
     hardcoverModalState.bookData = null;
     hardcoverModalState.selectedEditionId = null;
     openHardcoverModal();
@@ -59,8 +61,19 @@ async function autoResolveBook() {
 
 function showManualInput() {
     showHcState('manual');
-    document.getElementById('hc-input').value = '';
-    document.getElementById('hc-input').focus();
+    var searchInput = document.getElementById('hc-title-search');
+    var urlInput = document.getElementById('hc-input');
+    var resultsContainer = document.getElementById('hc-search-results');
+    if (searchInput) {
+        searchInput.value = hardcoverModalState.bookTitle || '';
+        while (resultsContainer.firstChild) resultsContainer.removeChild(resultsContainer.firstChild);
+    }
+    if (urlInput) urlInput.value = '';
+    if (searchInput && searchInput.value) {
+        searchByTitle();
+    } else if (searchInput) {
+        searchInput.focus();
+    }
 }
 
 async function resolveManualInput() {
@@ -79,6 +92,96 @@ async function resolveManualInput() {
     } catch (err) {
         document.getElementById('hc-error-msg').textContent = 'Search failed';
         showHcState('error');
+    }
+}
+
+function _setResultsMessage(container, text, className) {
+    while (container.firstChild) container.removeChild(container.firstChild);
+    var p = document.createElement('p');
+    p.className = className;
+    p.textContent = text;
+    container.appendChild(p);
+}
+
+async function searchByTitle() {
+    var searchInput = document.getElementById('hc-title-search');
+    var query = searchInput ? searchInput.value.trim() : '';
+    if (!query) return;
+
+    var resultsContainer = document.getElementById('hc-search-results');
+    _setResultsMessage(resultsContainer, 'Searching\u2026', 'hc-searching');
+
+    try {
+        var resp = await fetch('/api/hardcover/cover-search?query=' + encodeURIComponent(query));
+        var data = await resp.json();
+        while (resultsContainer.firstChild) resultsContainer.removeChild(resultsContainer.firstChild);
+
+        if (!data.results || data.results.length === 0) {
+            _setResultsMessage(resultsContainer, 'No results found. Try a different title or use the URL option below.', 'hc-no-results');
+            return;
+        }
+
+        data.results.forEach(function(book) {
+            var row = document.createElement('div');
+            row.className = 'hc-search-result';
+            row.onclick = function() { selectSearchResult(book); };
+
+            var img = document.createElement('img');
+            img.className = 'hc-search-thumb';
+            img.src = book.cached_image || '/static/no-cover.svg';
+            img.alt = '';
+            img.onerror = function() { this.src = '/static/no-cover.svg'; };
+
+            var info = document.createElement('div');
+            info.className = 'hc-search-info';
+
+            var title = document.createElement('div');
+            title.className = 'hc-search-title';
+            title.textContent = book.title || 'Unknown';
+
+            var author = document.createElement('div');
+            author.className = 'hc-search-author';
+            author.textContent = book.author || '';
+
+            var selectBtn = document.createElement('button');
+            selectBtn.className = 'btn btn-sm btn-accent';
+            selectBtn.textContent = 'Select';
+            selectBtn.onclick = function(e) { e.stopPropagation(); selectSearchResult(book); };
+
+            info.appendChild(title);
+            info.appendChild(author);
+            row.appendChild(img);
+            row.appendChild(info);
+            row.appendChild(selectBtn);
+            resultsContainer.appendChild(row);
+        });
+    } catch (err) {
+        _setResultsMessage(resultsContainer, 'Search failed. Try again or use the URL option below.', 'hc-no-results');
+    }
+}
+
+async function selectSearchResult(book) {
+    showHcState('loading');
+    try {
+        var resp = await fetch('/api/hardcover/resolve?abs_id=' + hardcoverModalState.absId + '&input=' + encodeURIComponent(String(book.book_id)));
+        var data = await resp.json();
+        if (data && data.found) {
+            displayBookWithEditions(data);
+            return;
+        }
+        document.getElementById('hc-error-msg').textContent = (data && data.message) || 'Could not load editions';
+        showHcState('error');
+    } catch (err) {
+        document.getElementById('hc-error-msg').textContent = 'Failed to load book details';
+        showHcState('error');
+    }
+}
+
+function toggleUrlFallback() {
+    var row = document.getElementById('hc-url-fallback');
+    row.style.display = row.style.display === 'none' ? 'block' : 'none';
+    if (row.style.display !== 'none') {
+        document.getElementById('hc-input').focus();
     }
 }
 
@@ -125,7 +228,7 @@ function displayBookWithEditions(data) {
     document.getElementById('hc-author').textContent = data.author || 'Unknown Author';
 
     var container = document.getElementById('hc-editions');
-    container.replaceChildren();
+    while (container.firstChild) container.removeChild(container.firstChild);
 
     var hasEditions = data.editions && data.editions.length > 0;
 
@@ -255,20 +358,6 @@ function displayBookWithEditions(data) {
     showHcState('found');
 }
 
-function formatEditionDetails(ed) {
-    var parts = [];
-    if (ed.audio_seconds && ed.audio_seconds > 0) {
-        var hours = Math.floor(ed.audio_seconds / 3600);
-        var mins = Math.floor((ed.audio_seconds % 3600) / 60);
-        parts.push(hours + 'h ' + mins + 'm');
-    } else if (ed.pages && ed.pages > 0) {
-        parts.push(ed.pages + ' pp');
-    }
-    if (ed.year) {
-        parts.push(ed.year);
-    }
-    return parts.join('  ·  ') || '—';
-}
 
 function selectEdition(div) {
     document.querySelectorAll('.hc-edition-option').forEach(function(el) {
@@ -293,7 +382,8 @@ async function linkSelectedEdition() {
                 pages: edition ? edition.pages : null,
                 audio_seconds: edition ? edition.audio_seconds : null,
                 title: data.title,
-                slug: data.slug
+                slug: data.slug,
+                cached_image: data.cached_image || null
             })
         });
 

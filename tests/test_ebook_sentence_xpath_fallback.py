@@ -1,3 +1,7 @@
+import pytest
+
+pytestmark = pytest.mark.docker
+
 import unittest
 
 from lxml import html

@@ -56,12 +56,20 @@ class MockContainer:
         self.mock_hardcover_client = MockHardcoverClient()
         self.mock_database_service = Mock()
         self.mock_database_service.get_all_settings.return_value = {}
+        self.mock_hardcover_service = Mock()
+        self.mock_hardcover_sync_client = Mock()
 
     def abs_client(self):
         return self.mock_abs_client
 
     def hardcover_client(self):
         return self.mock_hardcover_client
+
+    def hardcover_service(self):
+        return self.mock_hardcover_service
+
+    def hardcover_sync_client(self):
+        return self.mock_hardcover_sync_client
 
     def database_service(self):
         return self.mock_database_service
@@ -70,6 +78,9 @@ class MockContainer:
         return Mock()
 
     def booklore_client(self):
+        return Mock()
+
+    def booklore_client_group(self):
         return Mock()
 
     def storyteller_client(self):

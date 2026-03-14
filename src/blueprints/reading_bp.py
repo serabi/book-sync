@@ -32,26 +32,6 @@ def _get_reading_stats_service():
     return ReadingStatsService(get_database_service())
 
 
-def _safe_privacy(val):
-    """Parse the journal privacy setting to int, defaulting to 3 (me-only)."""
-    try:
-        return int(val)
-    except (TypeError, ValueError):
-        return 3
-
-
-def _resolve_journal_sync(hardcover_details, database_service):
-    """Resolve whether journal sync is enabled for a book (per-book or global)."""
-    if not hardcover_details or not hardcover_details.hardcover_book_id:
-        return False
-    try:
-        container = get_container()
-        hc_sync = container.hardcover_sync_client()
-        return hc_sync.is_journal_push_enabled(hardcover_details)
-    except Exception:
-        return False
-
-
 def _synthetic_journal(abs_id, event, date_str, percentage=None):
     """Create a lightweight object mimicking ReadingJournal for timeline display."""
     class _SyntheticJournal:
@@ -177,17 +157,10 @@ def reading_index():
         logger.warning(f"Could not fetch ABS metadata for reading log enrichment: {e}")
 
     # Fetch all states at once to avoid N+1
-    all_states = database_service.get_all_states()
-    states_by_book = {}
-    for state in all_states:
-        states_by_book.setdefault(state.abs_id, []).append(state)
+    states_by_book = database_service.get_states_by_book()
 
     # Fetch Booklore metadata for title enrichment
-    all_booklore_books = database_service.get_all_booklore_books()
-    booklore_by_filename = {}
-    for bl_book in all_booklore_books:
-        if bl_book.filename:
-            booklore_by_filename.setdefault(bl_book.filename.lower(), []).append(bl_book)
+    booklore_by_filename = database_service.get_booklore_by_filename()
 
     all_book_data = [
         _build_book_reading_data(
@@ -272,12 +245,6 @@ def reading_index():
             'description': 'Books you may revisit or archive.',
             'books': paused + dnf,
         },
-        {
-            'id': 'backlog',
-            'title': 'Backlog',
-            'description': 'Tracked books that have not started yet.',
-            'books': not_started,
-        },
     ]
 
     # TBR count for tab badge
@@ -293,6 +260,14 @@ def reading_index():
     path_to_tab = {'/reading/tbr': 'tbr', '/reading/stats': 'stats'}
     active_tab = path_to_tab.get(request.path, 'log')
 
+    # Build TBR-linked abs_ids set for "Add to Want to Read" visibility
+    tbr_linked_abs_ids = set()
+    try:
+        tbr_items = database_service.get_tbr_items()
+        tbr_linked_abs_ids = {item.book_abs_id for item in tbr_items if item.book_abs_id}
+    except Exception as e:
+        logger.debug(f"Could not load TBR items: {e}")
+
     return render_template(
         'reading.html',
         all_books=currently_reading + finished + paused + dnf + not_started,
@@ -303,6 +278,9 @@ def reading_index():
         goal=goal,
         current_year=current_year,
         total_books=len(all_book_data),
+        not_started_books=not_started,
+        not_started_count=len(not_started),
+        tbr_linked_abs_ids=tbr_linked_abs_ids,
         tbr_count=tbr_count,
         hc_configured=hc_configured,
         active_tab=active_tab,
@@ -312,6 +290,11 @@ def reading_index():
 @reading_bp.route('/reading/book/<abs_id>')
 def reading_detail(abs_id):
     """Render the book detail view with journal."""
+    valid_tabs = ('overview', 'journal', 'highlights')
+    active_tab = request.args.get('tab', 'overview')
+    if active_tab not in valid_tabs:
+        active_tab = 'overview'
+
     database_service = get_database_service()
     abs_service = get_abs_service()
 
@@ -319,17 +302,10 @@ def reading_detail(abs_id):
     if not book:
         abort(404)
 
-    all_states = database_service.get_all_states()
-    states_by_book = {}
-    for state in all_states:
-        states_by_book.setdefault(state.abs_id, []).append(state)
+    states_by_book = database_service.get_states_by_book()
 
     # Booklore enrichment
-    all_booklore_books = database_service.get_all_booklore_books()
-    booklore_by_filename = {}
-    for bl_book in all_booklore_books:
-        if bl_book.filename:
-            booklore_by_filename.setdefault(bl_book.filename.lower(), []).append(bl_book)
+    booklore_by_filename = database_service.get_booklore_by_filename()
 
     book_data = _build_book_reading_data(book, database_service, abs_service, states_by_book,
                                          booklore_by_filename)
@@ -363,12 +339,16 @@ def reading_detail(abs_id):
         book, states_by_book, container, abs_service, metadata, has_bookfusion_link,
     )
 
+    # Check if this book already has a linked TBR item
+    has_linked_tbr = database_service.find_tbr_by_abs_id(abs_id) is not None
+
     return render_template(
         'reading_detail.html',
         book=book_data,
         journals=journals,
         bf_highlights=bf_highlights,
         has_bookfusion_link=has_bookfusion_link,
+        has_linked_tbr=has_linked_tbr,
         metadata=metadata,
         services_enabled=services_enabled,
         service_states=service_states,
@@ -377,8 +357,40 @@ def reading_detail(abs_id):
             hardcover and hardcover.hardcover_book_id
         ),
         hardcover_linked=bool(hardcover and hardcover.hardcover_book_id),
-        journal_sync_enabled=_resolve_journal_sync(hardcover, database_service),
-        journal_privacy_default=_safe_privacy(database_service.get_setting('HARDCOVER_JOURNAL_PRIVACY')),
+        active_tab=active_tab,
+    )
+
+
+@reading_bp.route('/reading/tbr/<int:item_id>')
+def tbr_detail(item_id):
+    """Render the TBR book detail page."""
+    database_service = get_database_service()
+
+    item = database_service.get_tbr_item(item_id)
+    if not item:
+        abort(404)
+
+    # Deserialize genres
+    genres = _json.loads(item.genres) if item.genres else []
+
+    # Resolve linked library book
+    linked_book = None
+    if item.book_abs_id:
+        linked_book = database_service.get_book(item.book_abs_id)
+
+    # Check HC configuration
+    try:
+        hc_configured = get_container().hardcover_client().is_configured()
+    except Exception:
+        hc_configured = False
+
+    return render_template(
+        'tbr_detail.html',
+        item=item,
+        genres=genres,
+        linked_book=linked_book,
+        hc_configured=hc_configured,
+        get_hardcover_book_url=get_hardcover_book_url,
     )
 
 
@@ -443,9 +455,9 @@ def update_rating(abs_id):
     hardcover_error = None
     try:
         container = get_container()
-        hc_sync = container.hardcover_sync_client()
-        if hc_sync.is_configured():
-            sync_result = hc_sync.push_local_rating(book, rating)
+        hc_service = container.hardcover_service()
+        if hc_service.is_configured():
+            sync_result = hc_service.push_local_rating(book, rating)
             hardcover_synced = bool(sync_result.get('hardcover_synced'))
             hardcover_error = sync_result.get('hardcover_error')
     except Exception as e:
@@ -544,16 +556,26 @@ def sync_dates_to_hardcover(abs_id):
     if not book:
         return jsonify({"success": False, "error": "Book not found"}), 404
 
-    try:
-        from src.services.reading_date_service import push_dates_to_hardcover
-        container = get_container()
-        synced = push_dates_to_hardcover(abs_id, container, database_service, force=True)
-        if synced:
-            return jsonify({"success": True, "message": "Dates synced to Hardcover"})
-        return jsonify({"success": False, "error": "Nothing to sync — dates already match or Hardcover not linked"}), 400
-    except Exception as e:
-        logger.debug(f"Could not push dates to Hardcover: {e}")
-        return jsonify({"success": False, "error": "Failed to sync dates to Hardcover"}), 500
+    container = get_container()
+    synced, message = container.reading_date_service().push_dates_to_hardcover(abs_id, force=True)
+    if synced:
+        return jsonify({"success": True, "message": message})
+    return jsonify({"success": False, "error": message}), 400
+
+
+@reading_bp.route('/api/reading/book/<abs_id>/dates/pull-hardcover', methods=['POST'])
+def pull_dates_from_hardcover(abs_id):
+    """Pull started_at/finished_at from Hardcover into local DB."""
+    database_service = get_database_service()
+    book = database_service.get_book(abs_id)
+    if not book:
+        return jsonify({"success": False, "error": "Book not found"}), 404
+
+    container = get_container()
+    success, message, dates = container.reading_date_service().pull_dates_from_hardcover(abs_id)
+    if success:
+        return jsonify({"success": True, "message": message, "dates": dates})
+    return jsonify({"success": False, "error": message}), 400
 
 
 @reading_bp.route('/api/reading/book/<abs_id>/journal', methods=['POST'])
@@ -578,15 +600,6 @@ def add_journal(abs_id):
         abs_id, event='note', entry=entry, percentage=max_pct if max_pct > 0 else None
     )
 
-    # Fire-and-forget push to Hardcover
-    try:
-        container = get_container()
-        hc_sync = container.hardcover_sync_client()
-        if hc_sync.is_configured():
-            hc_sync.push_journal_note(book, entry)
-    except Exception as e:
-        logger.debug(f"Hardcover journal push failed for {abs_id}: {e}")
-
     return jsonify({
         "success": True,
         "journal": {
@@ -601,28 +614,71 @@ def add_journal(abs_id):
 
 @reading_bp.route('/api/reading/journal/<int:journal_id>', methods=['DELETE'])
 def delete_journal(journal_id):
-    """Delete a journal entry."""
+    """Delete a journal entry (cascades to book dates for started/finished)."""
     database_service = get_database_service()
+
+    # Look up the journal before deleting so we can cascade for started/finished
+    journal = database_service.get_reading_journal(journal_id)
+    if not journal:
+        return jsonify({"success": False, "error": "Journal entry not found"}), 404
+
+    abs_id = journal.abs_id
+    event = journal.event
+
     deleted = database_service.delete_reading_journal(journal_id)
     if not deleted:
         return jsonify({"success": False, "error": "Journal entry not found"}), 404
-    return jsonify({"success": True})
+
+    # If this was the last started/finished journal, clear the corresponding book field
+    cleared_field = None
+    if event in ('started', 'finished'):
+        remaining = database_service.find_journal_by_event(abs_id, event)
+        if not remaining:
+            cleared_field = 'started_at' if event == 'started' else 'finished_at'
+            database_service.update_book_reading_fields(abs_id, **{cleared_field: None})
+
+    return jsonify({"success": True, "cleared_field": cleared_field})
 
 
 @reading_bp.route('/api/reading/journal/<int:journal_id>', methods=['PATCH'])
 def update_journal(journal_id):
-    """Update a journal note entry."""
+    """Update a journal entry (notes: text; started/finished: date)."""
     database_service = get_database_service()
     data = request.json or {}
     entry = (data.get('entry') or '').strip()
-    if not entry:
-        return jsonify({"success": False, "error": "entry is required"}), 400
 
     existing = database_service.get_reading_journal(journal_id)
     if not existing:
         return jsonify({"success": False, "error": "Journal entry not found"}), 404
+
+    # Started/finished entries: only allow editing the date (created_at), not text
+    if existing.event in ('started', 'finished'):
+        date_str = (data.get('created_at') or '').strip()
+        if not date_str:
+            return jsonify({"success": False, "error": "created_at date is required for started/finished entries"}), 400
+        try:
+            new_dt = datetime.strptime(date_str, '%Y-%m-%d')
+        except ValueError:
+            return jsonify({"success": False, "error": "Invalid date format (expected YYYY-MM-DD)"}), 400
+        journal = database_service.update_reading_journal(journal_id, created_at=new_dt)
+        # Also update the corresponding book field
+        field = 'started_at' if existing.event == 'started' else 'finished_at'
+        database_service.update_book_reading_fields(existing.abs_id, **{field: date_str})
+        return jsonify({
+            "success": True,
+            "journal": {
+                "id": journal.id,
+                "event": journal.event,
+                "entry": journal.entry,
+                "percentage": journal.percentage,
+                "created_at": journal.created_at.isoformat() if journal.created_at else None,
+            }
+        })
+
     if existing.event != 'note':
         return jsonify({"success": False, "error": "Only notes can be edited"}), 400
+    if not entry:
+        return jsonify({"success": False, "error": "entry is required"}), 400
     journal = database_service.update_reading_journal(journal_id, entry=entry)
 
     return jsonify({
@@ -635,86 +691,6 @@ def update_journal(journal_id):
             "created_at": journal.created_at.isoformat() if journal.created_at else None,
         }
     })
-
-
-@reading_bp.route('/api/reading/book/<abs_id>/journal-sync', methods=['POST'])
-def set_journal_sync(abs_id):
-    """Set per-book journal sync preference for Hardcover."""
-    database_service = get_database_service()
-    data = request.json or {}
-    journal_sync = data.get('journal_sync')
-
-    if journal_sync not in ('on', 'off', None):
-        return jsonify({"success": False, "error": "journal_sync must be 'on', 'off', or null"}), 400
-
-    hardcover_details = database_service.get_hardcover_details(abs_id)
-    if not hardcover_details:
-        return jsonify({"success": False, "error": "Book not linked to Hardcover"}), 404
-
-    hardcover_details.journal_sync = journal_sync
-    database_service.save_hardcover_details(hardcover_details)
-    return jsonify({"success": True, "journal_sync": journal_sync})
-
-
-@reading_bp.route('/api/reading/journal/<int:journal_id>/push-hardcover', methods=['POST'])
-def push_journal_to_hardcover(journal_id):
-    """Push an existing journal entry (note or highlight) to Hardcover on demand."""
-    database_service = get_database_service()
-
-    journal = database_service.get_reading_journal(journal_id)
-    if not journal:
-        return jsonify({"success": False, "error": "Journal entry not found"}), 404
-
-    if not journal.entry:
-        return jsonify({"success": False, "error": "Journal entry has no text to push"}), 400
-
-    hardcover_details = database_service.get_hardcover_details(journal.abs_id)
-    if not hardcover_details or not hardcover_details.hardcover_book_id:
-        return jsonify({"success": False, "error": "Book not linked to Hardcover"}), 400
-
-    try:
-        container = get_container()
-        hc_client = container.hardcover_client()
-        if not hc_client or not hc_client.is_configured():
-            return jsonify({"success": False, "error": "Hardcover not configured"}), 400
-
-        data = request.json or {}
-        try:
-            privacy_override = int(data['privacy'])
-        except (KeyError, TypeError, ValueError):
-            privacy_override = None
-
-        hc_sync = container.hardcover_sync_client()
-        edition_id = hc_sync.select_edition_id(
-            database_service.get_book(journal.abs_id), hardcover_details
-        )
-        privacy = privacy_override if privacy_override in (1, 2, 3) else hc_sync.get_journal_privacy()
-
-        book = database_service.get_book(journal.abs_id)
-        book_title = book.abs_title if book else None
-
-        success = hc_client.create_reading_journal(
-            int(hardcover_details.hardcover_book_id),
-            int(edition_id) if edition_id else None,
-            'note',
-            action_at=journal.created_at.isoformat() if journal.created_at else None,
-            entry=journal.entry,
-            privacy_setting_id=privacy,
-        )
-        if success:
-            from src.services.hardcover_log_service import log_hardcover_action
-            from src.utils.logging_utils import sanitize_log_data
-            preview = journal.entry[:80] + ('...' if len(journal.entry) > 80 else '')
-            log_hardcover_action(
-                database_service, abs_id=journal.abs_id,
-                book_title=sanitize_log_data(book_title) if book_title else None,
-                direction='push', action='journal_note',
-                detail={'entry_preview': preview, 'privacy': privacy, 'source': journal.event},
-            )
-            return jsonify({"success": True})
-        return jsonify({"success": False, "error": "Hardcover rejected the journal entry"}), 500
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
 
 
 @reading_bp.route('/api/reading/goal/<int:year>', methods=['GET'])

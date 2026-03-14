@@ -112,6 +112,8 @@
   box-shadow:
     0 22px 50px rgba(0, 0, 0, 0.34),
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
 }
 
 .settings-sidebar-intro {
@@ -328,6 +330,11 @@
 .accent-dot-hardcover {
   background: var(--color-hardcover);
   color: var(--color-hardcover);
+}
+
+.accent-dot-telegram {
+  background: var(--color-telegram);
+  color: var(--color-telegram);
 }
 
 .sub-section-body {
@@ -726,10 +733,6 @@ input:checked + .slider::before {
 
 .m-0 {
   margin: 0 !important;
-}
-
-.section-header-flat {
-  display: none;
 }
 
 .dynamic-group {
