@@ -707,7 +707,7 @@ class SyncManager:
             return
 
         # Execute the sync update
-        self._execute_sync_update(book, config, abs_id, title_snip)
+        self._execute_sync_update(book, config, abs_id, title_snip, active_clients)
 
     def _evaluate_sync_significance(self, config, book, abs_id, title_snip, prev_states_by_client):
         """
@@ -778,7 +778,7 @@ class SyncManager:
 
         return True
 
-    def _execute_sync_update(self, book, config, abs_id, title_snip):
+    def _execute_sync_update(self, book, config, abs_id, title_snip, active_clients):
         """Resolve locator from leader, update followers, and save states."""
         leader, leader_pct = self._determine_leader(config, book, abs_id, title_snip)
         if not leader:
@@ -845,7 +845,7 @@ class SyncManager:
                 results[client_name] = SyncResult(None, False)
 
         # Push to push-only clients (configured but didn't report state)
-        for client_name, client in self.sync_clients.items():
+        for client_name, client in active_clients.items():
             if client_name in config or client_name == leader:
                 continue
             try:

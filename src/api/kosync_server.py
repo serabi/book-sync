@@ -676,13 +676,15 @@ def _try_find_epub_by_hash(doc_hash: str) -> str | None:
                 logger.info(f"Scanning {len(books)} books from Booklore DB cache...")
 
                 for book in books:
-                    book_id = str(book.raw_metadata_dict.get('id')) if hasattr(book, 'raw_metadata_dict') else None
+                    raw_id = book.raw_metadata_dict.get('id') if hasattr(book, 'raw_metadata_dict') else None
+                    book_id = str(raw_id) if raw_id is not None else None
                     # Fallback to parsing raw_metadata if needed
                     if not book_id:
                         import json
                         try:
                             meta = json.loads(book.raw_metadata)
-                            book_id = str(meta.get('id'))
+                            fallback_id = meta.get('id')
+                            book_id = str(fallback_id) if fallback_id is not None else None
                         except (json.JSONDecodeError, AttributeError) as e:
                             logger.debug(f"Failed to parse raw_metadata JSON: {e}")
                             continue
@@ -704,7 +706,7 @@ def _try_find_epub_by_hash(doc_hash: str) -> str | None:
                             computed_hash = _container.ebook_parser().get_kosync_id_from_bytes(book.filename, book_content)
 
                             if computed_hash == doc_hash:
-                                safe_title = book.filename
+                                safe_title = f"{book.server_id}_{book.filename}"
                                 cache_dir = _container.data_dir() / "epub_cache"
                                 cache_dir.mkdir(parents=True, exist_ok=True)
                                 cache_path = cache_dir / safe_title

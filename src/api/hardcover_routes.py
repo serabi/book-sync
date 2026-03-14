@@ -232,8 +232,12 @@ def link_hardcover(abs_id):
             )
 
             database_service.save_hardcover_details(hardcover_details)
+        except Exception as e:
+            logger.error(f"Failed to save hardcover details: {e}")
+            return jsonify({"error": "Database update failed"}), 500
 
-            # Post-link setup: resolve editions, create user_book, pull dates, push progress
+        # Post-link setup (non-fatal): resolve editions, create user_book, pull dates, push progress
+        try:
             hc_service = container.hardcover_service()
             hc_service.resolve_editions(hardcover_details)
 
@@ -244,11 +248,10 @@ def link_hardcover(abs_id):
                 # Re-fetch: _pull_dates_at_match may have updated dates in DB
                 book = database_service.get_book(abs_id)
                 hc_service.push_initial_progress(book, container.hardcover_sync_client())
-
-            return jsonify({"success": True, "title": title})
         except Exception as e:
-            logger.error(f"Failed to save hardcover details: {e}")
-            return jsonify({"error": "Database update failed"}), 500
+            logger.warning(f"Post-link Hardcover setup failed (link saved): {e}")
+
+        return jsonify({"success": True, "title": title})
 
     # Legacy form data flow
     url = request.form.get("hardcover_url", "").strip()
@@ -272,8 +275,13 @@ def link_hardcover(abs_id):
         )
 
         database_service.save_hardcover_details(hardcover_details)
+    except Exception as e:
+        logger.error(f"Failed to save hardcover details: {e}")
+        flash("Database update failed", "error")
+        return redirect(url_for("dashboard.index"))
 
-        # Post-link setup: resolve editions, create user_book, pull dates, push progress
+    # Post-link setup (non-fatal): resolve editions, create user_book, pull dates, push progress
+    try:
         hc_service = container.hardcover_service()
         hc_service.resolve_editions(hardcover_details)
 
@@ -284,11 +292,10 @@ def link_hardcover(abs_id):
             # Re-fetch: _pull_dates_at_match may have updated dates in DB
             book = database_service.get_book(abs_id)
             hc_service.push_initial_progress(book, container.hardcover_sync_client())
-
-        flash(f"Linked Hardcover: {book_data.get('title')}", "success")
     except Exception as e:
-        logger.error(f"Failed to save hardcover details: {e}")
-        flash("Database update failed", "error")
+        logger.warning(f"Post-link Hardcover setup failed (link saved): {e}")
+
+    flash(f"Linked Hardcover: {book_data.get('title')}", "success")
 
     return redirect(url_for("dashboard.index"))
 

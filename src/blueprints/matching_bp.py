@@ -316,7 +316,7 @@ def match():
                 abs_title=manager.get_abs_title(selected_ab),
                 ebook_filename=book.ebook_filename,
                 kosync_doc_id=book.kosync_doc_id,
-                status="not_started",
+                status=book.status or "not_started",
                 duration=manager.get_duration(selected_ab),
                 sync_mode="audiobook",
                 **_copy_book_merge_metadata(

@@ -706,7 +706,7 @@ class CleanFlaskIntegrationTest(unittest.TestCase):
         self.assertEqual(saved_book.abs_id, 'real-audiobook-789')
         self.assertEqual(saved_book.ebook_filename, 'mybook.epub')
         self.assertEqual(saved_book.kosync_doc_id, 'ebook-hash-123')
-        self.assertEqual(saved_book.status, 'not_started')
+        self.assertEqual(saved_book.status, 'active')  # preserves original book status
         self.assertEqual(saved_book.sync_mode, 'audiobook')
 
         self.mock_database_service.migrate_book_data.assert_called_once_with('ebook-abc123', 'real-audiobook-789')

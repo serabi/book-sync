@@ -106,7 +106,7 @@
                                 <div class="audiobook-title">{{ get_title(ab) }}</div>
                                 {% if ab.id in library_abs_ids %}
                                 <button type="button" class="source-badge inlibrary inlibrary-remove"
-                                    onclick="event.preventDefault(); event.stopPropagation(); showRemoveModal('{{ ab.id }}', '{{ get_title(ab)|e }}')"
+                                    onclick="event.preventDefault(); event.stopPropagation(); showRemoveModal({{ ab.id|tojson }}, {{ get_title(ab)|tojson }})"
                                     title="Remove from library">In Library</button>
                                 {% endif %}
                             </div>

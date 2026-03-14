@@ -305,6 +305,13 @@ def update_tbr_item(item_id):
     if not updates:
         return jsonify({"success": False, "error": "No valid fields to update"}), 400
 
+    # Dedupe check: prevent reassigning hardcover_book_id to a duplicate
+    new_hc_id = updates.get('hardcover_book_id')
+    if new_hc_id and str(new_hc_id) != str(item.hardcover_book_id or ''):
+        existing = database_service.find_tbr_by_hardcover_id(new_hc_id)
+        if existing and existing.id != item_id:
+            return jsonify({"success": False, "error": "Another TBR item already has this Hardcover ID"}), 409
+
     updated = database_service.update_tbr_item(item_id, **updates)
     if not updated:
         return jsonify({"success": False, "error": "Update failed"}), 500
