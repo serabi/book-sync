@@ -226,6 +226,9 @@ class HardcoverService:
             return ub
 
         # 3. Create a new user_book on HC
+        # Note: if the API call below succeeds but save_hardcover_details fails,
+        # the next call will find the orphaned user_book via get_user_book (step 2)
+        # and adopt it — self-healing by design.
         hc_status_id = LOCAL_TO_HC_STATUS.get(book.status, HC_WANT_TO_READ)
         if not edition_id:
             edition_id = self.select_edition_id(book, hardcover_details)

@@ -137,7 +137,7 @@
         <section class="r-detail-section">
             <h3 class="r-section-title">Notes</h3>
             <div class="tbr-notes-field">
-                <textarea id="tbr-notes" rows="3" placeholder="Add personal notes..." class="r-tbr-detail-notes">{{ item.notes or '' }}</textarea>
+                <textarea id="tbr-notes" rows="3" placeholder="Add personal notes..." class="r-tbr-detail-notes">{{ (item.notes or '')|e }}</textarea>
                 <button class="btn btn-secondary" id="save-notes-btn" type="button" style="align-self: flex-end; font-size: 12px; padding: 5px 14px;">Save</button>
             </div>
         </section>
@@ -149,8 +149,8 @@
                 <input type="text" id="edit-title" class="search-box" placeholder="Title" value="{{ item.title|e }}">
                 <input type="text" id="edit-author" class="search-box" placeholder="Author" value="{{ item.author|default('', true)|e }}">
                 <input type="text" id="edit-subtitle" class="search-box" placeholder="Subtitle" value="{{ item.subtitle|default('', true)|e }}">
-                <textarea id="edit-description" class="search-box" rows="4" placeholder="Description">{{ item.description|default('', true) }}</textarea>
-                <textarea id="edit-notes" class="search-box" rows="2" placeholder="Notes">{{ item.notes|default('', true) }}</textarea>
+                <textarea id="edit-description" class="search-box" rows="4" placeholder="Description">{{ item.description|default('', true)|e }}</textarea>
+                <textarea id="edit-notes" class="search-box" rows="2" placeholder="Notes">{{ item.notes|default('', true)|e }}</textarea>
                 <div class="tbr-edit-row">
                     <input type="number" id="edit-pages" class="search-box" placeholder="Pages" value="{{ item.page_count or '' }}">
                     <input type="number" id="edit-year" class="search-box" placeholder="Year" value="{{ item.release_year or '' }}">

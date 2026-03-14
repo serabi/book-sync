@@ -141,8 +141,8 @@ class StatusMachine:
             try:
                 pulled = container.reading_date_service().pull_reading_dates(abs_id)
                 return pulled.get('started_at', date.today().isoformat())
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug("Could not pull started_at for %s: %s", abs_id, e)
         return date.today().isoformat()
 
     def _push_to_hardcover(self, book, new_status, container):

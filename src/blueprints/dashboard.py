@@ -232,11 +232,11 @@ def index():
         hardcover_details = hardcover_by_book.get(book.abs_id)
         if hardcover_details:
             # HC out-of-sync indicator: cached HC status ≠ local status means push pending/failed
-            hc_to_local = {2: "active", 3: "completed", 4: "paused", 5: "dnf"}
+            hc_to_local = {1: "not_started", 2: "active", 3: "completed", 4: "paused", 5: "dnf"}
             hc_local_equiv = hc_to_local.get(hardcover_details.hardcover_status_id)
             hc_mismatch = (
                 hc_local_equiv is not None
-                and book.status in ("active", "paused", "dnf", "completed")
+                and book.status in ("not_started", "active", "paused", "dnf", "completed")
                 and hc_local_equiv != book.status
             )
             mapping.update(
