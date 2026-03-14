@@ -25,7 +25,7 @@ from src.sync_clients.sync_client_interface import (
 from src.utils.epub_resolver import get_local_epub
 
 # Logging utilities (placed at top to ensure availability during sync)
-from src.utils.logging_utils import sanitize_log_data
+from src.utils.logging_utils import sanitize_exception, sanitize_log_data
 
 # Silence noisy third-party loggers
 for noisy in ('urllib3', 'requests', 'schedule', 'chardet', 'multipart', 'faster_whisper'):
@@ -160,7 +160,7 @@ class SyncManager:
                     client.check_connection()
                     logger.info(f"'{client_name}' connection verified (retry)")
                 except Exception as e:
-                    logger.warning(f"'{client_name}' connection failed after retry: {e} (first attempt: {first_err})")
+                    logger.warning(f"'{client_name}' connection failed after retry: {sanitize_exception(e)} (first attempt: {sanitize_exception(first_err)})")
 
         # Check CWA Integration Status
         if self.library_service and self.library_service.cwa_client:
@@ -186,7 +186,7 @@ class SyncManager:
                 else:
                     logger.warning("ABS ebook methods missing - ebook search may not work")
             except Exception as e:
-                logger.warning(f"ABS ebook check failed: {e}")
+                logger.warning(f"ABS ebook check failed: {sanitize_exception(e)}")
 
         # Run one-time migration
         if self.migration_service:
@@ -199,7 +199,7 @@ class SyncManager:
             try:
                 hc_client.hardcover_service.backfill_hardcover_states()
             except Exception as e:
-                logger.warning(f"Hardcover state backfill failed (non-fatal): {e}")
+                logger.warning(f"Hardcover state backfill failed (non-fatal): {sanitize_exception(e)}")
 
         # Cleanup orphaned cache files
         # DISABLED: Current logic is too aggressive (deletes original_ebook_filename for linked books).
@@ -385,7 +385,7 @@ class SyncManager:
                 else:
                     logger.debug(f"'{book.abs_id}' Could not find timestamp for '{client_name}' text")
             except Exception as e:
-                logger.warning(f"'{book.abs_id}' Cross-format normalization failed for '{client_name}': {e}")
+                logger.warning(f"'{book.abs_id}' Cross-format normalization failed for '{client_name}': {sanitize_exception(e)}")
 
         # Only return if we successfully normalized at least one ebook client
         if len(normalized) > 1:
@@ -419,7 +419,7 @@ class SyncManager:
                     if state is not None:
                         config[client_name] = state
                 except Exception as e:
-                    logger.warning(f"'{client_name}' state fetch failed: {e}")
+                    logger.warning(f"'{client_name}' state fetch failed: {sanitize_exception(e)}")
 
         return config
 
@@ -614,7 +614,7 @@ class SyncManager:
             try:
                 self._sync_single_book(book, bulk_states_per_client)
             except Exception as e:
-                logger.error(f"Sync error for '{abs_id}': {type(e).__name__}: {e}")
+                logger.error(f"Sync error for '{abs_id}': {sanitize_exception(e)}")
                 logger.debug(traceback.format_exc())
 
         logger.debug("End of sync cycle for active books")
@@ -641,7 +641,7 @@ class SyncManager:
                         bulk_states_per_client[client_name] = bulk_data
                         logger.debug(f"Pre-fetched bulk state for {client_name}")
                 except Exception as e:
-                    logger.warning(f"Failed to pre-fetch bulk state for {client_name}: {e}")
+                    logger.warning(f"Failed to pre-fetch bulk state for {client_name}: {sanitize_exception(e)}")
 
             # Check for suggestions (runs even with no active books)
             if 'ABS' in bulk_states_per_client:
@@ -794,7 +794,7 @@ class SyncManager:
         try:
             txt = leader_client.get_text_from_current_state(book, leader_state)
         except Exception as e:
-            logger.warning(f"'{abs_id}' '{title_snip}' Error getting text from leader '{leader}': {e}")
+            logger.warning(f"'{abs_id}' '{title_snip}' Error getting text from leader '{leader}': {sanitize_exception(e)}")
             txt = None
         if not txt:
             logger.warning(f"'{abs_id}' '{title_snip}' Could not get text from leader '{leader}', persisting leader snapshot")
@@ -844,7 +844,7 @@ class SyncManager:
                 result = client.update_progress(book, request)
                 results[client_name] = result
             except Exception as e:
-                logger.warning(f"Failed to update '{client_name}': {e}")
+                logger.warning(f"Failed to update '{client_name}': {sanitize_exception(e)}")
                 results[client_name] = SyncResult(None, False)
 
         # Push to push-only clients (configured but didn't report state)
@@ -856,7 +856,7 @@ class SyncManager:
                 result = client.update_progress(book, request)
                 results[client_name] = result
             except Exception as e:
-                logger.warning(f"Failed to update push-only client '{client_name}': {e}")
+                logger.warning(f"Failed to update push-only client '{client_name}': {sanitize_exception(e)}")
 
         # Save states to database
         current_time = time.time()
