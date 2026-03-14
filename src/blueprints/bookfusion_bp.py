@@ -2,7 +2,6 @@
 
 import difflib
 import logging
-import re
 from collections import defaultdict
 from datetime import datetime
 
@@ -10,6 +9,7 @@ from flask import Blueprint, current_app, jsonify, render_template, request
 
 from src.blueprints.helpers import get_booklore_client, get_container, get_database_service
 from src.db.models import Book, HardcoverDetails
+from src.utils.title_utils import clean_book_title, normalize_title
 
 logger = logging.getLogger(__name__)
 
@@ -105,7 +105,7 @@ def sync_highlights():
 
     data = request.get_json(silent=True) or {}
     if data.get('full_resync'):
-        db_service.set_bookfusion_sync_cursor('')
+        db_service.set_bookfusion_sync_cursor(None)
 
     try:
         result = bf_client.sync_all_highlights(db_service)
@@ -115,19 +115,13 @@ def sync_highlights():
             'new_highlights': result['new_highlights'],
             'books_saved': result['books_saved'],
             'auto_matched': matched,
+            'new_ids': result.get('new_ids', []),
         })
     except Exception:
         logger.exception("BookFusion highlight sync failed")
         return jsonify({'error': 'BookFusion highlight sync failed'}), 500
 
 
-STRIP_EXTENSIONS = re.compile(r'\.(epub|mobi|azw3?|pdf|fb2|cbz|cbr|md)$', re.IGNORECASE)
-
-
-def _normalize_title(title: str) -> str:
-    """Normalize a title for matching: strip extensions, lowercase, collapse whitespace."""
-    t = STRIP_EXTENSIONS.sub('', title)
-    return ' '.join(t.lower().split())
 
 
 def _auto_match_highlights(db_service) -> int:
@@ -144,20 +138,20 @@ def _auto_match_highlights(db_service) -> int:
     book_map: dict[str, list[str]] = defaultdict(list)
     for b in books:
         if b.abs_title:
-            norm = _normalize_title(b.abs_title)
+            norm = normalize_title(b.abs_title)
             book_map[norm].append(b.abs_id)
 
     # Group unmatched by book_title
     title_groups: dict[str, list] = {}
     for hl in unmatched:
-        title = _clean_book_title(hl.book_title or '')
+        title = clean_book_title(hl.book_title or '')
         title_groups.setdefault(title, []).append(hl)
 
     matched_count = 0
     norm_keys = list(book_map.keys())
 
     for bf_title, highlights in title_groups.items():
-        norm_bf = _normalize_title(bf_title)
+        norm_bf = normalize_title(bf_title)
         abs_id = None
 
         # Exact match (only if unambiguous)
@@ -184,13 +178,6 @@ def _auto_match_highlights(db_service) -> int:
             matched_count += len(highlights)
 
     return matched_count
-
-
-def _clean_book_title(title: str) -> str:
-    """Strip .md suffix and wiki-link artifacts from book titles."""
-    if title.endswith('.md'):
-        title = title[:-3]
-    return title.strip()
 
 
 def _estimate_reading_dates(db_service, abs_id: str, bookfusion_ids: list[str], title: str) -> dict:
@@ -269,13 +256,13 @@ def _estimate_reading_dates(db_service, abs_id: str, bookfusion_ids: list[str], 
         if updated_book:
             book = updated_book
 
-    # Update status
-    if finished_at:
-        book.status = 'completed'
-    elif started_at:
-        book.status = 'active'
-    if book.status != 'not_started':
-        db_service.save_book(book)
+    # Update status via ReadingService for proper journal entries + HC sync
+    if finished_at or started_at:
+        from src.services.reading_service import ReadingService
+        reading_svc = ReadingService(db_service)
+        target_status = 'completed' if finished_at else 'active'
+        if book.status != target_status:
+            reading_svc.update_status(abs_id, target_status, container)
 
     return {
         'dates_set': True,
@@ -294,17 +281,18 @@ def get_highlights():
 
     grouped = {}
     for hl in highlights:
-        key = (hl.bookfusion_book_id, hl.matched_abs_id, _clean_book_title(hl.book_title or 'Unknown Book'))
+        key = (hl.bookfusion_book_id, hl.matched_abs_id, clean_book_title(hl.book_title or 'Unknown Book'))
         if key not in grouped:
             grouped[key] = {
                 'highlights': [],
                 'matched_abs_id': hl.matched_abs_id,
                 'bookfusion_book_id': hl.bookfusion_book_id,
-                'display_title': _clean_book_title(hl.book_title or 'Unknown Book'),
+                'display_title': clean_book_title(hl.book_title or 'Unknown Book'),
             }
         date_str = hl.highlighted_at.strftime('%Y-%m-%d %H:%M:%S') if hl.highlighted_at else None
         grouped[key]['highlights'].append({
             'id': hl.id,
+            'highlight_id': hl.highlight_id,
             'quote': hl.quote_text or hl.content,
             'date': date_str,
             'chapter_heading': hl.chapter_heading,
@@ -364,8 +352,20 @@ def save_highlight_to_journal():
 
     if not abs_id:
         return jsonify({'error': 'abs_id required'}), 400
+
+    # When no highlights provided in the request, fetch them server-side
     if not highlights:
-        return jsonify({'error': 'No highlights provided'}), 400
+        db_service = get_database_service()
+        bf_highlights = db_service.get_bookfusion_highlights_for_book(abs_id)
+        if not bf_highlights:
+            return jsonify({'error': 'No highlights found for this book'}), 400
+        highlights = []
+        for hl in bf_highlights:
+            highlights.append({
+                'quote': hl.quote_text or hl.content,
+                'chapter': hl.chapter_heading or '',
+                'highlighted_at': hl.highlighted_at.strftime('%Y-%m-%d %H:%M:%S') if hl.highlighted_at else '',
+            })
 
     db_service = get_database_service()
     book = db_service.get_book(abs_id)
@@ -385,9 +385,13 @@ def save_highlight_to_journal():
             entry += f"\n— {chapter}"
         created_at = None
         if highlighted_at_raw:
-            try:
-                created_at = datetime.strptime(highlighted_at_raw, '%Y-%m-%d %H:%M:%S')
-            except ValueError:
+            for fmt in ('%Y-%m-%d %H:%M:%S', '%b %d, %Y'):
+                try:
+                    created_at = datetime.strptime(highlighted_at_raw, fmt)
+                    break
+                except ValueError:
+                    continue
+            if not created_at:
                 logger.debug("Could not parse BookFusion highlight timestamp '%s'", highlighted_at_raw)
         try:
             db_service.add_reading_journal(abs_id, 'highlight', entry=entry, created_at=created_at)
@@ -412,7 +416,7 @@ def get_library():
     # Group by normalized title to merge format duplicates
     groups = defaultdict(list)
     for b in bf_books:
-        norm = _normalize_title(b.title or b.filename or '')
+        norm = normalize_title(b.title or b.filename or '')
         groups[norm].append(b)
 
     result = []
@@ -421,7 +425,7 @@ def get_library():
         group.sort(key=lambda b: b.highlight_count or 0, reverse=True)
         primary = group[0]
 
-        title = _clean_book_title(primary.title or primary.filename or '')
+        title = clean_book_title(primary.title or primary.filename or '')
         authors = ''
         series = ''
         tags = ''
@@ -498,14 +502,17 @@ def add_to_dashboard():
         return jsonify({'success': True, 'abs_id': abs_id, 'already_existed': True})
 
     # Create dashboard book entry
-    title = _clean_book_title(bf_book.title or bf_book.filename or 'Unknown')
+    title = clean_book_title(bf_book.title or bf_book.filename or 'Unknown')
+    initial_status = data.get('status', 'not_started')
+    if initial_status not in ('not_started', 'active'):
+        initial_status = 'not_started'
     book = Book(
         abs_id=abs_id,
         abs_title=title,
-        status='not_started',
+        status=initial_status,
         sync_mode='ebook_only',
     )
-    db_service.save_book(book)
+    db_service.save_book(book, is_new=True)
 
     # Auto-link ALL catalog books + highlights in the group
     for bid in bookfusion_ids:

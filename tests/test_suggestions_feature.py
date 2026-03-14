@@ -1,3 +1,7 @@
+import pytest
+
+pytestmark = pytest.mark.docker
+
 import json
 import os
 import sys
@@ -32,6 +36,10 @@ class MockContainer:
         self.mock_ebook_parser = Mock()
         self.mock_sync_clients = Mock()
         self.mock_hardcover_client = Mock()
+        self.mock_hardcover_service = Mock()
+        self.mock_hardcover_sync_client = Mock()
+        self.mock_reading_date_service = Mock()
+        self.mock_reading_date_service.pull_reading_dates.return_value = {}
 
         # Link up the manager
         self.mock_sync_manager.abs_client = self.mock_abs_client
@@ -41,11 +49,15 @@ class MockContainer:
     def sync_manager(self): return self.mock_sync_manager
     def abs_client(self): return self.mock_abs_client
     def booklore_client(self): return self.mock_booklore_client
+    def booklore_client_group(self): return self.mock_booklore_client
     def storyteller_client(self): return self.mock_storyteller_client
     def bookfusion_client(self): return self.mock_bookfusion_client
     def ebook_parser(self): return self.mock_ebook_parser
     def database_service(self): return self.mock_database_service
     def hardcover_client(self): return self.mock_hardcover_client
+    def hardcover_service(self): return self.mock_hardcover_service
+    def hardcover_sync_client(self): return self.mock_hardcover_sync_client
+    def reading_date_service(self): return self.mock_reading_date_service
     def sync_clients(self): return self.mock_sync_clients
     def data_dir(self): return Path(tempfile.gettempdir()) / 'test_data'
     def books_dir(self): return Path(tempfile.gettempdir()) / 'test_books'

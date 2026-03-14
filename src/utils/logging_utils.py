@@ -153,6 +153,19 @@ def setup_telegram_logging():
     return handler
 
 
+_SECRET_ENV_VARS = ('KOSYNC_KEY', 'HARDCOVER_TOKEN', 'TELEGRAM_BOT_TOKEN')
+
+
+def sanitize_exception(exc: Exception) -> str:
+    """Return exception message with secret env-var values redacted."""
+    msg = f"{type(exc).__name__}: {exc}"
+    for var in _SECRET_ENV_VARS:
+        val = os.environ.get(var)
+        if val:
+            msg = msg.replace(val, '***')
+    return msg
+
+
 def sanitize_log_data(data):
     """Truncate long strings to "First 50... [truncated] ...Last 50"."""
     if data is None:

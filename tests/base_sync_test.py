@@ -291,16 +291,9 @@ class BaseSyncCycleTestCase(unittest.TestCase, ABC):
                                manager.sync_clients['ABS']._update_abs_progress_with_offset.called)
                 self.assertTrue(abs_updated, "ABS update was not called")
             if leader != 'KOSYNC':
-                # Base tests intentionally use malformed KoSync-style XPath (/html/...),
-                # which should now be skipped by KoSync safety logic.
-                ko_xpath = getattr(mocks['ebook_parser'].find_text_location.return_value, 'xpath', '')
-                if isinstance(ko_xpath, str) and ko_xpath.startswith('/html/'):
-                    self.assertFalse(
-                        mocks['kosync_client'].update_progress.called,
-                        "KoSync update_progress should be skipped for malformed XPath"
-                    )
-                else:
-                    self.assertTrue(mocks['kosync_client'].update_progress.called, "KoSync update_progress was not called")
+                # KoSync now accepts percentage-only updates (empty xpath) when
+                # the original xpath is malformed and regeneration fails.
+                self.assertTrue(mocks['kosync_client'].update_progress.called, "KoSync update_progress was not called")
             if leader != 'STORYTELLER':
                 # [UPDATED] Check update_position
                 if self.test_book.storyteller_uuid:
@@ -370,20 +363,11 @@ class BaseSyncCycleTestCase(unittest.TestCase, ABC):
         expected_pct = self.expected_final_pct
         tolerance = 0.02
 
-        kosync_skipped = (
-            self.get_expected_leader().upper() != "KOSYNC"
-            and isinstance(getattr(self, '_mock_locator_xpath', ''), str)
-            and getattr(self, '_mock_locator_xpath', '').startswith('/html/')
-        )
-
         if self.get_expected_leader() != "None":
             self.assertAlmostEqual(abs_pct, expected_pct, delta=tolerance,
                                    msg=f"ABS final state {abs_pct:.1%} != expected {expected_pct:.1%}")
-            if kosync_skipped:
-                self.assertNotIn('kosync', final_states, "KoSync state should not be persisted when malformed XPath update is skipped")
-            else:
-                self.assertAlmostEqual(kosync_pct, expected_pct, delta=tolerance,
-                                       msg=f"KoSync final state {kosync_pct:.1%} != expected {expected_pct:.1%}")
+            self.assertAlmostEqual(kosync_pct, expected_pct, delta=tolerance,
+                                   msg=f"KoSync final state {kosync_pct:.1%} != expected {expected_pct:.1%}")
             if self.test_book.storyteller_uuid:
                 self.assertAlmostEqual(storyteller_pct, expected_pct, delta=tolerance,
                                     msg=f"Storyteller final state {storyteller_pct:.1%} != expected {expected_pct:.1%}")

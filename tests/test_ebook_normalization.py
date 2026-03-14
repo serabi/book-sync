@@ -12,6 +12,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+pytestmark = pytest.mark.docker
+
 sys.path.insert(0, str(os.path.join(os.path.dirname(__file__), '..')))
 
 os.environ.setdefault('DATA_DIR', 'test_data')

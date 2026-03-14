@@ -3,6 +3,10 @@
 Unit test for the ABS leading scenario using unittest.TestCase.
 """
 
+import pytest
+
+pytestmark = pytest.mark.docker
+
 import sys
 import unittest
 from pathlib import Path
@@ -97,10 +101,8 @@ class TestABSLeadsSync(BaseSyncCycleTestCase):
 
         result = client.update_progress(book, request)
 
-        self.assertFalse(result.success)
-        self.assertTrue(result.updated_state.get('skipped'))
-        self.assertIsNone(result.updated_state.get('xpath'))
-        kosync_api.update_progress.assert_not_called()
+        self.assertTrue(result.success)
+        kosync_api.update_progress.assert_called_once_with("test-kosync-doc", 0.4, "")
 
 
 if __name__ == '__main__':

@@ -81,6 +81,7 @@ class TbrRepository(BaseRepository):
     def update_tbr_item(self, item_id, **fields):
         """Update arbitrary fields on a TBR item. Returns the updated item or None."""
         ALLOWED = {'title', 'author', 'cover_url', 'notes', 'priority',
+                    'hardcover_book_id', 'hardcover_slug',
                     *ENRICHMENT_FIELDS}
         with self.get_session() as session:
             item = session.query(TbrItem).filter(TbrItem.id == item_id).first()
@@ -118,3 +119,23 @@ class TbrRepository(BaseRepository):
         """Return the total number of TBR items."""
         with self.get_session() as session:
             return session.query(func.count(TbrItem.id)).scalar()
+
+    def find_by_abs_id(self, abs_id):
+        """Find a TBR item linked to a given library book abs_id."""
+        return self._get_one(TbrItem, TbrItem.book_abs_id == abs_id)
+
+    def delete_by_abs_id(self, abs_id):
+        """Delete any TBR items linked to the given abs_id. Returns count deleted."""
+        with self.get_session() as session:
+            count = session.query(TbrItem).filter(TbrItem.book_abs_id == abs_id).delete()
+            return count
+
+    def get_unlinked_items(self):
+        """Return TBR items where book_abs_id is NULL (not linked to a library book)."""
+        with self.get_session() as session:
+            items = session.query(TbrItem).filter(
+                TbrItem.book_abs_id.is_(None)
+            ).all()
+            for item in items:
+                session.expunge(item)
+            return items

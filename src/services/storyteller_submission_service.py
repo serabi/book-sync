@@ -1,5 +1,6 @@
 """Service for submitting books to Storyteller for narrated EPUB3 creation."""
 
+import glob as glob_module
 import logging
 import os
 import re
@@ -169,19 +170,56 @@ class StorytellerSubmissionService:
         if submission.status in ("ready", "failed"):
             return submission.status
 
+        # Timeout: if submission has been non-terminal for too long, mark failed
+        max_wait = int(os.environ.get("STORYTELLER_MAX_WAIT_HOURS", "12"))
+        if submission.submitted_at:
+            # submitted_at is naive UTC (from datetime.utcnow() in the model)
+            elapsed = (datetime.utcnow() - submission.submitted_at).total_seconds() / 3600
+            if elapsed > max_wait:
+                logger.warning(
+                    f"Storyteller submission timed out after {elapsed:.1f}h for abs_id={abs_id} "
+                    f"(max {max_wait}h) — marking failed"
+                )
+                self._update_submission_status(submission, "failed")
+                return "failed"
+
+        # Fix 1: Propagate book's UUID to submission if missing
+        if not submission.storyteller_uuid:
+            book = self.database_service.get_book(abs_id)
+            if book and book.storyteller_uuid:
+                submission.storyteller_uuid = book.storyteller_uuid
+                self._update_submission_status(submission, submission.status)
+                logger.info(
+                    f"Storyteller: propagated UUID {book.storyteller_uuid[:8]}... "
+                    f"from book to submission for abs_id={abs_id}"
+                )
+
+        # Look up book title once for use in filesystem fallbacks
+        book_title = None
+        book = self.database_service.get_book(abs_id)
+        if book and book.abs_title:
+            book_title = book.abs_title
+
         # Check if Storyteller has produced transcription output
         assets_dir = os.environ.get("STORYTELLER_ASSETS_DIR", "").strip()
-        if assets_dir and submission.submission_dir:
-            # Try resolving via the stored storyteller_uuid first
-            if submission.storyteller_uuid:
-                try:
-                    if self._check_transcriptions_by_uuid(submission.storyteller_uuid):
-                        self._update_submission_status(submission, "ready")
-                        return "ready"
-                except Exception as e:
-                    logger.warning(f"Storyteller UUID transcription check failed: {e}")
+        checks_attempted = []
 
-            # Fallback: check by directory name in assets
+        # Check 1: UUID-based transcription check (independent of submission_dir)
+        if assets_dir and submission.storyteller_uuid:
+            checks_attempted.append("uuid")
+            try:
+                if self._check_transcriptions_by_uuid(submission.storyteller_uuid, title_hint=book_title):
+                    logger.info(f"Storyteller UUID check found transcriptions for abs_id={abs_id}")
+                    self._update_submission_status(submission, "ready")
+                    return "ready"
+                else:
+                    logger.debug(f"Storyteller UUID check: no transcriptions yet for uuid={submission.storyteller_uuid[:8]}...")
+            except Exception as e:
+                logger.warning(f"Storyteller UUID transcription check failed for abs_id={abs_id}: {e}")
+
+        # Check 2: Directory-based fallback (needs submission_dir)
+        if assets_dir and submission.submission_dir:
+            checks_attempted.append("directory")
             try:
                 assets_root = Path(assets_dir) / "assets"
                 transcripts_dir = assets_root / submission.submission_dir / "transcriptions"
@@ -189,13 +227,35 @@ class StorytellerSubmissionService:
                     logger.warning("Storyteller: refusing out-of-root transcript path in status check")
                     return submission.status
                 if transcripts_dir.is_dir() and any(transcripts_dir.iterdir()):
+                    logger.info(f"Storyteller directory check found transcriptions for abs_id={abs_id}")
                     self._update_submission_status(submission, "ready")
                     return "ready"
-            except OSError as e:
-                logger.warning(f"Storyteller assets directory check failed: {e}")
+                else:
+                    # Fuzzy match: Storyteller may have added a deduplication suffix
+                    escaped = glob_module.escape(submission.submission_dir)
+                    candidates = [
+                        p for p in assets_root.glob(f"{escaped}*/transcriptions")
+                        if p.is_dir() and assets_root.resolve() in p.resolve().parents
+                    ]
+                    for candidate in candidates:
+                        if any(candidate.iterdir()):
+                            logger.info(
+                                f"Storyteller fuzzy directory match found transcriptions at "
+                                f"'{candidate.parent.name}' for abs_id={abs_id}"
+                            )
+                            self._update_submission_status(submission, "ready")
+                            return "ready"
 
-        # Try to discover the storyteller_uuid via API title search
+                    logger.debug(
+                        f"Storyteller directory check: no transcriptions at {transcripts_dir} "
+                        f"(exists={transcripts_dir.is_dir()}, fuzzy_candidates={len(candidates)})"
+                    )
+            except OSError as e:
+                logger.warning(f"Storyteller assets directory check failed for abs_id={abs_id}: {e}")
+
+        # Check 3: Try to discover the storyteller_uuid via API title search
         if not submission.storyteller_uuid and self.storyteller_client and self.storyteller_client.is_configured():
+            checks_attempted.append("api_search")
             book = self.database_service.get_book(abs_id)
             if book and book.abs_title:
                 try:
@@ -212,11 +272,24 @@ class StorytellerSubmissionService:
                         # in case Storyteller has the book but never started alignment
                         if storyteller_uuid:
                             self.storyteller_client.trigger_processing(storyteller_uuid)
+                            logger.info(f"Storyteller: discovered UUID {storyteller_uuid[:8]}... for abs_id={abs_id}, triggered processing")
 
                         return "processing"
+                    else:
+                        logger.debug(
+                            f"Storyteller API search: {len(results)} results, {len(exact)} exact matches "
+                            f"for '{book.abs_title}' (need exactly 1)"
+                        )
                 except Exception as e:
-                    logger.warning(f"Storyteller book search failed: {e}")
+                    logger.warning(f"Storyteller book search failed for abs_id={abs_id}: {e}")
 
+        logger.debug(
+            f"Storyteller check_status fallthrough to 'processing' for abs_id={abs_id} "
+            f"(checks attempted: {checks_attempted or 'none'}, "
+            f"has_uuid={bool(submission.storyteller_uuid)}, "
+            f"has_dir={bool(submission.submission_dir)}, "
+            f"has_assets_dir={bool(assets_dir)})"
+        )
         self._update_submission_status(submission, "processing")
         return "processing"
 
@@ -304,11 +377,11 @@ class StorytellerSubmissionService:
             logger.warning(f"Failed to trigger Storyteller processing for '{title}'")
             return None
 
-    def _check_transcriptions_by_uuid(self, book_uuid: str) -> bool:
+    def _check_transcriptions_by_uuid(self, book_uuid: str, title_hint: str = None) -> bool:
         """Check if Storyteller has transcription data for a book by UUID."""
         if not self.storyteller_client:
             return False
-        chapters = self.storyteller_client.get_word_timeline_chapters(book_uuid)
+        chapters = self.storyteller_client.get_word_timeline_chapters(book_uuid, title_hint=title_hint)
         return chapters is not None and len(chapters) > 0
 
     def _sanitize_dirname(self, title: str, abs_id: str) -> str:

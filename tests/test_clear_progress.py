@@ -2,6 +2,10 @@
 Unit test for the clear_progress method in SyncManager.
 """
 
+import pytest
+
+pytestmark = pytest.mark.docker
+
 import logging
 import os
 import sys

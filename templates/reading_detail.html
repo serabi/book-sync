@@ -40,7 +40,7 @@
             <div class="r-hero-bg" style="background-image: url('{{ book.cover_url }}')"></div>
             {% endif %}
             <div class="r-hero-content">
-                <div class="r-hero-cover">
+                <div class="r-hero-cover {% if book.book_type == 'ebook-only' %}r-hero-cover--ebook{% endif %}">
                     {% if book.cover_url %}
                     <img src="{{ book.cover_url }}" alt=""
                         onerror="{% if book.fallback_cover_url and book.fallback_cover_url != book.cover_url %}this.onerror={% if book.kosync_doc_id %}function(){this.onerror=null; this.src='/covers/{{ book.kosync_doc_id }}.jpg';}{% else %}null{% endif %}; this.src='{{ book.fallback_cover_url|e }}';{% elif book.kosync_doc_id %}this.onerror=null; this.src='/covers/{{ book.kosync_doc_id }}.jpg';{% else %}this.style.display='none'; this.nextElementSibling.classList.remove('hidden');{% endif %}">
@@ -56,22 +56,6 @@
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
                         Change Cover
                     </button>
-                    {# Rating stars under cover #}
-                    <div class="r-detail-rating" id="rating-stars" data-abs-id="{{ book.abs_id }}" data-rating="{{ book.rating or 0 }}" data-hardcover-sync-available="{{ 'true' if hardcover_rating_sync_available else 'false' }}">
-                        {% set rating = book.rating or 0 %}
-                        {% for i in range(1, 6) %}
-                        {% if rating >= i %}
-                          {% set state = 'full' %}
-                        {% elif rating >= i - 0.5 %}
-                          {% set state = 'half' %}
-                        {% else %}
-                          {% set state = 'empty' %}
-                        {% endif %}
-                        <button class="r-star-btn r-star-{{ state }}" data-index="{{ i }}" type="button" title="{{ i }}/5">&#9733;</button>
-                        {% endfor %}
-                        <span class="r-rating-label" id="rating-label">{% if book.rating %}{{ book.rating }}/5{% else %}Rate{% endif %}</span>
-                    </div>
-                    <div class="r-rating-sync" id="rating-sync-status" {% if not hardcover_rating_sync_available %}hidden{% endif %}></div>
                 </div>
                 <div class="r-hero-info">
                     <h1 class="r-detail-title">{{ book.abs_title }}{% if metadata.subtitle %}: {{ metadata.subtitle }}{% endif %}</h1>
@@ -88,7 +72,14 @@
 
                     {# Progress bar + percentage chip + manual input #}
                     {% set show_manual = has_bookfusion_link or (book.book_type == 'ebook-only') %}
-                    {% if book.unified_progress > 0 %}
+                    {% if book.status == 'completed' %}
+                    <div class="r-detail-progress" id="progress-section">
+                        <div class="progress-bar">
+                            <div class="progress-bar-fill" id="progress-bar-fill" style="width: 100%"></div>
+                        </div>
+                        <span class="r-detail-pct" id="progress-pct">100%</span>
+                    </div>
+                    {% elif book.unified_progress > 0 %}
                     <div class="r-detail-progress" id="progress-section">
                         <div class="progress-bar">
                             <div class="progress-bar-fill {% if book.status == 'paused' %}progress-paused-fill{% elif book.status == 'dnf' %}progress-dnf-fill{% endif %}"
@@ -118,6 +109,23 @@
                     </div>
                     {% endif %}
 
+                    {# Rating stars #}
+                    <div class="r-detail-rating" id="rating-stars" data-abs-id="{{ book.abs_id }}" data-rating="{{ book.rating or 0 }}" data-hardcover-sync-available="{{ 'true' if hardcover_rating_sync_available else 'false' }}">
+                        {% set rating = book.rating or 0 %}
+                        {% for i in range(1, 6) %}
+                        {% if rating >= i %}
+                          {% set state = 'full' %}
+                        {% elif rating >= i - 0.5 %}
+                          {% set state = 'half' %}
+                        {% else %}
+                          {% set state = 'empty' %}
+                        {% endif %}
+                        <button class="r-star-btn r-star-{{ state }}" data-index="{{ i }}" type="button" title="{{ i }}/5">&#9733;</button>
+                        {% endfor %}
+                        <span class="r-rating-label" id="rating-label">{% if book.rating %}{{ book.rating }}/5{% else %}Rate{% endif %}</span>
+                    </div>
+                    <div class="r-rating-sync" id="rating-sync-status" {% if not hardcover_rating_sync_available %}hidden{% endif %}></div>
+
                     {# Action buttons #}
                     <div class="r-hero-actions">
                         {% if book.status not in ['pending', 'processing'] %}
@@ -136,6 +144,9 @@
                         <button class="r-hero-action-btn" onclick="rdAction('resume')">Resume Reading</button>
                         {% elif book.status == 'not_started' %}
                         <button class="r-hero-action-btn" onclick="rdAction('resume')">Start Reading</button>
+                        {% if not has_linked_tbr %}
+                        <button class="r-hero-action-btn" id="btn-add-to-tbr" data-abs-id="{{ book.abs_id }}">+ Want to Read</button>
+                        {% endif %}
                         <button class="r-hero-action-btn" onclick="rdAction('pause')">Pause</button>
                         <button class="r-hero-action-btn" onclick="rdAction('dnf')">Mark DNF</button>
                         <button class="r-hero-action-btn" onclick="rdAction('complete')">Mark Complete</button>
@@ -444,6 +455,11 @@
                         Sync Dates to Hardcover
                     </button>
                     <span class="r-hc-date-sync-status" id="hc-date-sync-status" hidden></span>
+                    <button type="button" class="r-hc-date-sync-btn" id="hc-date-pull" data-abs-id="{{ book.abs_id }}">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        Pull Dates from Hardcover
+                    </button>
+                    <span class="r-hc-date-sync-status" id="hc-date-pull-status" hidden></span>
                     {% endif %}
 
                     <form class="r-journal-form" id="journal-form" data-abs-id="{{ book.abs_id }}">
@@ -452,14 +468,6 @@
                             <textarea id="journal-entry" placeholder="What stood out in this session?" rows="3"></textarea>
                         </div>
                         <div class="r-journal-form-actions">
-                            {% if hardcover_linked %}
-                            <label class="r-journal-sync-toggle" title="Sync notes to Hardcover">
-                                <input type="checkbox" id="journal-sync-toggle" data-abs-id="{{ book.abs_id }}"
-                                    {% if journal_sync_enabled %}checked{% endif %}>
-                                <svg class="r-hc-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
-                                <span class="r-journal-sync-label">HC sync</span>
-                            </label>
-                            {% endif %}
                             <button type="button" class="btn btn-secondary btn-sm r-journal-cancel hidden" id="journal-cancel">Cancel</button>
                             <button type="submit" class="btn btn-primary btn-sm r-journal-submit" id="journal-submit">Add Note</button>
                         </div>
@@ -489,15 +497,14 @@
                                 {% if journal.entry %}
                                 <p class="r-tl-text">{{ journal.entry }}</p>
                                 {% endif %}
-                                {% if journal.event in ['note', 'highlight'] %}
+                                {% if journal.event in ['note', 'highlight', 'progress'] or (journal.event in ['started', 'finished'] and journal.id) %}
                                 <div class="r-tl-menu" data-journal-id="{{ journal.id }}" data-journal-event="{{ journal.event }}">
                                     <button class="r-tl-menu-trigger" title="More actions" aria-label="More actions" aria-expanded="false" type="button">⋯</button>
                                     <div class="r-tl-menu-dropdown">
                                         {% if journal.event == 'note' %}
                                         <button class="r-tl-menu-item" type="button" data-action="edit">Edit</button>
-                                        {% endif %}
-                                        {% if hardcover_linked and journal.entry %}
-                                        <button class="r-tl-menu-item" type="button" data-action="push-hardcover">Push to Hardcover</button>
+                                        {% elif journal.event in ['started', 'finished'] %}
+                                        <button class="r-tl-menu-item" type="button" data-action="edit">Edit Date</button>
                                         {% endif %}
                                         <button class="r-tl-menu-item r-tl-menu-item--danger" type="button" data-action="delete">Delete</button>
                                     </div>
@@ -518,16 +525,27 @@
         {# ── Highlights Tab ── #}
         {% if bf_highlights %}
         <div class="r-tab-panel" data-tab="highlights" style="display: none;">
+            <div class="r-highlights-header">
+                <div>
+                    <h3 class="r-section-title">BookFusion Highlights</h3>
+                    <p class="r-section-description">{{ bf_highlights|length }} highlight{{ 's' if bf_highlights|length != 1 }}</p>
+                </div>
+                <button class="btn btn-primary btn-sm" id="bulk-import-highlights" type="button"
+                        data-abs-id="{{ book.abs_id }}">Import All to Journal</button>
+            </div>
             <div class="r-highlights-body">
+                {% set current_chapter = namespace(value='') %}
                 {% for hl in bf_highlights %}
+                {% set chapter = (hl.chapter_heading or '')|replace('# ', '') %}
+                {% if chapter and chapter != current_chapter.value %}
+                {% set current_chapter.value = chapter %}
+                <div class="r-highlight-chapter-heading">{{ chapter|e }}</div>
+                {% endif %}
                 <div class="r-highlight-card">
                     <blockquote class="r-highlight-quote">{{ (hl.quote_text or hl.content) | sanitize_html }}</blockquote>
                     <div class="r-highlight-meta">
-                        {% if hl.chapter_heading %}
-                        <span class="r-highlight-chapter">{{ hl.chapter_heading | replace('# ', '') | e }}</span>
-                        {% endif %}
                         {% if hl.highlighted_at %}
-                        <span class="r-highlight-date">{{ hl.highlighted_at.strftime('%b %d, %Y') }}</span>
+                        <span class="r-highlight-date" data-highlighted-at="{{ hl.highlighted_at.strftime('%Y-%m-%d %H:%M:%S') }}">{{ hl.highlighted_at.strftime('%b %d, %Y') }}</span>
                         {% endif %}
                     </div>
                 </div>
@@ -536,29 +554,6 @@
         </div>
         {% endif %}
     </div>
-
-    {# ── Hardcover Push Modal ── #}
-    {% if hardcover_linked %}
-    <div id="hc-push-modal" class="confirm-modal" style="display:none;" data-privacy-default="{{ journal_privacy_default }}">
-        <div class="confirm-modal-overlay" onclick="closeHcPushModal()"></div>
-        <div class="confirm-modal-box">
-            <h3 class="confirm-modal-title">Push to Hardcover</h3>
-            <p class="confirm-modal-message" id="hc-push-preview"></p>
-            <div class="hc-push-privacy">
-                <label for="hc-push-privacy-select">Privacy:</label>
-                <select id="hc-push-privacy-select" class="form-select">
-                    <option value="3">Private</option>
-                    <option value="2">Followers Only</option>
-                    <option value="1">Public</option>
-                </select>
-            </div>
-            <div class="confirm-modal-actions">
-                <button type="button" class="btn btn-secondary" onclick="closeHcPushModal()">Cancel</button>
-                <button type="button" class="btn btn-primary" id="hc-push-confirm">Push</button>
-            </div>
-        </div>
-    </div>
-    {% endif %}
 
     {# ── Cover Picker Modal ── #}
     <div id="cover-picker-modal" class="modal-backdrop" style="display:none;" onclick="if(event.target===this)closeCoverPicker()">
@@ -633,9 +628,17 @@
                     <p class="hc-text-muted"><a href="#" onclick="showManualInput(); return false;">Wrong book? Enter URL manually</a></p>
                 </div>
                 <div id="hc-manual" style="display:none;">
-                    <p>Enter Hardcover URL or book ID:</p>
-                    <input type="text" id="hc-input" placeholder="https://hardcover.app/books/...">
-                    <button class="btn btn-md btn-accent" onclick="resolveManualInput()">Search</button>
+                    <div class="hc-title-search-row">
+                        <input type="text" id="hc-title-search" placeholder="Search by title…"
+                            onkeydown="if(event.key==='Enter'){event.preventDefault();searchByTitle();}">
+                        <button class="btn btn-md btn-accent" onclick="searchByTitle()">Search</button>
+                    </div>
+                    <div id="hc-search-results"></div>
+                    <p class="hc-text-muted hc-url-toggle"><a href="#" onclick="toggleUrlFallback(); return false;">Or enter URL/ID directly</a></p>
+                    <div id="hc-url-fallback" style="display:none;">
+                        <input type="text" id="hc-input" placeholder="https://hardcover.app/books/...">
+                        <button class="btn btn-md btn-accent" onclick="resolveManualInput()">Resolve</button>
+                    </div>
                 </div>
                 <div id="hc-error" style="display:none;">
                     <p id="hc-error-msg" class="hc-text-error"></p>
@@ -699,6 +702,11 @@
 
         var _rdAbsId = {{ book.abs_id | tojson }};
         var _rdTitle = {{ book.abs_title | tojson }};
+        var _rdPendingJournalId = null;
+
+        {% if active_tab != 'overview' %}
+        switchTab({{ active_tab | tojson }});
+        {% endif %}
 
         (function() {
             var btn = document.getElementById('change-cover-btn');
@@ -712,6 +720,7 @@
         // Hardcover re-link
         function openHcRelink(btn) {
             hardcoverModalState.absId = btn.dataset.absId;
+            hardcoverModalState.bookTitle = btn.dataset.title || '{{ book.abs_title|e }}';
             hardcoverModalState.bookData = null;
             hardcoverModalState.selectedEditionId = null;
             openHardcoverModal();
@@ -834,13 +843,18 @@
             }
         }
 
+        function showJournalDeleteConfirm(journalId) {
+            _rdPendingJournalId = journalId;
+            showRdConfirm('Delete Entry', 'Delete this journal entry?', 'delete-journal');
+        }
+
         function showRdConfirm(title, msg, action) {
             _rdPendingAction = action;
             document.getElementById('rd-confirm-title').textContent = title;
             document.getElementById('rd-confirm-msg').textContent = msg;
             document.getElementById('rd-confirm-btn').textContent = title;
             var btn = document.getElementById('rd-confirm-btn');
-            btn.className = (action === 'delete') ? 'btn btn-danger' : 'btn btn-warning';
+            btn.className = (action === 'delete' || action === 'delete-journal') ? 'btn btn-danger' : 'btn btn-warning';
             document.getElementById('rd-confirm-modal').style.display = 'flex';
         }
 
@@ -875,6 +889,26 @@
                 form.action = '/delete/' + encodeURIComponent(_rdAbsId);
                 document.body.appendChild(form);
                 form.submit();
+            } else if (action === 'delete-journal') {
+                var jid = _rdPendingJournalId;
+                _rdPendingJournalId = null;
+                if (!jid) return;
+                var item = document.querySelector('.r-tl-item[data-journal-id="' + jid + '"]');
+                fetch('/api/reading/journal/' + jid, { method: 'DELETE' })
+                    .then(function(r) { if (!r.ok) throw new Error(); return r.json(); })
+                    .then(function(data) {
+                        if (!data.success) return;
+                        if (item) {
+                            item.style.transition = 'opacity 0.3s';
+                            item.style.opacity = '0';
+                            setTimeout(function() { item.remove(); }, 300);
+                        }
+                        if (data.cleared_field) {
+                            var inputId = data.cleared_field === 'started_at' ? 'started-at' : 'finished-at';
+                            var dateInput = document.getElementById(inputId);
+                            if (dateInput) dateInput.value = '';
+                        }
+                    });
             }
         }
 
@@ -906,6 +940,64 @@
                 });
             }
             setupToggle(document.getElementById('meta-toggle'), 'meta-body', 'r-meta-chevron');
+        })();
+
+        // ── Add to Want to Read ──
+        (function() {
+            var tbrBtn = document.getElementById('btn-add-to-tbr');
+            if (!tbrBtn) return;
+            tbrBtn.addEventListener('click', function() {
+                tbrBtn.disabled = true;
+                tbrBtn.textContent = 'Adding...';
+                fetch('/api/reading/tbr/from-library', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ abs_id: tbrBtn.dataset.absId }),
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data.success) {
+                        tbrBtn.textContent = 'Added to Want to Read';
+                    } else {
+                        tbrBtn.textContent = data.error || 'Failed';
+                        tbrBtn.disabled = false;
+                    }
+                })
+                .catch(function() {
+                    tbrBtn.textContent = '+ Want to Read';
+                    tbrBtn.disabled = false;
+                });
+            });
+        })();
+
+        // ── Bulk import highlights to journal ──
+        (function() {
+            var importBtn = document.getElementById('bulk-import-highlights');
+            if (!importBtn) return;
+            importBtn.addEventListener('click', function() {
+                var absId = importBtn.dataset.absId;
+                importBtn.disabled = true;
+                importBtn.textContent = 'Importing...';
+
+                fetch('/api/bookfusion/save-journal', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ abs_id: absId }),
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    if (data.success) {
+                        importBtn.textContent = 'Imported ' + data.saved + ' highlights';
+                    } else {
+                        importBtn.textContent = data.error || 'Import failed';
+                        importBtn.disabled = false;
+                    }
+                })
+                .catch(function() {
+                    importBtn.textContent = 'Import All to Journal';
+                    importBtn.disabled = false;
+                });
+            });
         })();
     </script>
 </body>

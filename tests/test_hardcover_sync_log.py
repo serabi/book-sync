@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.db.database_service import DatabaseService
 from src.db.models import Book, HardcoverDetails, HardcoverSyncLog
 from src.services.hardcover_log_service import log_hardcover_action
+from src.services.hardcover_service import HardcoverService
 from src.sync_clients.hardcover_sync_client import HardcoverSyncClient
 
 
@@ -178,6 +179,9 @@ class _MockContainer:
     def booklore_client(self):
         return Mock()
 
+    def booklore_client_group(self):
+        return Mock()
+
     def storyteller_client(self):
         return Mock()
 
@@ -302,6 +306,12 @@ class TestHardcoverSyncLogInstrumentation(unittest.TestCase):
             database_service=self.db,
         )
 
+        self.hardcover_service = HardcoverService(
+            hardcover_client=self.mock_hc,
+            database_service=self.db,
+            abs_client=self.mock_abs,
+        )
+
         self.book = Book(abs_id='instr-test', abs_title='Instrumentation Book', status='active')
         self.db.save_book(self.book)
 
@@ -309,7 +319,7 @@ class TestHardcoverSyncLogInstrumentation(unittest.TestCase):
         import shutil
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
-    @patch('src.sync_clients.hardcover_sync_client.record_write')
+    @patch('src.services.hardcover_service.record_write')
     def test_push_local_status_logs_success(self, mock_rw):
         details = HardcoverDetails(
             abs_id='instr-test', hardcover_book_id='999',
@@ -318,14 +328,14 @@ class TestHardcoverSyncLogInstrumentation(unittest.TestCase):
         self.db.save_hardcover_details(details)
 
         self.mock_hc.update_status.return_value = {'id': 1, 'status_id': 2}
-        self.sync_client.push_local_status(self.book, 'active')
+        self.hardcover_service.push_local_status(self.book, 'active')
 
         items, total = self.db.get_hardcover_sync_logs(action='status_update')
         self.assertGreaterEqual(total, 1)
         self.assertEqual(items[0].direction, 'push')
         self.assertTrue(items[0].success)
 
-    @patch('src.sync_clients.hardcover_sync_client.record_write')
+    @patch('src.services.hardcover_service.record_write')
     def test_push_local_status_logs_error(self, mock_rw):
         details = HardcoverDetails(
             abs_id='instr-test', hardcover_book_id='999',
@@ -334,14 +344,14 @@ class TestHardcoverSyncLogInstrumentation(unittest.TestCase):
         self.db.save_hardcover_details(details)
 
         self.mock_hc.update_status.side_effect = Exception("API down")
-        self.sync_client.push_local_status(self.book, 'active')
+        self.hardcover_service.push_local_status(self.book, 'active')
 
         items, total = self.db.get_hardcover_sync_logs(action='status_update')
         self.assertGreaterEqual(total, 1)
         self.assertFalse(items[0].success)
         self.assertIn("API down", items[0].error_message)
 
-    @patch('src.sync_clients.hardcover_sync_client.record_write')
+    @patch('src.services.hardcover_service.record_write')
     def test_push_rating_logs(self, mock_rw):
         details = HardcoverDetails(
             abs_id='instr-test', hardcover_book_id='999',
@@ -351,7 +361,7 @@ class TestHardcoverSyncLogInstrumentation(unittest.TestCase):
         self.db.save_hardcover_details(details)
 
         self.mock_hc.update_user_book.return_value = True
-        result = self.sync_client.push_local_rating(self.book, 4.0)
+        result = self.hardcover_service.push_local_rating(self.book, 4.0)
 
         self.assertTrue(result['hardcover_synced'])
         items, total = self.db.get_hardcover_sync_logs(action='rating')

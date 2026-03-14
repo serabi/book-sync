@@ -60,6 +60,7 @@
                     <option value="progress">Progress</option>
                     <option value="status">Status</option>
                     <option value="last_sync">Last Synced</option>
+                    <option value="finished_date">Finished Date</option>
                 </select>
                 <button type="button" class="sort-direction" id="sort-direction" title="Click to Reverse Order" style="border: none;">↓</button>
             </div>
@@ -179,9 +180,17 @@
                                 Enter URL manually</a></p>
                     </div>
                     <div id="hc-manual" style="display:none;">
-                        <p>Enter Hardcover URL or book ID:</p>
-                        <input type="text" id="hc-input" placeholder="https://hardcover.app/books/...">
-                        <button class="btn btn-md btn-accent" onclick="resolveManualInput()">Search</button>
+                        <div class="hc-title-search-row">
+                            <input type="text" id="hc-title-search" placeholder="Search by title…"
+                                onkeydown="if(event.key==='Enter'){event.preventDefault();searchByTitle();}">
+                            <button class="btn btn-md btn-accent" onclick="searchByTitle()">Search</button>
+                        </div>
+                        <div id="hc-search-results"></div>
+                        <p class="hc-text-muted hc-url-toggle"><a href="#" onclick="toggleUrlFallback(); return false;">Or enter URL/ID directly</a></p>
+                        <div id="hc-url-fallback" style="display:none;">
+                            <input type="text" id="hc-input" placeholder="https://hardcover.app/books/...">
+                            <button class="btn btn-md btn-accent" onclick="resolveManualInput()">Resolve</button>
+                        </div>
                     </div>
                     <div id="hc-error" style="display:none;">
                         <p id="hc-error-msg" class="hc-text-error"></p>

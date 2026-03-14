@@ -99,7 +99,7 @@ def build_book_metadata(book, container, database_service, abs_service, booklore
         except Exception as e:
             logger.debug("Booklore lookup failed for ebook_filename=%s, original=%s, client=%s: %s",
                          book.ebook_filename, getattr(book, 'original_ebook_filename', None),
-                         bl_client.base_url, e)
+                         getattr(bl_client, 'base_url', '?'), e)
 
     # BookFusion catalog entry (tags, series)
     bf_book = database_service.get_bookfusion_book_by_abs_id(abs_id)

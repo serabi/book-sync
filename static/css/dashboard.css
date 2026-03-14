@@ -369,7 +369,8 @@
   margin-bottom: 0.75rem;
 }
 
-#hc-input {
+#hc-input,
+#hc-title-search {
   width: 100%;
   padding: 0.75rem 1rem;
   border-radius: var(--radius);
@@ -381,9 +382,11 @@
   transition: all var(--transition-bounce);
 }
 
-#hc-input::placeholder { color: var(--color-text-faint); }
+#hc-input::placeholder,
+#hc-title-search::placeholder { color: var(--color-text-faint); }
 
-#hc-input:focus {
+#hc-input:focus,
+#hc-title-search:focus {
   outline: none;
   border-color: rgba(124, 58, 237, 0.5);
   box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
@@ -391,6 +394,86 @@
 
 #hc-manual button {
   transition: all var(--transition-bounce);
+}
+
+/* HC title search row */
+.hc-title-search-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.hc-title-search-row input {
+  flex: 1;
+  margin-bottom: 0;
+}
+
+/* HC search results */
+#hc-search-results {
+  max-height: 240px;
+  overflow-y: auto;
+  margin-bottom: 0.5rem;
+}
+
+.hc-search-result {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem;
+  border-radius: var(--radius-md, 6px);
+  cursor: pointer;
+  transition: background var(--transition-fast, 0.15s);
+}
+
+.hc-search-result:hover {
+  background: var(--color-surface-hover, rgba(255,255,255,0.05));
+}
+
+.hc-search-thumb {
+  width: 36px;
+  height: 52px;
+  object-fit: cover;
+  border-radius: 3px;
+  flex-shrink: 0;
+  background: var(--color-surface-alt, #1a1a2e);
+}
+
+.hc-search-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.hc-search-title {
+  font-weight: 600;
+  font-size: 0.9rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hc-search-author {
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hc-searching,
+.hc-no-results {
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  text-align: center;
+  padding: 1rem 0;
+}
+
+.hc-url-toggle {
+  font-size: 0.8rem;
+  margin-top: 0.25rem;
+}
+
+#hc-url-fallback {
+  margin-top: 0.5rem;
 }
 
 .hc-text-muted {
@@ -498,6 +581,18 @@
 }
 
 /* BookFusion service badge in card menu */
+/* Stale indicator for HC date sync button — shown after local date edit */
+.r-hc-date-sync-btn--stale {
+  outline: 2px solid #F59E0B;
+  outline-offset: 2px;
+  animation: r-hc-stale-pulse 2s ease-in-out infinite;
+}
+
+@keyframes r-hc-stale-pulse {
+  0%, 100% { outline-color: rgba(245, 158, 11, 0.8); }
+  50% { outline-color: rgba(245, 158, 11, 0.3); }
+}
+
 .bf-svc-badge {
   display: inline-block;
   padding: 1px 6px;

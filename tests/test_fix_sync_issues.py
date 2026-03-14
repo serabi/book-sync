@@ -1,5 +1,9 @@
 
 # from pathlib import Path # Not needed if we mock objects
+import pytest
+
+pytestmark = pytest.mark.docker
+
 import os
 import unittest
 from unittest.mock import MagicMock, patch

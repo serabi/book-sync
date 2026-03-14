@@ -1,0 +1,54 @@
+{# ═══ Settings Page Macros ═══ #}
+
+{# ── Service URL block (Internal / External / Preferred) ── #}
+{% macro service_urls(prefix, server_val, help_text='Choose which URL is used for navbar shortcuts and book deep links. Legacy Web URL values are preserved as the external fallback.') %}
+<div class="form-group full-width">
+    <label>Service URLs</label>
+    <div class="field-grid">
+        <div class="form-group">
+            <label>Internal URL</label>
+            <input type="text" name="{{ prefix }}_WEB_URL_INTERNAL" value="{{ get_val(prefix ~ '_WEB_URL_INTERNAL') }}"
+                placeholder="{{ server_val or 'http://10.0.0.97:8080' }}">
+        </div>
+        <div class="form-group">
+            <label>External URL</label>
+            <input type="text" name="{{ prefix }}_WEB_URL_EXTERNAL" value="{{ get_val(prefix ~ '_WEB_URL_EXTERNAL') or get_val(prefix ~ '_WEB_URL') }}"
+                placeholder="https://{{ prefix|lower|replace('_', '') }}.example.com">
+        </div>
+        <div class="form-group">
+            <label>Preferred URL</label>
+            <select name="{{ prefix }}_HEADER_URL_MODE">
+                <option value="internal" {% if get_val(prefix ~ '_HEADER_URL_MODE', 'external') == 'internal' %}selected{% endif %}>Use Internal</option>
+                <option value="external" {% if get_val(prefix ~ '_HEADER_URL_MODE', 'external') != 'internal' %}selected{% endif %}>Use External</option>
+            </select>
+        </div>
+    </div>
+    <div class="help-text">{{ help_text }}</div>
+</div>
+{% endmacro %}
+
+{# ── Sub-section header with accent dot, optional test button, and enable toggle ── #}
+{% macro service_header(accent_class, label, enable_name, enabled, body_id, test_service=none) %}
+<div class="sub-section-header">
+    <h3><span class="accent-dot {{ accent_class }}"></span> {{ label }}</h3>
+    <div class="toggle-switch-wrapper">
+        {% if test_service %}
+        <button type="button" class="btn btn-sm" onclick="testConnection('{{ test_service }}', this)">Test</button>
+        {% endif %}
+        <span class="toggle-label">Enable</span>
+        <label class="toggle-switch">
+            <input type="checkbox" id="toggle_{{ enable_name|lower }}" name="{{ enable_name }}"
+                onchange="toggleSection('{{ body_id }}', this.checked)" {% if enabled %}checked{% endif %}>
+            <span class="slider"></span>
+        </label>
+    </div>
+</div>
+{% endmacro %}
+
+{# ── Password / secret field with (unchanged) placeholder ── #}
+{% macro secret_field(label, name, current_val, placeholder='') %}
+<div class="form-group">
+    <label>{{ label }}</label>
+    <input type="password" name="{{ name }}" placeholder="{{ '(unchanged)' if current_val else placeholder }}">
+</div>
+{% endmacro %}

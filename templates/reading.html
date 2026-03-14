@@ -143,7 +143,7 @@
                     <button class="r-filter-chip" data-filter="finished" type="button" role="tab" aria-selected="false">Finished <span>{{ section_counts.finished|default(0) }}</span></button>
                     <button class="r-filter-chip" data-filter="paused" type="button" role="tab" aria-selected="false">Paused <span>{{ section_counts.paused|default(0) }}</span></button>
                     <button class="r-filter-chip" data-filter="dnf" type="button" role="tab" aria-selected="false">DNF <span>{{ section_counts.dnf|default(0) }}</span></button>
-                    <button class="r-filter-chip" data-filter="not_started" type="button" role="tab" aria-selected="false">Backlog <span>{{ section_counts.not_started|default(0) }}</span></button>
+                    <button class="r-filter-chip" data-filter="not_started" data-switch-tab="tbr" type="button" role="tab" aria-selected="false">Backlog <span>{{ section_counts.not_started|default(0) }}</span></button>
                 </div>
                 <div class="r-toolbar-actions">
                     <button class="r-mobile-control-btn" id="reading-controls-open" type="button">
@@ -267,11 +267,55 @@
                 </div>
             </div>
 
+            <div class="r-tbr-filter-chips" id="tbr-filter-chips">
+                <button class="r-filter-chip active" data-tbr-filter="all" type="button">All</button>
+                <button class="r-filter-chip" data-tbr-filter="want" type="button">Want to Read{% if tbr_count %} <span>{{ tbr_count }}</span>{% endif %}</button>
+                <button class="r-filter-chip" data-tbr-filter="library" type="button">In Library{% if not_started_count %} <span>{{ not_started_count }}</span>{% endif %}</button>
+            </div>
+
             <div class="r-tbr-grid" id="tbr-grid">
                 <div class="r-tbr-empty" id="tbr-empty"{% if tbr_count %} hidden{% endif %}>
                     <p>No books on your list yet. Search and add books you want to read.</p>
                 </div>
             </div>
+
+            {% if not_started_books %}
+            <div class="r-library-backlog" id="library-backlog-section">
+                <div class="r-tbr-section-divider"></div>
+                <div class="r-tbr-section-label">In Your Library — {{ not_started_count }} book{{ 's' if not_started_count != 1 }}</div>
+                <div class="r-library-backlog-grid">
+                    {% for book in not_started_books %}
+                    <div class="r-tbr-card r-tbr-card--library" data-abs-id="{{ book.abs_id }}">
+                        <div class="r-tbr-card-cover">
+                            {% if book.cover_url %}
+                            <img src="{{ book.cover_url|e }}" alt="" loading="lazy"
+                                onerror="this.style.display='none';">
+                            {% else %}
+                            <div class="r-tbr-card-cover-empty"></div>
+                            {% endif %}
+                        </div>
+                        <div class="r-tbr-card-body">
+                            <div class="r-tbr-card-title" title="{{ book.abs_title|e }}">{{ book.abs_title|e }}</div>
+                            {% if book.abs_author %}
+                            <div class="r-tbr-card-author">{{ book.abs_author|e }}</div>
+                            {% endif %}
+                            <div class="r-tbr-card-meta">
+                                <span class="r-tbr-badge r-tbr-badge--library">In Library</span>
+                            </div>
+                            <div class="r-library-card-actions">
+                                <button class="btn btn-primary btn-sm r-library-start-btn" type="button"
+                                        data-abs-id="{{ book.abs_id }}">Start Reading</button>
+                                {% if book.abs_id not in tbr_linked_abs_ids %}
+                                <button class="btn btn-secondary btn-sm r-library-tbr-btn" type="button"
+                                        data-abs-id="{{ book.abs_id }}">+ Want to Read</button>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
         </div>
 
         <!-- TBR Add Book Modal -->

@@ -657,50 +657,56 @@ def _try_find_epub_by_hash(doc_hash: str) -> str | None:
             logger.info(f"Filesystem search finished. Checked {count} files. No match found")
 
         # Fallback to Booklore
-        if _container.booklore_client().is_configured():
+        bl_group = _container.booklore_client_group()
+        if bl_group.is_configured():
             logger.info("Starting Booklore API search...")
 
             try:
-                # Query BookloreBook cache in DB first
+                # Query BookloreBook cache in DB first (all servers)
                 books = _database_service.get_all_booklore_books()
                 if not books:
                     # If DB cache empty, fetch from API
-                    _container.booklore_client().get_all_books()
+                    bl_group.get_all_books()
                     logger.info("Booklore cache in DB is empty. Consider running a library sync.")
-                    # Fallback to direct API call for scan
                     from src.services.library_service import LibraryService
-                    lib_service = LibraryService(_database_service, _container.booklore_client())
+                    lib_service = LibraryService(_database_service, bl_group)
                     lib_service.sync_library_books()
                     books = _database_service.get_all_booklore_books()
 
                 logger.info(f"Scanning {len(books)} books from Booklore DB cache...")
 
                 for book in books:
-                    book_id = str(book.raw_metadata_dict.get('id')) if hasattr(book, 'raw_metadata_dict') else None
+                    raw_id = book.raw_metadata_dict.get('id') if hasattr(book, 'raw_metadata_dict') else None
+                    book_id = str(raw_id) if raw_id is not None else None
                     # Fallback to parsing raw_metadata if needed
                     if not book_id:
                         import json
                         try:
                             meta = json.loads(book.raw_metadata)
-                            book_id = str(meta.get('id'))
+                            fallback_id = meta.get('id')
+                            book_id = str(fallback_id) if fallback_id is not None else None
                         except (json.JSONDecodeError, AttributeError) as e:
                             logger.debug(f"Failed to parse raw_metadata JSON: {e}")
                             continue
 
+                    # Qualified booklore_id: "server_id:book_id"
+                    qualified_id = f"{book.server_id}:{book_id}"
+
                     # Check if we have a KosyncDocument for this Booklore ID
-                    cached_doc = _database_service.get_kosync_doc_by_booklore_id(book_id)
+                    cached_doc = _database_service.get_kosync_doc_by_booklore_id(qualified_id)
                     if cached_doc:
                         if cached_doc.document_hash == doc_hash:
                             logger.info(f"Matched EPUB via Booklore ID in DB: {book.filename}")
                             return book.filename
 
                     try:
-                        book_content = _container.booklore_client().download_book(book_id)
+                        # Use qualified ID for download so the group routes to the right server
+                        book_content = bl_group.download_book(qualified_id)
                         if book_content:
                             computed_hash = _container.ebook_parser().get_kosync_id_from_bytes(book.filename, book_content)
 
                             if computed_hash == doc_hash:
-                                safe_title = book.filename
+                                safe_title = f"{book.server_id}_{book.filename}"
                                 cache_dir = _container.data_dir() / "epub_cache"
                                 cache_dir.mkdir(parents=True, exist_ok=True)
                                 cache_path = cache_dir / safe_title
@@ -716,7 +722,7 @@ def _try_find_epub_by_hash(doc_hash: str) -> str | None:
                                     _database_service.save_kosync_document(cached_doc)
                                 else:
                                     _upsert_kosync_metadata(computed_hash, safe_title, 'booklore',
-                                                            booklore_id=book_id)
+                                                            booklore_id=qualified_id)
 
                                 logger.info(f"Matched EPUB via Booklore download: {safe_title}")
                                 return safe_title
