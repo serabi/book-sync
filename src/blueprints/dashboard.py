@@ -2,6 +2,7 @@
 
 import logging
 import os
+import threading
 import time
 from pathlib import Path
 
@@ -37,9 +38,8 @@ def index():
 
     books = database_service.get_all_books()
 
-    # Auto-complete and date sync — throttled to once per 5 minutes
-    from src.services.reading_date_service import auto_complete_finished_books, sync_reading_dates
-
+    # Fire date sync in a background thread so it doesn't block page render.
+    # Results will be visible on the next dashboard load.
     _THROTTLE_KEY = "dashboard_date_sync_last_run"
     _THROTTLE_SECONDS = 300
     last_run_raw = database_service.get_setting(_THROTTLE_KEY)
@@ -47,26 +47,20 @@ def index():
         last_run = float(last_run_raw) if last_run_raw else 0.0
     except (TypeError, ValueError):
         last_run = 0.0
-    should_run_date_ops = (time.time() - last_run) >= _THROTTLE_SECONDS
 
-    if should_run_date_ops:
+    if (time.time() - last_run) >= _THROTTLE_SECONDS:
         database_service.set_setting(_THROTTLE_KEY, str(time.time()))
 
-        ac_stats = auto_complete_finished_books(database_service, container)
-        if ac_stats["completed"]:
-            logger.info(f"Auto-completed {ac_stats['completed']} book(s) at 100% progress")
-            books = database_service.get_all_books()
+        def _run_date_sync():
+            try:
+                rds = container.reading_date_service()
+                ac_stats = rds.auto_complete_finished_books(container)
+                if ac_stats["completed"]:
+                    logger.info(f"Auto-completed {ac_stats['completed']} book(s) at 100% progress")
+            except Exception:
+                logger.exception("Background auto-complete failed")
 
-        needs_date_sync = any(
-            (not b.started_at and b.status in ("active", "paused", "completed", "dnf"))
-            or (not b.finished_at and b.status == "completed")
-            for b in books
-        )
-        if needs_date_sync:
-            stats = sync_reading_dates(database_service, container)
-            if stats["updated"] or stats["completed"]:
-                logger.info(f"Reading dates sync: {stats}")
-                books = database_service.get_all_books()
+        threading.Thread(target=_run_date_sync, daemon=True).start()
 
     abs_service = get_abs_service()
 
@@ -86,24 +80,19 @@ def index():
         logger.warning(f"Could not fetch ABS metadata for dashboard enrichment: {e}")
 
     # Fetch all states at once to avoid N+1 queries
-    all_states = database_service.get_all_states()
-    states_by_book = {}
-    for state in all_states:
-        if state.abs_id not in states_by_book:
-            states_by_book[state.abs_id] = []
-        states_by_book[state.abs_id].append(state)
+    states_by_book = database_service.get_states_by_book()
 
     # Fetch all hardcover details at once
     all_hardcover = database_service.get_all_hardcover_details()
     hardcover_by_book = {h.abs_id: h for h in all_hardcover}
 
     # Fetch Booklore metadata for ebook-only title/author enrichment
-    all_booklore_books = database_service.get_all_booklore_books()
-    booklore_by_filename = {}
-    for bl_book in all_booklore_books:
-        if not bl_book.filename:
-            continue
-        booklore_by_filename.setdefault(bl_book.filename.lower(), []).append(bl_book)
+    booklore_by_filename = database_service.get_booklore_by_filename()
+
+    bl_client = get_booklore_client()
+    bl_base = None
+    if bl_client.is_configured():
+        bl_base = get_service_web_url("BOOKLORE") or bl_client.base_url
 
     integrations = {}
     sync_clients = container.sync_clients()
@@ -132,7 +121,12 @@ def index():
         except Exception as e:
             logger.warning(f"Could not fetch Storyteller submissions: {e}")
 
+    # Bulk-fetch latest jobs for books in pending/processing/retry states (avoid N+1)
+    job_status_books = [b.abs_id for b in books if b.status in ("pending", "processing", "failed_retry_later")]
+    jobs_by_book = database_service.get_latest_jobs_bulk(job_status_books)
+
     mappings = []
+    books_needing_title_save = []
     total_duration = 0
     total_listened = 0
 
@@ -179,9 +173,9 @@ def index():
                 getattr(book, "original_ebook_filename", None),
             ):
                 enriched_title = bl_meta.title
-                # Persist the improved title so it sticks
+                # Persist the improved title so it sticks (batched after loop)
                 book.abs_title = bl_meta.title
-                database_service.save_book(book)
+                books_needing_title_save.append(book)
 
         mapping = {
             "abs_id": book.abs_id,
@@ -198,6 +192,7 @@ def index():
             "unified_progress": 0,
             "duration": book.duration or 0,
             "storyteller_uuid": book.storyteller_uuid,
+            "finished_at": book.finished_at,
             "storyteller_submission_status": None,
             "states": {},
         }
@@ -208,7 +203,7 @@ def index():
             mapping["storyteller_submission_status"] = st_submission.status
 
         if book.status in ("pending", "processing", "failed_retry_later"):
-            job = database_service.get_latest_job(book.abs_id)
+            job = jobs_by_book.get(book.abs_id)
             if job:
                 mapping["job_progress"] = round((job.progress or 0.0) * 100, 1)
                 mapping["retry_count"] = job.retry_count or 0
@@ -236,7 +231,7 @@ def index():
         # Hardcover details
         hardcover_details = hardcover_by_book.get(book.abs_id)
         if hardcover_details:
-            # Map HC status ID → local equivalent for mismatch detection
+            # HC out-of-sync indicator: cached HC status ≠ local status means push pending/failed
             hc_to_local = {2: "active", 3: "completed", 4: "paused", 5: "dnf"}
             hc_local_equiv = hc_to_local.get(hardcover_details.hardcover_status_id)
             hc_mismatch = (
@@ -288,23 +283,13 @@ def index():
         else:
             mapping["abs_url"] = None
 
-        # Booklore deep links (check all instances)
+        # Booklore deep links (from pre-built lookup — avoids per-book fuzzy matching)
         mapping["booklore_id"] = None
         mapping["booklore_url"] = None
-        if book.ebook_filename:
-            bl_client = get_booklore_client()
-            try:
-                if bl_client.is_configured():
-                    bl_book = bl_client.find_book_by_filename(book.ebook_filename, allow_refresh=False)
-                    if not bl_book and book.original_ebook_filename:
-                        bl_book = bl_client.find_book_by_filename(book.original_ebook_filename, allow_refresh=False)
-                    if bl_book:
-                        bl_base = get_service_web_url("BOOKLORE") or bl_client.base_url
-                        url = f"{bl_base}/book/{bl_book.get('id')}?tab=view"
-                        mapping["booklore_id"] = bl_book.get("id")
-                        mapping["booklore_url"] = url
-            except Exception:
-                logger.debug("Booklore lookup failed, skipping")
+        bl_id = bl_meta.raw_metadata_dict.get("id") if bl_meta else None
+        if bl_id and bl_base:
+            mapping["booklore_id"] = bl_id
+            mapping["booklore_url"] = f"{bl_base}/book/{bl_id}?tab=view"
 
         if mapping.get("hardcover_slug"):
             mapping["hardcover_url"] = get_hardcover_book_url(mapping["hardcover_slug"])
@@ -357,6 +342,10 @@ def index():
             total_listened += (progress_pct / 100.0) * duration
 
         mappings.append(mapping)
+
+    # Batch-save books that had their titles enriched from Booklore
+    for book in books_needing_title_save:
+        database_service.save_book(book)
 
     if total_duration > 0:
         overall_progress = round((total_listened / total_duration) * 100, 1)

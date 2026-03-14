@@ -1,5 +1,9 @@
 """Tests for SyncManager.queue_suggestion (socket-triggered suggestion discovery)."""
 
+import pytest
+
+pytestmark = pytest.mark.docker
+
 import os
 import sys
 import unittest

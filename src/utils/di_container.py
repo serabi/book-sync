@@ -21,8 +21,10 @@ from src.db.database_service import DatabaseService
 from src.services.abs_service import ABSService
 from src.services.alignment_service import AlignmentService
 from src.services.background_job_service import BackgroundJobService
+from src.services.hardcover_service import HardcoverService
 from src.services.library_service import LibraryService
 from src.services.migration_service import MigrationService
+from src.services.reading_date_service import ReadingDateService
 from src.services.storyteller_submission_service import StorytellerSubmissionService
 from src.services.suggestion_service import SuggestionService
 from src.sync_clients.abs_ebook_sync_client import ABSEbookSyncClient
@@ -159,8 +161,17 @@ class Container(containers.DeclarativeContainer):
 
     abs_ebook_sync_client = providers.Singleton(ABSEbookSyncClient, abs_client, ebook_parser)
 
+    hardcover_service = providers.Singleton(
+        HardcoverService, hardcover_client, database_service, abs_client
+    )
+
+    reading_date_service = providers.Singleton(
+        ReadingDateService, database_service, hardcover_client, abs_client
+    )
+
     hardcover_sync_client = providers.Singleton(
-        HardcoverSyncClient, hardcover_client, ebook_parser, abs_client, database_service
+        HardcoverSyncClient, hardcover_client, ebook_parser, abs_client, database_service,
+        hardcover_service=hardcover_service,
     )
 
     # Suggestion Service

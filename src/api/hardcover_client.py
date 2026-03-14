@@ -701,6 +701,61 @@ class HardcoverClient:
         """Get today's date in YYYY-MM-DD format for Hardcover API."""
         return date.today().isoformat()
 
+    def update_read_dates(self, user_book_read_id: int, started_at: str = None, finished_at: str = None) -> bool:
+        """Update only the dates on an existing user_book_read. No progress fields touched."""
+        query = """
+        mutation UpdateReadDates($id: Int!, $startedAt: date, $finishedAt: date) {
+            update_user_book_read(id: $id, object: {
+                started_at: $startedAt,
+                finished_at: $finishedAt
+            }) {
+                error
+                user_book_read { id started_at finished_at }
+            }
+        }
+        """
+        variables = {"id": user_book_read_id, "startedAt": started_at, "finishedAt": finished_at}
+        result = self.query(query, variables)
+        if result and result.get("update_user_book_read"):
+            if result["update_user_book_read"].get("error"):
+                logger.error(f"Hardcover update_read_dates error: {result['update_user_book_read']['error']}")
+                return False
+            return True
+        return False
+
+    def create_read_with_dates(self, user_book_id: int, started_at: str = None,
+                               finished_at: str = None, edition_id: int = None) -> int | None:
+        """Create a new user_book_read with dates only (no progress).
+        Returns the new read ID, or None on failure."""
+        query = """
+        mutation InsertUserBookRead($id: Int!, $editionId: Int, $startedAt: date, $finishedAt: date) {
+            insert_user_book_read(user_book_id: $id, user_book_read: {
+                progress_pages: null,
+                progress_seconds: null,
+                edition_id: $editionId,
+                started_at: $startedAt,
+                finished_at: $finishedAt
+            }) {
+                error
+                user_book_read { id }
+            }
+        }
+        """
+        variables = {
+            "id": user_book_id,
+            "editionId": int(edition_id) if edition_id else None,
+            "startedAt": started_at,
+            "finishedAt": finished_at,
+        }
+        result = self.query(query, variables)
+        if result and result.get("insert_user_book_read"):
+            if result["insert_user_book_read"].get("error"):
+                logger.error(f"HC create_read_with_dates error: {result['insert_user_book_read']['error']}")
+                return None
+            read = result["insert_user_book_read"].get("user_book_read")
+            return read["id"] if read else None
+        return None
+
     def update_progress(
         self,
         user_book_id: int,
@@ -711,7 +766,6 @@ class HardcoverClient:
         audio_seconds: int = None,
         started_at: str = None,
         finished_at: str = None,
-        force_dates: bool = False,
     ) -> bool:
         """
         Update reading progress.
@@ -720,9 +774,6 @@ class HardcoverClient:
 
         Optional started_at/finished_at (YYYY-MM-DD strings) override the default
         of using today's date when filling missing dates on the Hardcover read.
-
-        When force_dates is True, provided started_at/finished_at will overwrite
-        existing dates on the Hardcover read (used for user-initiated date edits).
         """
         # First check if there's an existing read
         read_query = """
@@ -750,29 +801,19 @@ class HardcoverClient:
             existing_read = read_result["user_book_reads"][0]
             read_id = existing_read["id"]
 
-            # Preserve existing dates unless force_dates is set
             started_at_val = existing_read.get("started_at")
             finished_at_val = existing_read.get("finished_at")
 
-            if force_dates:
-                # User explicitly edited dates — overwrite HC values
-                if started_at is not None:
-                    started_at_val = started_at
-                    logger.info(f"Hardcover: Force-setting started_at to '{started_at_val}'")
-                if finished_at is not None:
-                    finished_at_val = finished_at
-                    logger.info(f"Hardcover: Force-setting finished_at to '{finished_at_val}'")
-            else:
-                # If no start date exists, and we passed 2%, fill it in
-                if not started_at_val and should_start:
-                    started_at_val = started_at or today
-                    logger.info(
-                        f"Hardcover: Setting started_at to '{started_at_val}' (Progress: {current_percentage:.1%})"
-                    )
+            # If no start date exists, and we passed 2%, fill it in
+            if not started_at_val and should_start:
+                started_at_val = started_at or today
+                logger.info(
+                    f"Hardcover: Setting started_at to '{started_at_val}' (Progress: {current_percentage:.1%})"
+                )
 
-                if is_finished and not finished_at_val:
-                    finished_at_val = finished_at or today
-                    logger.info(f"Hardcover: Setting finished_at to '{finished_at_val}'")
+            if is_finished and not finished_at_val:
+                finished_at_val = finished_at or today
+                logger.info(f"Hardcover: Setting finished_at to '{finished_at_val}'")
 
             # Use progress_seconds for audiobooks, progress_pages for page-based editions
             if audio_seconds and audio_seconds > 0:
@@ -1098,41 +1139,6 @@ class HardcoverClient:
             if bid in books_by_id
         ]
 
-    def get_currently_reading(self) -> dict:
-        """Bulk-fetch all user_books with Want to Read (1), Currently Reading (2), or Paused (4) status.
-
-        Returns dict keyed by book_id for quick lookup.
-        """
-        query = """
-        query {
-            me {
-                user_books(where: {status_id: {_in: [1, 2, 4]}}) {
-                    id
-                    status_id
-                    book_id
-                    edition_id
-                    user_book_reads(order_by: {id: desc}, limit: 1) {
-                        id
-                        started_at
-                        finished_at
-                        progress_pages
-                        progress_seconds
-                    }
-                }
-            }
-        }
-        """
-        result = self.query(query)
-        if not result or not result.get("me"):
-            return {}
-
-        me = result["me"]
-        if isinstance(me, list):
-            me = me[0] if me else {}
-
-        user_books = me.get("user_books", [])
-        return {ub["book_id"]: ub for ub in user_books}
-
     def get_all_editions(self, book_id: int) -> dict:
         """Fetch all default editions for a book, keyed by format type.
 
@@ -1167,48 +1173,6 @@ class HardcoverClient:
             if book.get("default_audio_edition"):
                 editions['audio'] = book["default_audio_edition"]
         return editions
-
-    def create_reading_journal(self, book_id: int, edition_id: int | None,
-                               event: str, action_at: str | None = None,
-                               entry: str | None = None,
-                               privacy_setting_id: int = 3) -> bool:
-        """Create a reading journal entry on Hardcover.
-
-        Events: 'started_reading', 'finished_reading', 'note', etc.
-        entry: optional text content for notes/highlights.
-        privacy_setting_id: 1=public, 2=followers, 3=private (default).
-        """
-        query = """
-        mutation ($object: ReadingJournalCreateType!) {
-            insert_reading_journal(object: $object) {
-                error
-                reading_journal { id }
-            }
-        }
-        """
-        obj = {
-            "book_id": int(book_id),
-            "event": event,
-            "privacy_setting_id": privacy_setting_id,
-            "tags": [],
-        }
-        if edition_id:
-            obj["edition_id"] = int(edition_id)
-        if action_at:
-            obj["action_at"] = action_at
-        if entry:
-            obj["entry"] = entry
-
-        result = self.query(query, {"object": obj})
-        if result and result.get("insert_reading_journal"):
-            errors = result["insert_reading_journal"].get("errors")
-            if errors:
-                logger.error(f"Hardcover create_reading_journal error: {errors}")
-                return False
-            if result["insert_reading_journal"].get("reading_journal"):
-                return True
-            logger.error("Hardcover create_reading_journal: no reading_journal in response")
-        return False
 
     # ── TBR / Want-to-Read methods ──
 

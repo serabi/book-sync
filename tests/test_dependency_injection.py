@@ -3,6 +3,10 @@
 Test script to verify dependency injection is working properly.
 """
 
+import pytest
+
+pytestmark = pytest.mark.docker
+
 import os
 import sys
 from pathlib import Path

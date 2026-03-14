@@ -5,7 +5,7 @@ import logging
 import requests
 from flask import Blueprint, Response, send_from_directory
 
-from src.blueprints.helpers import get_booklore_client, get_container, get_covers_dir, get_database_service
+from src.blueprints.helpers import get_container, get_covers_dir, get_database_service
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +48,8 @@ def serve_cover(filename):
 @covers_bp.route('/api/cover-proxy/booklore/<int:book_id>')
 def proxy_booklore_cover(book_id):
     """Proxy cover access to Booklore (requires Bearer token auth)."""
-    return _proxy_booklore_cover_for(get_booklore_client(), book_id)
+    container = get_container()
+    return _proxy_booklore_cover_for(container.booklore_client(), book_id)
 
 
 @covers_bp.route('/api/cover-proxy/booklore2/<int:book_id>')

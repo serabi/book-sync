@@ -537,6 +537,7 @@ select:focus {
 .source-badge.booklore { background: rgba(13, 148, 136, 0.2); color: #5EEAD4; }
 .source-badge.cwa { background: rgba(251, 146, 60, 0.2); color: var(--color-cwa); }
 .source-badge.localfile { background: rgba(192, 132, 252, 0.2); color: var(--color-localfile); }
+.source-badge.inlibrary { background: rgba(76, 175, 80, 0.15); color: #81c784; }
 
 /* Count badge */
 .queue-count,

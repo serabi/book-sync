@@ -3,6 +3,10 @@
 Unit test for the BookLore leading scenario using unittest.TestCase.
 """
 
+import pytest
+
+pytestmark = pytest.mark.docker
+
 import sys
 import unittest
 from pathlib import Path

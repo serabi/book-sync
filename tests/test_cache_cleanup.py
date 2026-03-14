@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+import pytest
+
+pytestmark = pytest.mark.docker
+
 import os
 import shutil
 import sys

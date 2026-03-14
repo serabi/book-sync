@@ -254,19 +254,26 @@ class StorytellerAPIClient:
 
                 if len(query_tokens) == 1:
                     matched = query_tokens[0] in searchable
+                    overlap = 1 if matched else 0
                 else:
                     searchable_tokens = set(w for w in re.split(r'\W+', searchable) if w and w not in stopwords)
                     overlap = len(query_set & searchable_tokens)
-                    matched = overlap >= min(len(query_set), len(searchable_tokens)) * 0.5
+                    min_size = min(len(query_set), len(searchable_tokens))
+                    if min_size <= 1:
+                        matched = overlap >= 1
+                    else:
+                        matched = overlap >= max(round(min_size * 0.67), 2)
 
                 if matched:
-                    results.append({
+                    overlap_ratio = overlap / max(len(query_set), 1)
+                    results.append((overlap_ratio, {
                         'uuid': book.get('uuid') or book.get('id'),
                         'title': title,
                         'authors': [a.get('name') for a in book.get('authors', [])],
                         'cover_url': f"/api/v2/books/{book.get('uuid') or book.get('id')}/cover"
-                    })
-            return results
+                    }))
+            results.sort(key=lambda x: x[0], reverse=True)
+            return [book for _, book in results]
         return []
 
     def get_book_details(self, book_uuid: str) -> dict | None:
@@ -279,7 +286,7 @@ class StorytellerAPIClient:
             logger.error(f"Error fetching book details: {e}")
         return None
 
-    def get_word_timeline_chapters(self, book_uuid: str) -> list[dict] | None:
+    def get_word_timeline_chapters(self, book_uuid: str, title_hint: str = None) -> list[dict] | None:
         """Load wordTimeline data from Storyteller's assets directory.
 
         Storyteller organizes assets by book title (with optional suffix for
@@ -287,48 +294,80 @@ class StorytellerAPIClient:
         the API, then looks for transcript files in:
             {STORYTELLER_ASSETS_DIR}/assets/{title}{suffix}/transcriptions/
 
+        If the API is unavailable and title_hint is provided, falls back to
+        globbing for directories matching the title prefix (handles Storyteller's
+        deduplication suffix like "[Ru93Xoc2]").
+
         Accepts any 5-digit prefix chapter files (e.g. 00000-00001.json).
         Returns a list of chapter dicts with 'words' entries, or None if unavailable.
         """
+        import glob as glob_module
+
         assets_dir = os.environ.get('STORYTELLER_ASSETS_DIR', '').strip()
         if not assets_dir:
             return None
 
+        assets_root = (Path(assets_dir) / 'assets').resolve()
+
         # Resolve book title via API to find the correct directory name
         book_details = self.get_book_details(book_uuid)
+        if book_details:
+            title = book_details.get('title', '')
+            suffix = book_details.get('suffix', '')
+            if not title:
+                return None
+
+            dir_name = f"{title}{suffix}"
+            transcripts_dir = (assets_root / dir_name / 'transcriptions').resolve()
+            if assets_root not in transcripts_dir.parents:
+                logger.warning("Storyteller: Refusing out-of-root transcript path")
+                return None
+            if transcripts_dir.is_dir():
+                return self._scan_transcription_dir(transcripts_dir, assets_root)
+
+        # Fallback: API failed or dir not found — try globbing by title hint
+        if title_hint:
+            escaped = glob_module.escape(title_hint)
+            candidates = [
+                p for p in assets_root.glob(f"{escaped}*/transcriptions")
+                if p.is_dir() and assets_root in p.resolve().parents
+            ]
+            if candidates:
+                if len(candidates) > 1:
+                    logger.warning(
+                        f"Storyteller: {len(candidates)} glob matches for '{title_hint}*', using first"
+                    )
+                result = self._scan_transcription_dir(candidates[0].resolve(), assets_root)
+                if result:
+                    logger.info(
+                        f"Storyteller: filesystem fallback found transcriptions at {candidates[0].parent.name}"
+                    )
+                    return result
+
         if not book_details:
             logger.debug(f"Storyteller: Could not fetch details for UUID {book_uuid}")
-            return None
+        else:
+            logger.debug(f"Storyteller: No transcriptions dir for '{book_details.get('title', '')}'")
+        return None
 
-        title = book_details.get('title', '')
-        suffix = book_details.get('suffix', '')
-        if not title:
-            return None
+    @staticmethod
+    def _scan_transcription_dir(transcripts_dir: Path, assets_root: Path) -> list[dict] | None:
+        """Scan a transcriptions directory for chapter timeline files.
 
-        # Validate that resolved paths stay within the assets root (path traversal defense)
-        assets_root = (Path(assets_dir) / 'assets').resolve()
-        dir_name = f"{title}{suffix}"
-        transcripts_dir = (assets_root / dir_name / 'transcriptions').resolve()
-        if assets_root not in transcripts_dir.parents:
-            logger.warning("Storyteller: Refusing out-of-root transcript path")
-            return None
-        if not transcripts_dir.is_dir():
-            logger.debug(f"Storyteller: No transcriptions dir at {transcripts_dir}")
-            return None
-
+        Returns a list of chapter dicts with 'words' entries, or None if empty.
+        """
         chapters = []
         pattern = re.compile(r'^\d{5}-\d{5}\.json$')
         for filename in sorted(os.listdir(transcripts_dir)):
             if not pattern.match(filename):
                 continue
             filepath = (transcripts_dir / filename).resolve()
-            if transcripts_dir not in filepath.parents and filepath.parent != transcripts_dir:
+            if transcripts_dir.resolve() not in filepath.parents and filepath.parent.resolve() != transcripts_dir.resolve():
                 logger.warning(f"Storyteller: Refusing out-of-root transcript file: {filename}")
                 continue
             try:
                 with filepath.open('r', encoding='utf-8') as f:
                     data = json.load(f)
-                # wordTimeline is the key containing word-level timing data
                 timeline = data.get('wordTimeline') or data.get('timeline')
                 if timeline and isinstance(timeline, list):
                     chapters.append({

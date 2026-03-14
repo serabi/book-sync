@@ -40,6 +40,11 @@ class MockContainer:
         self.mock_storyteller_client.is_configured.return_value = False
         self.mock_bookfusion_client = Mock()
         self.mock_bookfusion_client.is_configured.return_value = False
+        self.mock_hardcover_service = Mock()
+        self.mock_hardcover_service.is_configured.return_value = False
+        self.mock_reading_date_service = Mock()
+        self.mock_reading_date_service.pull_reading_dates.return_value = {}
+        self.mock_reading_date_service.push_dates_to_hardcover.return_value = (True, "Dates synced")
 
     def database_service(self):
         return self.mock_database_service
@@ -55,6 +60,12 @@ class MockContainer:
 
     def hardcover_sync_client(self):
         return self.mock_hardcover_sync_client
+
+    def hardcover_service(self):
+        return self.mock_hardcover_service
+
+    def reading_date_service(self):
+        return self.mock_reading_date_service
 
     def booklore_client(self):
         return self.mock_booklore_client
@@ -176,8 +187,8 @@ class TestReadingRoutes(unittest.TestCase):
         book = Book(abs_id='book-1', abs_title='Test', status='completed')
         book.rating = 3.5
         self.db.update_book_reading_fields.return_value = book
-        self.mock_container.mock_hardcover_sync_client.is_configured.return_value = True
-        self.mock_container.mock_hardcover_sync_client.push_local_rating.return_value = {
+        self.mock_container.mock_hardcover_service.is_configured.return_value = True
+        self.mock_container.mock_hardcover_service.push_local_rating.return_value = {
             'hardcover_synced': False,
             'hardcover_error': 'boom',
         }
@@ -209,8 +220,11 @@ class TestReadingRoutes(unittest.TestCase):
 
     def test_reading_page_renders_log_and_stats_tabs(self):
         book = Book(abs_id='book-1', abs_title='Test Book', status='active')
+        state = State(abs_id='book-1', client_name='manual', percentage=0.5)
         self.db.get_all_books.return_value = [book]
-        self.db.get_all_states.return_value = [State(abs_id='book-1', client_name='manual', percentage=0.5)]
+        self.db.get_all_states.return_value = [state]
+        self.db.get_states_by_book.return_value = {'book-1': [state]}
+        self.db.get_booklore_by_filename.return_value = {}
         self.db.get_all_booklore_books.return_value = []
         self.db.get_reading_goal.return_value = None
 

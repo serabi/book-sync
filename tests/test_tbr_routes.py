@@ -58,6 +58,10 @@ class MockContainer:
         self.mock_storyteller_client.is_configured.return_value = False
         self.mock_bookfusion_client = Mock()
         self.mock_bookfusion_client.is_configured.return_value = False
+        self.mock_hardcover_service = Mock()
+        self.mock_hardcover_service.is_configured.return_value = False
+        self.mock_reading_date_service = Mock()
+        self.mock_reading_date_service.pull_reading_dates.return_value = {}
 
     def database_service(self):
         return self.mock_database_service
@@ -73,6 +77,12 @@ class MockContainer:
 
     def hardcover_sync_client(self):
         return self.mock_hardcover_sync_client
+
+    def hardcover_service(self):
+        return self.mock_hardcover_service
+
+    def reading_date_service(self):
+        return self.mock_reading_date_service
 
     def booklore_client(self):
         return self.mock_booklore_client
@@ -148,6 +158,7 @@ class TestTbrRoutes(unittest.TestCase):
         self.db = self.mock_container.mock_database_service
         self.db.get_hardcover_details.return_value = None
         self.db.get_tbr_count.return_value = 0
+        self.db.get_all_books.return_value = []
 
     # ── GET /api/reading/tbr ──
 
@@ -623,6 +634,70 @@ class TestTbrRoutes(unittest.TestCase):
 
         resp = self.client.post('/api/reading/tbr/import-hardcover-list', json={'list_id': 999})
         self.assertEqual(resp.status_code, 404)
+
+    # ── HC import filtering (already-reading books) ──
+
+    def test_import_wtr_filters_active_books(self):
+        """Books already active in library are filtered out of WTR import."""
+        self.mock_container.mock_hardcover_client.is_configured.return_value = True
+        self.mock_container.mock_hardcover_client.get_want_to_read_books.return_value = [
+            {'book_id': 1, 'title': 'Active Book', 'slug': 'active'},
+            {'book_id': 2, 'title': 'New Book', 'slug': 'new'},
+        ]
+        hc_detail = SimpleNamespace(hardcover_book_id=1, abs_id='abs-active')
+        self.db.get_all_hardcover_details.return_value = [hc_detail]
+        active_book = Book(abs_id='abs-active', abs_title='Active Book', status='active')
+        self.db.get_all_books.return_value = [active_book]
+        self.db.add_tbr_item.return_value = (_make_tbr_item(id=10), True)
+
+        resp = self.client.post('/api/reading/tbr/import-hardcover')
+        data = resp.get_json()
+
+        self.assertEqual(data['filtered'], 1)
+        self.assertEqual(data['imported'], 1)
+        # Only the new book should have been added
+        self.assertEqual(self.db.add_tbr_item.call_count, 1)
+
+    def test_import_wtr_filters_completed_books(self):
+        """Books already completed in library are filtered out of WTR import."""
+        self.mock_container.mock_hardcover_client.is_configured.return_value = True
+        self.mock_container.mock_hardcover_client.get_want_to_read_books.return_value = [
+            {'book_id': 5, 'title': 'Done Book', 'slug': 'done'},
+        ]
+        hc_detail = SimpleNamespace(hardcover_book_id=5, abs_id='abs-done')
+        self.db.get_all_hardcover_details.return_value = [hc_detail]
+        done_book = Book(abs_id='abs-done', abs_title='Done Book', status='completed')
+        self.db.get_all_books.return_value = [done_book]
+
+        resp = self.client.post('/api/reading/tbr/import-hardcover')
+        data = resp.get_json()
+
+        self.assertEqual(data['filtered'], 1)
+        self.assertEqual(data['imported'], 0)
+        self.db.add_tbr_item.assert_not_called()
+
+    def test_import_list_filters_active_books(self):
+        """Books already active in library are filtered out of list import."""
+        self.mock_container.mock_hardcover_client.is_configured.return_value = True
+        self.mock_container.mock_hardcover_client.get_list_books.return_value = {
+            'name': 'SciFi',
+            'books': [
+                {'book_id': 10, 'title': 'Reading This', 'slug': 'reading'},
+                {'book_id': 11, 'title': 'New One', 'slug': 'new'},
+            ],
+        }
+        hc_detail = SimpleNamespace(hardcover_book_id=10, abs_id='abs-reading')
+        self.db.get_all_hardcover_details.return_value = [hc_detail]
+        reading_book = Book(abs_id='abs-reading', abs_title='Reading This', status='active')
+        self.db.get_all_books.return_value = [reading_book]
+        self.db.add_tbr_item.return_value = (_make_tbr_item(id=20), True)
+
+        resp = self.client.post('/api/reading/tbr/import-hardcover-list', json={'list_id': 1})
+        data = resp.get_json()
+
+        self.assertEqual(data['filtered'], 1)
+        self.assertEqual(data['imported'], 1)
+        self.assertEqual(self.db.add_tbr_item.call_count, 1)
 
 
 if __name__ == '__main__':

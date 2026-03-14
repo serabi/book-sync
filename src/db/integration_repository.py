@@ -273,6 +273,7 @@ class IntegrationRepository(BaseRepository):
 
     def save_bookfusion_highlights(self, highlights):
         saved = 0
+        new_ids = []
         with self.get_session() as session:
             all_ids = [h["highlight_id"] for h in highlights if h.get("highlight_id")]
             existing_rows = (
@@ -296,19 +297,38 @@ class IntegrationRepository(BaseRepository):
                     existing.highlighted_at = h.get("highlighted_at")
                     existing.quote_text = h.get("quote_text")
                 else:
-                    session.add(
-                        BookfusionHighlight(
-                            bookfusion_book_id=h.get("bookfusion_book_id"),
-                            highlight_id=highlight_id,
-                            content=h.get("content", ""),
-                            book_title=h.get("book_title"),
-                            chapter_heading=h.get("chapter_heading"),
-                            highlighted_at=h.get("highlighted_at"),
-                            quote_text=h.get("quote_text"),
+                    try:
+                        nested = session.begin_nested()
+                        session.add(
+                            BookfusionHighlight(
+                                bookfusion_book_id=h.get("bookfusion_book_id"),
+                                highlight_id=highlight_id,
+                                content=h.get("content", ""),
+                                book_title=h.get("book_title"),
+                                chapter_heading=h.get("chapter_heading"),
+                                highlighted_at=h.get("highlighted_at"),
+                                quote_text=h.get("quote_text"),
+                            )
                         )
-                    )
-                    saved += 1
-        return saved
+                        session.flush()
+                        saved += 1
+                        new_ids.append(highlight_id)
+                    except IntegrityError:
+                        nested.rollback()
+                        logger.warning("Duplicate BookFusion highlight %s, updating instead", highlight_id)
+                        existing = (
+                            session.query(BookfusionHighlight)
+                            .filter(BookfusionHighlight.highlight_id == highlight_id)
+                            .first()
+                        )
+                        if existing:
+                            existing.content = h.get("content", "")
+                            existing.chapter_heading = h.get("chapter_heading")
+                            existing.book_title = h.get("book_title")
+                            existing.highlighted_at = h.get("highlighted_at")
+                            existing.quote_text = h.get("quote_text")
+                            session.flush()
+        return {'saved': saved, 'new_ids': new_ids}
 
     def get_bookfusion_highlights(self):
         with self.get_session() as session:
@@ -390,7 +410,6 @@ class IntegrationRepository(BaseRepository):
                             tags=b.get("tags"),
                             series=b.get("series"),
                             highlight_count=b.get("highlight_count", 0),
-                            last_updated=datetime.now(UTC),
                         )
                     )
                     saved += 1

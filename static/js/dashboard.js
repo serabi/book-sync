@@ -97,7 +97,8 @@ function initDashboard() {
         title: 'asc',
         progress: 'desc',
         status: 'asc',
-        last_sync: 'desc'
+        last_sync: 'desc',
+        finished_date: 'desc'
     };
 
     let lastSort = null;
@@ -136,8 +137,9 @@ function initDashboard() {
 
         const sortedCards = cards.sort((a, b) => {
             let comparison = 0;
-            const valA = a.dataset[sortBy === 'last_sync' ? 'lastSync' : sortBy] || '';
-            const valB = b.dataset[sortBy === 'last_sync' ? 'lastSync' : sortBy] || '';
+            const datasetKey = sortBy === 'last_sync' ? 'lastSync' : sortBy === 'finished_date' ? 'finished' : sortBy;
+            const valA = a.dataset[datasetKey] || '';
+            const valB = b.dataset[datasetKey] || '';
 
             if (sortBy === 'title') {
                 comparison = valA.localeCompare(valB);
@@ -147,6 +149,11 @@ function initDashboard() {
                 comparison = valA.localeCompare(valB);
             } else if (sortBy === 'last_sync') {
                 comparison = parseLastSync(valA) - parseLastSync(valB);
+            } else if (sortBy === 'finished_date') {
+                if (!valA && !valB) comparison = 0;
+                else if (!valA) comparison = 1;   // no date → end
+                else if (!valB) comparison = -1;
+                else comparison = valA.localeCompare(valB);
             }
 
             return direction === 'asc' ? comparison : -comparison;
@@ -199,6 +206,11 @@ function initDashboard() {
 
     if (currentlyReadingGrid || finishedGrid || pausedGrid || dnfGrid || allBooksGrid) {
         applySorting(savedSort);
+    }
+
+    // Default finished grid to finished_date sort (newest first) unless user chose it globally
+    if (savedSort !== 'finished_date' && finishedGrid) {
+        sortCards(finishedGrid, 'finished_date', 'desc');
     }
 
     if (filterSelect) {
@@ -448,6 +460,43 @@ function pauseBook(absId, btn) {
             if (data.success) {
                 btn.textContent = "OK";
                 setTimeout(() => window.location.reload(), 1000);
+            } else {
+                btn.textContent = "Err";
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                    btn.disabled = false;
+                }, 2000);
+            }
+        }).catch(error => {
+            console.error('Error:', error);
+            btn.textContent = "Err";
+            setTimeout(() => {
+                btn.textContent = originalText;
+                btn.disabled = false;
+            }, 2000);
+        });
+}
+
+function addToWantToRead(absId, btn) {
+    btn.disabled = true;
+    const originalText = btn.textContent;
+    btn.textContent = "...";
+    closeAllMenus();
+
+    fetch('/api/reading/tbr/from-library', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ abs_id: absId })
+    }).then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                btn.textContent = data.created ? "Added" : "Already added";
+                btn.classList.add('success');
+                setTimeout(() => {
+                    btn.textContent = originalText;
+                    btn.disabled = false;
+                    btn.classList.remove('success');
+                }, 2000);
             } else {
                 btn.textContent = "Err";
                 setTimeout(() => {

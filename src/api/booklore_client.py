@@ -879,6 +879,24 @@ class BookloreClientGroup:
                 return result
         return None
 
+    @property
+    def base_url(self):
+        for c in self._active:
+            return c.base_url
+        return None
+
+    def remove_from_shelf(self, ebook_filename, shelf_name=None):
+        for c in self._active:
+            if c.remove_from_shelf(ebook_filename, shelf_name):
+                return True
+        return False
+
+    def add_to_shelf(self, ebook_filename, shelf_name=None):
+        for c in self._active:
+            if c.add_to_shelf(ebook_filename, shelf_name):
+                return True
+        return False
+
     def get_progress(self, ebook_filename):
         for c in self._active:
             pct, cfi = c.get_progress(ebook_filename)

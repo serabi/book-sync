@@ -35,6 +35,10 @@ class MockContainer:
         self.mock_bookfusion_client.is_configured.return_value = False
         self.mock_bookfusion_client.highlights_api_key = ''
         self.mock_bookfusion_client.upload_api_key = ''
+        self.mock_hardcover_service = Mock()
+        self.mock_hardcover_sync_client = Mock()
+        self.mock_reading_date_service = Mock()
+        self.mock_reading_date_service.pull_reading_dates.return_value = {}
 
         # Configure the sync manager to return our mock clients
         self.mock_sync_manager.abs_client = self.mock_abs_client
@@ -67,6 +71,15 @@ class MockContainer:
 
     def bookfusion_client(self):
         return self.mock_bookfusion_client
+
+    def hardcover_service(self):
+        return self.mock_hardcover_service
+
+    def hardcover_sync_client(self):
+        return self.mock_hardcover_sync_client
+
+    def reading_date_service(self):
+        return self.mock_reading_date_service
 
     def data_dir(self):
         return Path(tempfile.gettempdir()) / 'test_data'
@@ -188,6 +201,8 @@ class CleanFlaskIntegrationTest(unittest.TestCase):
         self.mock_database_service.get_all_books.return_value = [test_book]
         self.mock_database_service.get_states_for_book.return_value = mock_states
         self.mock_database_service.get_all_states.return_value = mock_states
+        self.mock_database_service.get_states_by_book.return_value = {'test-book-123': mock_states}
+        self.mock_database_service.get_booklore_by_filename.return_value = {}
         self.mock_database_service.get_hardcover_details.return_value = None
         self.mock_database_service.get_all_hardcover_details.return_value = []
         self.mock_database_service.get_all_booklore_books.return_value = []
@@ -221,7 +236,7 @@ class CleanFlaskIntegrationTest(unittest.TestCase):
 
             # Verify database was called (may be called more than once due to reading-date backfill)
             self.mock_database_service.get_all_books.assert_called()
-            self.mock_database_service.get_all_states.assert_called_once()
+            self.mock_database_service.get_states_by_book.assert_called_once()
             self.mock_database_service.get_all_hardcover_details.assert_called_once()
 
             # Verify render_template was called with correct arguments
@@ -569,7 +584,7 @@ class CleanFlaskIntegrationTest(unittest.TestCase):
         self.assertEqual(saved_book.abs_id, 'audio-only-123')
         self.assertIsNone(saved_book.ebook_filename)
         self.assertIsNone(saved_book.kosync_doc_id)
-        self.assertEqual(saved_book.status, 'active')
+        self.assertEqual(saved_book.status, 'not_started')
         self.assertEqual(saved_book.sync_mode, 'audiobook')
         self.assertEqual(saved_book.duration, 3600)  # From mock manager
 
@@ -601,7 +616,7 @@ class CleanFlaskIntegrationTest(unittest.TestCase):
             self.assertEqual(saved_book.abs_title, 'Test Ebook Title')
             self.assertEqual(saved_book.ebook_filename, 'test-ebook.epub')
             self.assertEqual(saved_book.kosync_doc_id, 'abcdef1234567890aabbccdd')
-            self.assertEqual(saved_book.status, 'active')
+            self.assertEqual(saved_book.status, 'not_started')
             self.assertEqual(saved_book.sync_mode, 'ebook_only')
 
             self.mock_database_service.resolve_suggestion.assert_called_once_with('abcdef1234567890aabbccdd')
@@ -691,7 +706,7 @@ class CleanFlaskIntegrationTest(unittest.TestCase):
         self.assertEqual(saved_book.abs_id, 'real-audiobook-789')
         self.assertEqual(saved_book.ebook_filename, 'mybook.epub')
         self.assertEqual(saved_book.kosync_doc_id, 'ebook-hash-123')
-        self.assertEqual(saved_book.status, 'active')
+        self.assertEqual(saved_book.status, 'not_started')
         self.assertEqual(saved_book.sync_mode, 'audiobook')
 
         self.mock_database_service.migrate_book_data.assert_called_once_with('ebook-abc123', 'real-audiobook-789')

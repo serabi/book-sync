@@ -109,7 +109,8 @@
                             Start Reading
                         </button>
                         {% else %}
-                        <button class="r-hero-action-btn" type="button" disabled title="Link to a library book first">
+                        <button class="r-hero-action-btn r-hero-action-btn--start" type="button" id="start-reading-btn"
+                                data-item-id="{{ item.id }}" data-unlinked="true">
                             Start Reading
                         </button>
                         {% endif %}
@@ -157,7 +158,10 @@
                 <div class="tbr-edit-actions">
                     <button class="btn btn-primary" id="save-edits-btn" type="button">Save Changes</button>
                     <button class="btn btn-secondary" id="change-cover-edit-btn" type="button">Change Cover</button>
-                    {% if not item.hardcover_book_id and hc_configured %}
+                    {% if item.hardcover_book_id %}
+                    <button class="btn btn-secondary" id="change-hc-btn" type="button">Change HC Link</button>
+                    <button class="btn btn-secondary" id="unlink-hc-btn" type="button">Unlink Hardcover</button>
+                    {% elif hc_configured %}
                     <button class="btn btn-secondary" id="link-hc-btn" type="button">Link to Hardcover</button>
                     {% endif %}
                 </div>

@@ -24,7 +24,8 @@ else 0 %}
 <div class="book-card {% if max_diff > 5 %}out-of-sync{% endif %}" data-progress="{{ mapping.unified_progress }}"
     data-last-sync="{{ mapping.last_sync }}" data-status="{{ mapping.status }}" data-title="{{ mapping.abs_title|e }}"
     data-sync-mode="{{ mapping.sync_mode }}" data-abs-id="{{ mapping.abs_id }}"
-    data-book-type="{{ bt }}">
+    data-book-type="{{ bt }}"
+    data-finished="{{ mapping.finished_at or '' }}">
 
     {# Cover image section — clickable link to book detail page #}
     <div class="book-cover-section">
@@ -266,7 +267,7 @@ else 0 %}
                                         <img src="/static/hardcover.svg" alt="HC"
                                             class="service-icon {% if not mapping.hardcover_book_id %}grayscale-muted{% endif %}">
                                         {% if mapping.hardcover_status_mismatch %}
-                                        <span class="hc-mismatch-dot" title="Hardcover status differs from local"></span>
+                                        <span class="hc-mismatch-dot" title="Hardcover status out of sync (push pending)"></span>
                                         {% endif %}
                                     </span>
                                 </a>
@@ -314,7 +315,16 @@ else 0 %}
                         <button class="card-menu-item" onclick='syncNow({{ mapping.abs_id|tojson }}, this)'>Sync Now</button>
                         {% endif %}
 
+                        {% if mapping.status in ['pending', 'processing', 'failed_retry_later', 'failed_permanent'] %}
+                        <button type="button" class="card-menu-item card-menu-danger"
+                            onclick='showConfirmModal("Delete Book", "Permanently delete this book mapping and all cached data?", {{ ("/delete/" ~ mapping.abs_id)|tojson }}, "danger")'>Delete</button>
+                        {% endif %}
+
                         {# Submenu trigger for status actions (hide for processing/pending/failed states) #}
+                        {% if mapping.status == 'not_started' or (mapping.status == 'active' and mapping.unified_progress == 0) %}
+                        <button class="card-menu-item" onclick='addToWantToRead({{ mapping.abs_id|tojson }}, this)'>Add to Want to Read</button>
+                        {% endif %}
+
                         {% if mapping.status not in ['pending', 'processing', 'failed_retry_later', 'failed_permanent'] %}
                         <button class="card-menu-item card-menu-submenu-trigger" type="button">
                             <span>Edit Book Status</span>

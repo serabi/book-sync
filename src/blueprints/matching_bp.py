@@ -36,7 +36,9 @@ def _create_storyteller_reservation(database_service, abs_id):
     and starts Whisper transcription before the async submission thread has
     finished copying files and creating its own record.
     """
-    submission = StorytellerSubmission(abs_id=abs_id, status="queued")
+    book = database_service.get_book(abs_id)
+    storyteller_uuid = book.storyteller_uuid if book else None
+    submission = StorytellerSubmission(abs_id=abs_id, status="queued", storyteller_uuid=storyteller_uuid)
     database_service.save_storyteller_submission(submission)
     return submission
 
@@ -210,15 +212,15 @@ def match():
                 abs_title=manager.get_abs_title(selected_ab),
                 ebook_filename=None,
                 kosync_doc_id=None,
-                status="active",
+                status="not_started",
                 duration=manager.get_duration(selected_ab),
                 sync_mode="audiobook",
             )
-            database_service.save_book(book)
+            database_service.save_book(book, is_new=True)
             abs_service.add_to_collection(abs_id, current_app.config["ABS_COLLECTION_NAME"])
-            hardcover_sync_client = container.sync_clients().get("Hardcover")
-            if hardcover_sync_client and hardcover_sync_client.is_configured():
-                hardcover_sync_client.automatch_hardcover(book)
+            hc_service = container.hardcover_service()
+            if hc_service.is_configured():
+                hc_service.automatch_hardcover(book, hardcover_sync_client=container.hardcover_sync_client())
             database_service.resolve_suggestion(abs_id)
             return redirect(url_for("dashboard.index"))
 
@@ -256,11 +258,11 @@ def match():
                 abs_title=title,
                 ebook_filename=ebook_filename,
                 kosync_doc_id=kosync_doc_id,
-                status="active",
+                status="not_started",
                 sync_mode="ebook_only",
                 storyteller_uuid=storyteller_uuid,
             )
-            database_service.save_book(book)
+            database_service.save_book(book, is_new=True)
             if kosync_doc_id:
                 database_service.resolve_suggestion(kosync_doc_id)
             return redirect(url_for("dashboard.index"))
@@ -314,7 +316,7 @@ def match():
                 abs_title=manager.get_abs_title(selected_ab),
                 ebook_filename=book.ebook_filename,
                 kosync_doc_id=book.kosync_doc_id,
-                status="active",
+                status="not_started",
                 duration=manager.get_duration(selected_ab),
                 sync_mode="audiobook",
                 **_copy_book_merge_metadata(
@@ -334,9 +336,9 @@ def match():
             except Exception as e:
                 logger.error(f"Failed to merge book data: {e}")
                 raise
-            hardcover_sync_client = container.sync_clients().get("Hardcover")
-            if hardcover_sync_client and hardcover_sync_client.is_configured():
-                hardcover_sync_client.automatch_hardcover(new_book)
+            hc_service = container.hardcover_service()
+            if hc_service.is_configured():
+                hc_service.automatch_hardcover(new_book, hardcover_sync_client=container.hardcover_sync_client())
             database_service.resolve_suggestion(abs_id)
             if new_book.kosync_doc_id:
                 database_service.resolve_suggestion(new_book.kosync_doc_id)
@@ -416,7 +418,7 @@ def match():
 
         storyteller_submit = request.form.get("storyteller_submit")
 
-        database_service.save_book(book)
+        database_service.save_book(book, is_new=True)
 
         # Create Storyteller reservation immediately after saving the book —
         # before any HTTP calls (Hardcover, Booklore, ABS) that could take
@@ -436,9 +438,9 @@ def match():
                 raise
 
         # Trigger Hardcover Automatch
-        hardcover_sync_client = container.sync_clients().get("Hardcover")
-        if hardcover_sync_client and hardcover_sync_client.is_configured():
-            hardcover_sync_client.automatch_hardcover(book)
+        hc_service = container.hardcover_service()
+        if hc_service.is_configured():
+            hc_service.automatch_hardcover(book, hardcover_sync_client=container.hardcover_sync_client())
 
         if not migration_source_id:
             abs_service.add_to_collection(abs_id, current_app.config["ABS_COLLECTION_NAME"])
@@ -531,6 +533,15 @@ def match():
 
     storyteller_force_mode = os.environ.get("STORYTELLER_FORCE_MODE", "false").lower() == "true"
 
+    # Build sets of IDs already in the library for "In Library" badges
+    library_abs_ids = set()
+    library_ebook_filenames = set()
+    if search:
+        all_books = database_service.get_all_books()
+        library_abs_ids = {b.abs_id for b in all_books}
+        library_ebook_filenames = {b.ebook_filename for b in all_books if b.ebook_filename}
+        library_ebook_filenames |= {b.original_ebook_filename for b in all_books if b.original_ebook_filename}
+
     return render_template(
         "match.html",
         audiobooks=audiobooks,
@@ -545,6 +556,8 @@ def match():
         preselect_abs_id=preselect_abs_id,
         storyteller_submit_available=storyteller_submit_available,
         storyteller_force_mode=storyteller_force_mode,
+        library_abs_ids=library_abs_ids,
+        library_ebook_filenames=library_ebook_filenames,
     )
 
 
@@ -605,15 +618,15 @@ def batch_match():
                             abs_title=item["abs_title"],
                             ebook_filename=None,
                             kosync_doc_id=None,
-                            status="active",
+                            status="not_started",
                             duration=item["duration"],
                             sync_mode="audiobook",
                         )
-                        database_service.save_book(book)
+                        database_service.save_book(book, is_new=True)
                         abs_service.add_to_collection(item["abs_id"], current_app.config["ABS_COLLECTION_NAME"])
-                        hardcover_sync_client = container.sync_clients().get("Hardcover")
-                        if hardcover_sync_client and hardcover_sync_client.is_configured():
-                            hardcover_sync_client.automatch_hardcover(book)
+                        hc_service = container.hardcover_service()
+                        if hc_service.is_configured():
+                            hc_service.automatch_hardcover(book, hardcover_sync_client=container.hardcover_sync_client())
                         database_service.resolve_suggestion(item["abs_id"])
                         continue
 
@@ -686,7 +699,7 @@ def batch_match():
                         **merge_metadata,
                     )
 
-                    database_service.save_book(book)
+                    database_service.save_book(book, is_new=True)
 
                     # Create reservation immediately after book save, before HTTP calls
                     if batch_storyteller_submit:
@@ -700,9 +713,9 @@ def batch_match():
                         logger.info(f"Successfully merged {migration_source_id} into {item['abs_id']}")
 
                     # Trigger Hardcover Automatch
-                    hardcover_sync_client = container.sync_clients().get("Hardcover")
-                    if hardcover_sync_client and hardcover_sync_client.is_configured():
-                        hardcover_sync_client.automatch_hardcover(book)
+                    hc_service = container.hardcover_service()
+                    if hc_service.is_configured():
+                        hc_service.automatch_hardcover(book, hardcover_sync_client=container.hardcover_sync_client())
 
                     if not migration_source_id:
                         abs_service.add_to_collection(item["abs_id"], current_app.config["ABS_COLLECTION_NAME"])

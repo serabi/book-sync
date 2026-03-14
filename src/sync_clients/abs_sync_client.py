@@ -184,7 +184,6 @@ class ABSSyncClient(SyncClient):
             if char_index is not None:
                 ts_for_text = self.alignment_service.get_time_for_text(
                     book.abs_id,
-                    request.txt,
                     char_offset_hint=char_index
                 )
             else:

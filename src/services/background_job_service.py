@@ -68,10 +68,13 @@ class BackgroundJobService:
                 self.database_service.save_book(book)
                 logger.info(f"Reset crashed book status: {sanitize_log_data(book.abs_title)}")
 
-            # Check processing/failed books — recover if alignment exists, else mark failed
-            candidates = self.database_service.get_books_by_status(
-                "processing"
-            ) + self.database_service.get_books_by_status("failed_retry_later")
+            # Check stale books — recover if alignment exists, else handle per-status
+            candidates = (
+                self.database_service.get_books_by_status("processing")
+                + self.database_service.get_books_by_status("failed_retry_later")
+                + self.database_service.get_books_by_status("pending")
+                + self.database_service.get_books_by_status("failed_permanent")
+            )
 
             for book in candidates:
                 has_alignment = False
@@ -400,7 +403,22 @@ class BackgroundJobService:
         if not book.storyteller_uuid and not self.storyteller_client:
             return None
 
-        # Check for active submission — refresh its status from Storyteller first
+        # If the book already has a UUID, try alignment directly first —
+        # don't defer to submission status when data might already be available
+        if book.storyteller_uuid and self.storyteller_client and os.environ.get("STORYTELLER_ASSETS_DIR", "").strip():
+            try:
+                st_chapters = self.storyteller_client.get_word_timeline_chapters(book.storyteller_uuid)
+                if st_chapters:
+                    # Transcriptions are ready — mark any active submission as done and align
+                    submission = self.database_service.get_active_storyteller_submission(abs_id)
+                    if submission and submission.status not in ("ready", "failed"):
+                        if self.storyteller_submission_service:
+                            self.storyteller_submission_service._update_submission_status(submission, "ready")
+                    return self._do_storyteller_alignment(book, abs_id, st_chapters, book_text, update_progress)
+            except Exception as e:
+                logger.debug(f"Direct Storyteller alignment check failed for '{sanitize_log_data(book.abs_title)}': {e}")
+
+        # Fall through: check submission status if no direct alignment was possible
         submission = self.database_service.get_active_storyteller_submission(abs_id)
         if submission and submission.status in ("queued", "processing"):
             if self.storyteller_submission_service:
@@ -428,21 +446,26 @@ class BackgroundJobService:
             st_chapters = self.storyteller_client.get_word_timeline_chapters(book.storyteller_uuid)
             if not st_chapters:
                 return None
-            if not self.alignment_service:
-                logger.warning(
-                    f"Skipping Storyteller alignment for '{sanitize_log_data(book.abs_title)}': alignment_service not available"
-                )
-                return None
-            logger.info(
-                f"Using Storyteller wordTimeline for '{sanitize_log_data(book.abs_title)}' ({len(st_chapters)} chapters)"
-            )
-            update_progress(0.5, 2)
-            success = self.alignment_service.align_storyteller_and_store(abs_id, st_chapters, book_text)
-            if success:
-                update_progress(1.0, 2)
-                return "STORYTELLER_NATIVE"
+            return self._do_storyteller_alignment(book, abs_id, st_chapters, book_text, update_progress)
         except Exception as e:
             logger.warning(f"Storyteller wordTimeline failed for '{sanitize_log_data(book.abs_title)}': {e}")
+        return None
+
+    def _do_storyteller_alignment(self, book, abs_id, st_chapters, book_text, update_progress) -> str | None:
+        """Run Storyteller alignment once chapters are available."""
+        if not self.alignment_service:
+            logger.warning(
+                f"Skipping Storyteller alignment for '{sanitize_log_data(book.abs_title)}': alignment_service not available"
+            )
+            return None
+        logger.info(
+            f"Using Storyteller wordTimeline for '{sanitize_log_data(book.abs_title)}' ({len(st_chapters)} chapters)"
+        )
+        update_progress(0.5, 2)
+        success = self.alignment_service.align_storyteller_and_store(abs_id, st_chapters, book_text)
+        if success:
+            update_progress(1.0, 2)
+            return "STORYTELLER_NATIVE"
         return None
 
     def _auto_submit_to_storyteller(self, book, abs_id, abs_title, epub_path) -> bool:

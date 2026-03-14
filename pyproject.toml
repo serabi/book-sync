@@ -2,6 +2,9 @@
 name = "pagekeeper"
 requires-python = ">=3.11"
 
+[tool.pytest.ini_options]
+markers = ["docker: tests requiring Docker (epubcfi, ffmpeg)"]
+
 [tool.ruff]
 target-version = "py311"
 line-length = 120

@@ -84,6 +84,11 @@ function initReadingPage(currentYear, activeTab) {
 
   filterChips.forEach(chip => {
     chip.addEventListener('click', () => {
+      // If the chip has data-switch-tab, switch to that tab instead of filtering
+      if (chip.dataset.switchTab) {
+        setMainTab(chip.dataset.switchTab);
+        return;
+      }
       filterChips.forEach(item => {
         item.classList.remove('active');
         item.setAttribute('aria-selected', 'false');
@@ -496,8 +501,8 @@ function initReadingDetail() {
     function getStarValue(star, clientX) {
       const idx = parseInt(star.dataset.index, 10);
       const rect = star.getBoundingClientRect();
-      const isLeftHalf = (clientX - rect.left) < rect.width / 2;
-      return isLeftHalf ? idx - 0.5 : idx;
+      const isLeftThird = (clientX - rect.left) < rect.width / 3;
+      return isLeftThird ? idx - 0.5 : idx;
     }
 
     stars.forEach(star => {
@@ -554,6 +559,32 @@ function initReadingDetail() {
             flashDateFeedback(input, false, data.error || 'Save failed');
           } else {
             flashDateFeedback(input, true, 'Saved');
+            // Update the corresponding timeline entry visually
+            const eventClass = field === 'started_at' ? 'r-tl-event-started' : 'r-tl-event-finished';
+            const timeline = document.getElementById('journal-timeline');
+            if (timeline) {
+              const eventSpan = timeline.querySelector('.' + eventClass);
+              if (eventSpan) {
+                const dateSpan = eventSpan.parentElement.querySelector('.r-tl-date');
+                if (dateSpan) {
+                  if (input.value) {
+                    const formatted = new Date(input.value + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                    dateSpan.textContent = formatted;
+                  } else {
+                    // Date cleared — remove synthetic timeline items (no journal ID)
+                    const tlItem = eventSpan.closest('.r-tl-item');
+                    if (tlItem && !tlItem.dataset.journalId) {
+                      tlItem.style.transition = 'opacity 0.3s';
+                      tlItem.style.opacity = '0';
+                      setTimeout(() => tlItem.remove(), 300);
+                    }
+                  }
+                }
+              }
+            }
+            // Mark HC sync button as stale
+            const syncBtn = document.getElementById('hc-date-sync');
+            if (syncBtn) syncBtn.classList.add('r-hc-date-sync-btn--stale');
           }
         })
         .catch(() => {
@@ -575,11 +606,12 @@ function initReadingDetail() {
         method: 'POST',
       })
         .then(r => {
-          if (!r.ok) return r.text().then(t => { throw new Error(t || 'Sync failed'); });
+          if (!r.ok) return r.json().then(data => { throw data; });
           return r.json();
         })
         .then(data => {
           hcSyncBtn.disabled = false;
+          if (data.success) hcSyncBtn.classList.remove('r-hc-date-sync-btn--stale');
           if (hcSyncStatus) {
             hcSyncStatus.hidden = false;
             hcSyncStatus.className = `r-hc-date-sync-status ${data.success ? 'success' : 'error'}`;
@@ -587,13 +619,54 @@ function initReadingDetail() {
             setTimeout(() => { hcSyncStatus.hidden = true; }, 4000);
           }
         })
-        .catch(() => {
+        .catch(err => {
           hcSyncBtn.disabled = false;
           if (hcSyncStatus) {
             hcSyncStatus.hidden = false;
             hcSyncStatus.className = 'r-hc-date-sync-status error';
-            hcSyncStatus.textContent = 'Sync failed';
+            hcSyncStatus.textContent = (err && err.error) || 'Sync failed';
             setTimeout(() => { hcSyncStatus.hidden = true; }, 4000);
+          }
+        });
+    });
+  }
+
+  // ── Pull Dates from Hardcover button ──
+  const hcPullBtn = document.getElementById('hc-date-pull');
+  const hcPullStatus = document.getElementById('hc-date-pull-status');
+  if (hcPullBtn) {
+    hcPullBtn.addEventListener('click', () => {
+      hcPullBtn.disabled = true;
+      if (hcPullStatus) { hcPullStatus.hidden = true; }
+      fetch(`/api/reading/book/${hcPullBtn.dataset.absId}/dates/pull-hardcover`, {
+        method: 'POST',
+      })
+        .then(r => {
+          if (!r.ok) return r.json().then(data => { throw data; });
+          return r.json();
+        })
+        .then(data => {
+          hcPullBtn.disabled = false;
+          if (data.success && data.dates) {
+            const startedInput = document.getElementById('started-at');
+            const finishedInput = document.getElementById('finished-at');
+            if (startedInput && data.dates.started_at) startedInput.value = data.dates.started_at;
+            if (finishedInput && data.dates.finished_at) finishedInput.value = data.dates.finished_at;
+          }
+          if (hcPullStatus) {
+            hcPullStatus.hidden = false;
+            hcPullStatus.className = `r-hc-date-sync-status ${data.success ? 'success' : 'error'}`;
+            hcPullStatus.textContent = data.success ? 'Dates pulled from Hardcover' : (data.error || 'Pull failed');
+            setTimeout(() => { hcPullStatus.hidden = true; }, 4000);
+          }
+        })
+        .catch(err => {
+          hcPullBtn.disabled = false;
+          if (hcPullStatus) {
+            hcPullStatus.hidden = false;
+            hcPullStatus.className = 'r-hc-date-sync-status error';
+            hcPullStatus.textContent = (err && err.error) || 'Pull failed';
+            setTimeout(() => { hcPullStatus.hidden = true; }, 4000);
           }
         });
     });
@@ -697,6 +770,19 @@ function initReadingDetail() {
       const item = menu.closest('.r-tl-item');
 
       if (actionBtn.dataset.action === 'edit') {
+        if (eventType === 'started' || eventType === 'finished') {
+          // Focus the corresponding top date input for editing
+          const inputId = eventType === 'started' ? 'started-at' : 'finished-at';
+          const dateInput = document.getElementById(inputId);
+          if (dateInput) {
+            dateInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            setTimeout(() => { dateInput.focus(); dateInput.showPicker?.(); }, 350);
+          }
+          menu.classList.remove('open');
+          const triggerBtn = menu.querySelector('.r-tl-menu-trigger');
+          if (triggerBtn) triggerBtn.setAttribute('aria-expanded', 'false');
+          return;
+        }
         if (eventType !== 'note') return;
         const text = item?.querySelector('.r-tl-text')?.textContent || '';
         form.dataset.editJournalId = journalId;
@@ -711,32 +797,13 @@ function initReadingDetail() {
         return;
       }
 
-      if (actionBtn.dataset.action === 'push-hardcover') {
-        openHcPushModal(journalId, item);
-        menu.classList.remove('open');
-        return;
-      }
-
       if (actionBtn.dataset.action !== 'delete') return;
-      if (!confirm('Delete this journal entry?')) return;
-      function flashError() {
-        menu.style.outline = '2px solid var(--color-danger, red)';
-        setTimeout(() => { menu.style.outline = ''; }, 2000);
+      if (typeof showJournalDeleteConfirm === 'function') {
+        showJournalDeleteConfirm(journalId);
       }
-      fetch(`/api/reading/journal/${journalId}`, { method: 'DELETE' })
-        .then(r => {
-          if (!r.ok) throw new Error('Delete failed');
-          return r.json();
-        })
-        .then(data => {
-          if (!data.success) { flashError(); return; }
-          if (item) {
-            item.style.transition = 'opacity 0.3s';
-            item.style.opacity = '0';
-            setTimeout(() => item.remove(), 300);
-          }
-        })
-        .catch(() => flashError());
+      menu.classList.remove('open');
+      const triggerBtn2 = menu.querySelector('.r-tl-menu-trigger');
+      if (triggerBtn2) triggerBtn2.setAttribute('aria-expanded', 'false');
     });
 
     document.addEventListener('click', e => {
@@ -750,101 +817,6 @@ function initReadingDetail() {
     });
   }
 
-  // ── Hardcover Push Modal ──
-  const hcPushModal = document.getElementById('hc-push-modal');
-  const hcPushPreview = document.getElementById('hc-push-preview');
-  const hcPushPrivacy = document.getElementById('hc-push-privacy-select');
-  const hcPushConfirm = document.getElementById('hc-push-confirm');
-  let _hcPushJournalId = null;
-  let _hcPushItem = null;
-
-  function openHcPushModal(journalId, item) {
-    if (!hcPushModal) return;
-    _hcPushJournalId = journalId;
-    _hcPushItem = item;
-    const entry = item?.dataset.entry || item?.querySelector('.r-tl-text')?.textContent || '';
-    if (hcPushPreview) hcPushPreview.textContent = entry.length > 200 ? entry.slice(0, 200) + '...' : entry;
-    if (hcPushPrivacy) hcPushPrivacy.value = hcPushModal.dataset.privacyDefault || '3';
-    if (hcPushConfirm) {
-      hcPushConfirm.disabled = false;
-      hcPushConfirm.textContent = 'Push';
-    }
-    hcPushModal.style.display = 'flex';
-  }
-  window.openHcPushModal = openHcPushModal;
-
-  function closeHcPushModal() {
-    if (hcPushModal) hcPushModal.style.display = 'none';
-    _hcPushJournalId = null;
-    _hcPushItem = null;
-  }
-  window.closeHcPushModal = closeHcPushModal;
-
-  if (hcPushConfirm) {
-    hcPushConfirm.addEventListener('click', () => {
-      if (!_hcPushJournalId) return;
-      const privacy = parseInt(hcPushPrivacy?.value, 10) || 3;
-      hcPushConfirm.disabled = true;
-      hcPushConfirm.textContent = 'Pushing...';
-
-      fetch(`/api/reading/journal/${_hcPushJournalId}/push-hardcover`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ privacy }),
-      })
-        .then(r => {
-          if (!r.ok) return r.text().then(t => { throw new Error(t || 'Push failed'); });
-          return r.json();
-        })
-        .then(data => {
-          if (data.success) {
-            // Update the menu button in the timeline to show success
-            if (_hcPushItem) {
-              const pushBtn = _hcPushItem.querySelector('[data-action="push-hardcover"]');
-              if (pushBtn) {
-                pushBtn.textContent = 'Pushed \u2713';
-                pushBtn.classList.add('r-tl-menu-item--success');
-                pushBtn.disabled = true;
-              }
-            }
-            closeHcPushModal();
-          } else {
-            hcPushConfirm.textContent = data.error || 'Failed';
-            hcPushConfirm.disabled = false;
-            setTimeout(() => { hcPushConfirm.textContent = 'Push'; }, 2500);
-          }
-        })
-        .catch(() => {
-          hcPushConfirm.textContent = 'Failed';
-          hcPushConfirm.disabled = false;
-          setTimeout(() => { hcPushConfirm.textContent = 'Push'; }, 2500);
-        });
-    });
-  }
-
-  // ── Journal Sync Toggle ──
-  const syncToggle = document.getElementById('journal-sync-toggle');
-  if (syncToggle) {
-    syncToggle.addEventListener('change', () => {
-      const absId = syncToggle.dataset.absId;
-      const value = syncToggle.checked ? 'on' : 'off';
-      fetch(`/api/reading/book/${absId}/journal-sync`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ journal_sync: value }),
-      })
-        .then(r => {
-          if (!r.ok) throw new Error('Request failed');
-          return r.json();
-        })
-        .then(data => {
-          if (!data.success) syncToggle.checked = !syncToggle.checked;
-        })
-        .catch(() => {
-          syncToggle.checked = !syncToggle.checked;
-        });
-    });
-  }
 }
 
 
@@ -1486,6 +1458,95 @@ function initTbrTab(hcConfigured) {
       setTimeout(() => toast.remove(), 300);
     }, 3000);
   }
+
+  // ── TBR Filter Chips (Want to Read / In Library) ──
+  const tbrFilterChips = document.querySelectorAll('[data-tbr-filter]');
+  let activeTbrFilter = 'all';
+
+  function applyTbrFilter() {
+    const tbrGrid = document.getElementById('tbr-grid');
+    const librarySection = document.getElementById('library-backlog-section');
+    if (activeTbrFilter === 'all') {
+      if (tbrGrid) tbrGrid.style.display = '';
+      if (librarySection) librarySection.style.display = '';
+    } else if (activeTbrFilter === 'want') {
+      if (tbrGrid) tbrGrid.style.display = '';
+      if (librarySection) librarySection.style.display = 'none';
+    } else if (activeTbrFilter === 'library') {
+      if (tbrGrid) tbrGrid.style.display = 'none';
+      if (librarySection) librarySection.style.display = '';
+    }
+  }
+
+  tbrFilterChips.forEach(chip => {
+    chip.addEventListener('click', () => {
+      tbrFilterChips.forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      activeTbrFilter = chip.dataset.tbrFilter;
+      applyTbrFilter();
+    });
+  });
+
+  // ── Library backlog card actions ──
+  document.querySelectorAll('.r-library-start-btn').forEach(btn => {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      const absId = this.dataset.absId;
+      this.disabled = true;
+      this.textContent = 'Starting...';
+      fetch('/api/reading/book/' + encodeURIComponent(absId) + '/status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'active' }),
+      })
+        .then(r => r.json())
+        .then(data => {
+          if (data.success) {
+            window.location.href = '/reading/book/' + encodeURIComponent(absId);
+          } else {
+            showToast(data.error || 'Failed to start reading');
+            this.disabled = false;
+            this.textContent = 'Start Reading';
+          }
+        })
+        .catch(() => {
+          showToast('Failed to start reading');
+          this.disabled = false;
+          this.textContent = 'Start Reading';
+        });
+    });
+  });
+
+  document.querySelectorAll('.r-library-tbr-btn').forEach(btn => {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      const absId = this.dataset.absId;
+      this.disabled = true;
+      this.textContent = 'Adding...';
+      fetch('/api/reading/tbr/from-library', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ abs_id: absId }),
+      })
+        .then(r => r.json())
+        .then(data => {
+          if (data.success) {
+            this.textContent = 'Added';
+            showToast(data.created ? 'Added to Want to Read' : 'Already on list');
+            loadTbrItems();
+          } else {
+            showToast(data.error || 'Failed to add');
+            this.disabled = false;
+            this.textContent = '+ Want to Read';
+          }
+        })
+        .catch(() => {
+          showToast('Failed to add');
+          this.disabled = false;
+          this.textContent = '+ Want to Read';
+        });
+    });
+  });
 
   // ── Load on tab activation ──
   let _loaded = false;

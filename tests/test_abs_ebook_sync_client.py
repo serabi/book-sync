@@ -1,3 +1,7 @@
+import pytest
+
+pytestmark = pytest.mark.docker
+
 import unittest
 from unittest.mock import MagicMock
 

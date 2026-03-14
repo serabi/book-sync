@@ -1,4 +1,8 @@
 
+import pytest
+
+pytestmark = pytest.mark.docker
+
 import os
 import sys
 import unittest

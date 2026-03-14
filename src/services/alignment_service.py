@@ -141,33 +141,21 @@ class AlignmentService:
         self._save_alignment(abs_id, alignment_map)
         return True
 
-    def get_time_for_text(self, abs_id: str, query_text: str, char_offset_hint: int = None) -> float | None:
-        """
-        Precise time lookup.
-        If char_offset_hint is provided (from ebook reader), use it directly with the map.
-        Otherwise, fuzzy search the text to find offset, then use map.
-        """
-        # 1. Fetch Alignment Map
+    def get_time_for_text(self, abs_id: str, char_offset_hint: int = None) -> float | None:
+        """Look up a timestamp from the alignment map using a character offset."""
         alignment = self._get_alignment(abs_id)
         if not alignment:
             return None
 
         map_points = alignment
-
-        # 2. Resolve offset
         target_offset = char_offset_hint
 
         if target_offset is None:
-            # Note: For now, KOSync always provides an offset or we calculate it.
             return None
 
-        # 3. Interpolate Timestamp
-        # Binary search
+        # Binary search for the interval [p1, p2] where p1.char <= target <= p2.char
         left = 0
         right = len(map_points) - 1
-
-        # Points are [{'char': x, 'ts': y}, ...]
-        # Find interval [p1, p2] where p1.char <= target <= p2.char
 
         if target_offset < map_points[0]['char']:
             return map_points[0]['ts']
@@ -390,6 +378,10 @@ class AlignmentService:
 
     def _save_alignment(self, abs_id: str, alignment_map: list[dict]):
         """Upsert alignment to SQLite."""
+        if not alignment_map:
+            logger.warning(f"Refusing to save empty alignment map for {abs_id}")
+            return
+
         with self.database_service.get_session() as session:
             json_blob = json.dumps(alignment_map)
 
@@ -408,24 +400,32 @@ class AlignmentService:
     def _get_alignment(self, abs_id: str) -> list[dict] | None:
         with self.database_service.get_session() as session:
             entry = session.query(BookAlignment).filter_by(abs_id=abs_id).first()
-            if entry:
-                try:
-                    raw = json.loads(entry.alignment_map_json)
-                except (json.JSONDecodeError, TypeError) as e:
-                    logger.warning(f"Corrupt alignment data for {abs_id}: {e}")
-                    return None
-                # Validate structure: each point must have int 'char' and float 'ts'
-                validated = []
-                for point in raw:
-                    if isinstance(point, dict) and 'char' in point and 'ts' in point:
-                        try:
-                            validated.append({'char': int(point['char']), 'ts': float(point['ts'])})
-                        except (ValueError, TypeError):
-                            logger.warning(f"Skipping invalid alignment point for {abs_id}: {point}")
-                    else:
-                        logger.warning(f"Skipping malformed alignment point for {abs_id}: {point}")
-                return validated if validated else None
-            return None
+            if not entry:
+                logger.debug(f"No alignment row for {abs_id}")
+                return None
+
+            try:
+                raw = json.loads(entry.alignment_map_json)
+            except (json.JSONDecodeError, TypeError) as e:
+                logger.warning(f"Corrupt alignment JSON for {abs_id}: {e}")
+                return None
+
+            # Validate structure: each point must have int 'char' and float 'ts'
+            validated = []
+            for point in raw:
+                if isinstance(point, dict) and 'char' in point and 'ts' in point:
+                    try:
+                        validated.append({'char': int(point['char']), 'ts': float(point['ts'])})
+                    except (ValueError, TypeError):
+                        logger.warning(f"Skipping invalid alignment point for {abs_id}: {point}")
+                else:
+                    logger.warning(f"Skipping malformed alignment point for {abs_id}: {point}")
+
+            if not validated:
+                logger.warning(f"Alignment for {abs_id} has no valid points after validation")
+                return None
+            return validated
+
     def get_book_duration(self, abs_id: str) -> float | None:
         """Get the total duration of the book from its alignment map."""
         alignment = self._get_alignment(abs_id)

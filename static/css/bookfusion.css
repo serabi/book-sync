@@ -156,6 +156,7 @@
 .bf-upload-btn:disabled:focus-visible { outline: none; }
 .bf-upload-btn.done { background: var(--color-success); }
 .bf-upload-btn.error { background: var(--color-error); }
+.bf-upload-btn.bf-start-btn { background: var(--color-success); }
 
 /* Highlights */
 .bf-sync-bar {
@@ -354,6 +355,19 @@
     color: var(--color-text-muted);
     font-size: 0.85rem;
     font-weight: 400;
+}
+.bf-new-badge {
+    display: inline-block;
+    padding: 1px 7px;
+    border-radius: 3px;
+    background: var(--color-primary-light);
+    color: var(--color-primary-hover);
+    font-size: 0.7rem;
+    font-weight: 600;
+    font-style: normal;
+    margin-right: 6px;
+    vertical-align: middle;
+    letter-spacing: 0.02em;
 }
 .bf-match-badge {
     display: inline-block;
