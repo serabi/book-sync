@@ -36,6 +36,7 @@ class MockContainer:
         self.mock_bookfusion_client.highlights_api_key = ''
         self.mock_bookfusion_client.upload_api_key = ''
         self.mock_hardcover_service = Mock()
+        self.mock_hardcover_service.is_configured.return_value = False
         self.mock_hardcover_sync_client = Mock()
         self.mock_reading_date_service = Mock()
         self.mock_reading_date_service.pull_reading_dates.return_value = {}

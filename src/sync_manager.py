@@ -196,7 +196,10 @@ class SyncManager:
         # Backfill Hardcover state records for linked books missing them
         hc_client = self.sync_clients.get('Hardcover')
         if hc_client and getattr(hc_client, 'hardcover_service', None):
-            hc_client.hardcover_service.backfill_hardcover_states()
+            try:
+                hc_client.hardcover_service.backfill_hardcover_states()
+            except Exception as e:
+                logger.warning(f"Hardcover state backfill failed (non-fatal): {e}")
 
         # Cleanup orphaned cache files
         # DISABLED: Current logic is too aggressive (deletes original_ebook_filename for linked books).

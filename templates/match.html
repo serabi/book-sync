@@ -125,7 +125,7 @@
 
                 {# ── Storyteller disclosure ── #}
                 {% if not link_to and not attach_to %}
-                    {% if storyteller_books %}
+                    {% if storyteller_books or storyteller_submit_available %}
                     <div class="match-storyteller-disclosure" id="storytellerSection">
                         <button type="button" class="match-storyteller-toggle" id="storytellerToggle">
                             <span class="match-storyteller-toggle-text">Storyteller</span>
@@ -321,12 +321,14 @@
             clearSelections('ebook_filename');
             clearSelections('storyteller_uuid');
 
-            // Restore storyteller default (skip selected)
+            // Restore storyteller default (skip selected) and clear stale title
             const skipRadio = document.querySelector('.st-option.ghost-card input[type="radio"]');
             if (skipRadio) {
                 skipRadio.checked = true;
                 skipRadio.closest('.st-option').classList.add('selected');
             }
+            const stTitleInput = document.getElementById('input_storyteller_title');
+            if (stTitleInput) stTitleInput.value = '';
 
             // Adapt Storyteller hint and transcription visibility per mode
             const stHint = document.querySelector('.match-storyteller-toggle-hint');
