@@ -9,7 +9,7 @@ import logging
 import re
 from datetime import datetime
 
-from src.db.models import BookAlignment
+from src.db.models import Book, BookAlignment, Job
 from src.utils.logging_utils import time_execution
 from src.utils.polisher import Polisher
 
@@ -443,6 +443,17 @@ class AlignmentService:
         with self.database_service.get_session() as session:
             session.query(BookAlignment).filter_by(abs_id=abs_id).delete()
             logger.info(f"Deleted alignment data for {abs_id}")
+
+    def realign_book(self, abs_id: str):
+        """Atomically delete alignment + jobs and requeue book for re-processing."""
+        with self.database_service.get_session() as session:
+            session.query(BookAlignment).filter_by(abs_id=abs_id).delete()
+            session.query(Job).filter(Job.abs_id == abs_id).delete()
+            book = session.query(Book).filter_by(abs_id=abs_id).first()
+            if book:
+                book.transcript_file = None
+                book.status = 'pending'
+            logger.info(f"Re-alignment queued for {abs_id}")
 
     def _save_alignment(self, abs_id: str, alignment_map: list[dict], source: str = None):
         """Upsert alignment to SQLite."""
