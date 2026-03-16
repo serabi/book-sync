@@ -417,26 +417,30 @@ class AlignmentService:
             except (json.JSONDecodeError, TypeError):
                 return None
 
-            if not data:
+            if not isinstance(data, list) or not data:
                 return None
 
-            # Detect sentinel: last point may be an end-of-book marker
-            real_end = data[-1]
-            if len(data) >= 2:
-                penultimate = data[-2]
-                char_gap = real_end['char'] - penultimate['char']
-                ts_gap = real_end['ts'] - penultimate['ts']
-                if ts_gap > 0 and char_gap / max(ts_gap, 1) > 1000:
-                    real_end = penultimate
+            try:
+                # Detect sentinel: last point may be an end-of-book marker
+                real_end = data[-1]
+                if len(data) >= 2:
+                    penultimate = data[-2]
+                    char_gap = real_end['char'] - penultimate['char']
+                    ts_gap = real_end['ts'] - penultimate['ts']
+                    if ts_gap > 0 and char_gap / max(ts_gap, 1) > 1000:
+                        real_end = penultimate
 
-            return {
-                'num_points': len(data),
-                'max_timestamp': real_end['ts'],
-                'max_char': real_end['char'],
-                'total_chars': data[-1]['char'],
-                'last_updated': row.last_updated,
-                'source': row.source,
-            }
+                return {
+                    'num_points': len(data),
+                    'max_timestamp': real_end['ts'],
+                    'max_char': real_end['char'],
+                    'total_chars': data[-1]['char'],
+                    'last_updated': row.last_updated,
+                    'source': row.source,
+                }
+            except (KeyError, TypeError, IndexError):
+                logger.warning(f"Malformed alignment data for {abs_id}")
+                return None
 
     def delete_alignment(self, abs_id: str):
         """Delete alignment data for a book."""

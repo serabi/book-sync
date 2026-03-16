@@ -435,7 +435,7 @@
         </div>
 
         {# ── Journal Tab ── #}
-        <div class="r-tab-panel" data-tab="journal" style="display: none;">
+        <div class="r-tab-panel" data-tab="journal" style="{% if active_tab != 'journal' %}display: none;{% endif %}">
             <div class="r-journal-shell">
                 <div class="r-journal-panel">
                     <div class="r-journal-panel-head">
@@ -530,7 +530,7 @@
 
         {# ── Highlights Tab ── #}
         {% if bf_highlights %}
-        <div class="r-tab-panel" data-tab="highlights" style="display: none;">
+        <div class="r-tab-panel" data-tab="highlights" style="{% if active_tab != 'highlights' %}display: none;{% endif %}">
             <div class="r-highlights-header">
                 <div>
                     <h3 class="r-section-title">BookFusion Highlights</h3>
@@ -597,7 +597,7 @@
                         <div class="r-align-label">Last Updated</div>
                         <div class="r-align-value">
                             {% if alignment_info.last_updated %}
-                            {{ alignment_info.last_updated.strftime('%b %d, %Y') }}
+                            {{ alignment_info.last_updated.strftime('%b %d, %Y %I:%M %p') }}
                             {% else %}
                             --
                             {% endif %}
@@ -984,8 +984,12 @@
                 form.submit();
             } else if (action === 'realign') {
                 fetch('/api/realign/' + encodeURIComponent(_rdAbsId), { method: 'POST', headers: {'Content-Type': 'application/json'} })
-                .then(function(r) { return r.json(); })
-                .then(function(d) { if (d.success) location.reload(); else alert(d.error || 'Error'); });
+                .then(function(r) {
+                    if (!r.ok) throw new Error('Request failed');
+                    return r.json();
+                })
+                .then(function(d) { if (d.success) location.reload(); else alert(d.error || 'Error'); })
+                .catch(function() { alert('Failed to start re-alignment'); });
             } else if (action === 'delete-journal') {
                 var jid = _rdPendingJournalId;
                 _rdPendingJournalId = null;

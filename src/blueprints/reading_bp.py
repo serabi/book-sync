@@ -365,8 +365,8 @@ def reading_detail(abs_id):
                 # Infer source for legacy data
                 if not alignment_info['source'] and book.storyteller_uuid:
                     alignment_info['source'] = 'storyteller'
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"Failed to load alignment info for {abs_id}: {e}")
 
     return render_template(
         'reading_detail.html',

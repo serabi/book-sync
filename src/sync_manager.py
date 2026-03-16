@@ -298,8 +298,8 @@ class SyncManager:
         if book.ebook_filename and hasattr(self, 'books_dir'):
             try:
                 self._get_local_epub(book.ebook_filename)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"'{book.abs_id}' EPUB prefetch failed: {sanitize_exception(e)}")
 
         if not has_abs:
             # Ebook-only path: normalize via character offsets in the shared EPUB
@@ -798,8 +798,8 @@ class SyncManager:
         if book.ebook_filename and hasattr(self, 'books_dir'):
             try:
                 self._get_local_epub(book.ebook_filename)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"'{book.abs_id}' EPUB prefetch failed: {sanitize_exception(e)}")
 
         leader_client = self.sync_clients[leader]
         leader_state = config[leader]
