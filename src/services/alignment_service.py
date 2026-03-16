@@ -24,7 +24,7 @@ class AlignmentService:
         return bool(abs_id and self._get_alignment(abs_id))
 
     @time_execution
-    def align_and_store(self, abs_id: str, raw_segments: list[dict], ebook_text: str, spine_chapters: list[dict] = None):
+    def align_and_store(self, abs_id: str, raw_segments: list[dict], ebook_text: str, spine_chapters: list[dict] = None, source: str = None):
         """
         Main entry point for "Unified Alignment".
 
@@ -65,7 +65,7 @@ class AlignmentService:
             return False
 
         # 4. Store to Database
-        self._save_alignment(abs_id, alignment_map)
+        self._save_alignment(abs_id, alignment_map, source=source)
         return True
 
     @time_execution
@@ -138,7 +138,7 @@ class AlignmentService:
             ]
             logger.warning(f"   N-gram anchoring failed, using linear fallback for {abs_id}")
 
-        self._save_alignment(abs_id, alignment_map)
+        self._save_alignment(abs_id, alignment_map, source='storyteller')
         return True
 
     def get_time_for_text(self, abs_id: str, char_offset_hint: int = None) -> float | None:
@@ -159,8 +159,21 @@ class AlignmentService:
 
         if target_offset < map_points[0]['char']:
             return map_points[0]['ts']
-        if target_offset > map_points[-1]['char']:
-            return map_points[-1]['ts']
+
+        # Detect partial alignment: use second-to-last point as the real
+        # data boundary (last point may be a sentinel mapping to epub end)
+        real_end = map_points[-1]
+        if len(map_points) >= 2:
+            penultimate = map_points[-2]
+            char_gap = real_end['char'] - penultimate['char']
+            ts_gap = real_end['ts'] - penultimate['ts']
+            if ts_gap > 0 and char_gap / max(ts_gap, 1) > 1000:
+                real_end = penultimate
+
+        if target_offset > real_end['char']:
+            logger.warning(f"'{abs_id}' Char offset {target_offset} exceeds alignment range "
+                           f"(max {real_end['char']}) — alignment may be partial")
+            return None
 
         # Manual binary search to find floor
         floor_idx = 0
@@ -194,6 +207,7 @@ class AlignmentService:
     def get_char_for_time(self, abs_id: str, timestamp: float) -> int | None:
         """
         Reverse lookup: Find character offset for a given timestamp.
+        Returns None if the timestamp is beyond the alignment data range.
         """
         # 1. Fetch Alignment Map
         alignment = self._get_alignment(abs_id)
@@ -209,8 +223,23 @@ class AlignmentService:
 
         if target_ts <= map_points[0]['ts']:
             return int(map_points[0]['char'])
-        if target_ts >= map_points[-1]['ts']:
-            return int(map_points[-1]['char'])
+
+        # Detect partial alignment: use second-to-last point as the real
+        # data boundary (last point may be a sentinel mapping to epub end)
+        real_end = map_points[-1]
+        if len(map_points) >= 2:
+            penultimate = map_points[-2]
+            char_gap = real_end['char'] - penultimate['char']
+            ts_gap = real_end['ts'] - penultimate['ts']
+            # If the last point has a disproportionate char jump, it's a sentinel
+            if ts_gap > 0 and char_gap / max(ts_gap, 1) > 1000:
+                real_end = penultimate
+
+        if target_ts > real_end['ts']:
+            # Timestamp is beyond the alignment data — can't determine position
+            logger.warning(f"'{abs_id}' Timestamp {target_ts:.1f}s exceeds alignment range "
+                           f"(max {real_end['ts']:.1f}s) — alignment may be partial")
+            return None
 
         floor_idx = 0
         while left <= right:
@@ -376,7 +405,46 @@ class AlignmentService:
         logger.info(f"   Anchored Alignment: Found {len(valid_anchors)} anchors (Total).")
         return final_map
 
-    def _save_alignment(self, abs_id: str, alignment_map: list[dict]):
+    def get_alignment_info(self, abs_id: str) -> dict | None:
+        """Return summary info about a book's alignment data without loading the full map."""
+        with self.database_service.get_session() as session:
+            row = session.query(BookAlignment).filter_by(abs_id=abs_id).first()
+            if not row:
+                return None
+
+            try:
+                data = json.loads(row.alignment_map_json)
+            except (json.JSONDecodeError, TypeError):
+                return None
+
+            if not data:
+                return None
+
+            # Detect sentinel: last point may be an end-of-book marker
+            real_end = data[-1]
+            if len(data) >= 2:
+                penultimate = data[-2]
+                char_gap = real_end['char'] - penultimate['char']
+                ts_gap = real_end['ts'] - penultimate['ts']
+                if ts_gap > 0 and char_gap / max(ts_gap, 1) > 1000:
+                    real_end = penultimate
+
+            return {
+                'num_points': len(data),
+                'max_timestamp': real_end['ts'],
+                'max_char': real_end['char'],
+                'total_chars': data[-1]['char'],
+                'last_updated': row.last_updated,
+                'source': row.source,
+            }
+
+    def delete_alignment(self, abs_id: str):
+        """Delete alignment data for a book."""
+        with self.database_service.get_session() as session:
+            session.query(BookAlignment).filter_by(abs_id=abs_id).delete()
+            logger.info(f"Deleted alignment data for {abs_id}")
+
+    def _save_alignment(self, abs_id: str, alignment_map: list[dict], source: str = None):
         """Upsert alignment to SQLite."""
         if not alignment_map:
             logger.warning(f"Refusing to save empty alignment map for {abs_id}")
@@ -390,8 +458,10 @@ class AlignmentService:
             if existing:
                 existing.alignment_map_json = json_blob
                 existing.last_updated = datetime.utcnow()
+                if source:
+                    existing.source = source
             else:
-                new_align = BookAlignment(abs_id=abs_id, alignment_map_json=json_blob)
+                new_align = BookAlignment(abs_id=abs_id, alignment_map_json=json_blob, source=source)
                 session.add(new_align)
 
             # Context manager handles commit
