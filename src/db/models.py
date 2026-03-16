@@ -422,14 +422,16 @@ class BookAlignment(Base):
 
     abs_id = Column(String(255), ForeignKey('books.abs_id', ondelete='CASCADE'), primary_key=True)
     alignment_map_json = Column(Text, nullable=False)  # JSON-encoded list of dicts or optimized structure
+    source = Column(String(20), nullable=True)  # storyteller, smil, whisper
     last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationship
     book = relationship("Book", back_populates="alignment")
 
-    def __init__(self, abs_id: str, alignment_map_json: str):
+    def __init__(self, abs_id: str, alignment_map_json: str, source: str = None):
         self.abs_id = abs_id
         self.alignment_map_json = alignment_map_json
+        self.source = source
 
 
 class BookfusionHighlight(Base):

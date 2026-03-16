@@ -317,7 +317,7 @@ class BackgroundJobService:
                 logger.info(f"Aligning transcript ({transcript_source}) using Anchored Alignment...")
                 update_progress(0.1, 3)
 
-                success = self.alignment_service.align_and_store(abs_id, raw_transcript, book_text, chapters)
+                success = self.alignment_service.align_and_store(abs_id, raw_transcript, book_text, chapters, source=transcript_source.lower())
 
                 update_progress(0.5, 3)
 
