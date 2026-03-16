@@ -162,15 +162,21 @@
 
         {# ── Tab Bar ── #}
         <div class="r-tab-bar r-detail-tab-bar">
-            <button class="r-tab-btn active" data-tab="overview" type="button" onclick="switchTab('overview')">Overview</button>
-            <button class="r-tab-btn" data-tab="journal" type="button" onclick="switchTab('journal')">Journal</button>
+            <button class="r-tab-btn{% if active_tab == 'overview' %} active{% endif %}" data-tab="overview" type="button" onclick="switchTab('overview')">Overview</button>
+            <button class="r-tab-btn{% if active_tab == 'journal' %} active{% endif %}" data-tab="journal" type="button" onclick="switchTab('journal')">Journal</button>
             {% if bf_highlights %}
             <button class="r-tab-btn" data-tab="highlights" type="button" onclick="switchTab('highlights')">Highlights <span class="r-tab-badge">{{ bf_highlights|length }}</span></button>
+            {% endif %}
+            {% if show_alignment_tab %}
+            <button class="r-tab-btn{% if active_tab == 'alignment' %} active{% endif %}" data-tab="alignment" type="button" onclick="switchTab('alignment')">Alignment
+                {% if alignment_info and alignment_info.status == 'partial' %}<span class="r-tab-badge r-tab-badge--warn">!</span>{% endif %}
+                {% if not alignment_info %}<span class="r-tab-badge r-tab-badge--warn">--</span>{% endif %}
+            </button>
             {% endif %}
         </div>
 
         {# ── Overview Tab ── #}
-        <div class="r-tab-panel" data-tab="overview">
+        <div class="r-tab-panel" data-tab="overview" style="{% if active_tab != 'overview' %}display: none;{% endif %}">
             {# Services — dashboard order: ABS, KoSync, Storyteller, Booklore, Hardcover, BookFusion #}
             {% set any_service = integrations.abs or integrations.kosync or integrations.storyteller or integrations.booklore or integrations.hardcover or integrations.bookfusion or services_enabled.storyteller or services_enabled.booklore or services_enabled.hardcover or services_enabled.bookfusion or (services_enabled.abs and not integrations.abs and book.book_type == 'ebook-only') %}
             {% if any_service %}
@@ -429,7 +435,7 @@
         </div>
 
         {# ── Journal Tab ── #}
-        <div class="r-tab-panel" data-tab="journal" style="display: none;">
+        <div class="r-tab-panel" data-tab="journal" style="{% if active_tab != 'journal' %}display: none;{% endif %}">
             <div class="r-journal-shell">
                 <div class="r-journal-panel">
                     <div class="r-journal-panel-head">
@@ -524,7 +530,7 @@
 
         {# ── Highlights Tab ── #}
         {% if bf_highlights %}
-        <div class="r-tab-panel" data-tab="highlights" style="display: none;">
+        <div class="r-tab-panel" data-tab="highlights" style="{% if active_tab != 'highlights' %}display: none;{% endif %}">
             <div class="r-highlights-header">
                 <div>
                     <h3 class="r-section-title">BookFusion Highlights</h3>
@@ -550,6 +556,93 @@
                     </div>
                 </div>
                 {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        {# ── Alignment Tab ── #}
+        {% if show_alignment_tab %}
+        <div class="r-tab-panel" data-tab="alignment" style="{% if active_tab != 'alignment' %}display: none;{% endif %}">
+            <div class="r-detail-section">
+                <h3 class="r-section-title">Audio-Text Alignment</h3>
+
+                {% if alignment_info %}
+                <div class="r-align-grid">
+                    {# Status #}
+                    <div class="r-align-card">
+                        <div class="r-align-label">Status</div>
+                        <div class="r-align-value">
+                            {% if alignment_info.status == 'active' %}
+                            <span class="r-align-status r-align-status--active">Active</span>
+                            {% elif alignment_info.status == 'partial' %}
+                            <span class="r-align-status r-align-status--partial">Partial</span>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    {# Source #}
+                    <div class="r-align-card">
+                        <div class="r-align-label">Source</div>
+                        <div class="r-align-value">{{ (alignment_info.source or 'unknown')|capitalize }}</div>
+                    </div>
+
+                    {# Points #}
+                    <div class="r-align-card">
+                        <div class="r-align-label">Alignment Points</div>
+                        <div class="r-align-value">{{ '{:,}'.format(alignment_info.num_points) }}</div>
+                    </div>
+
+                    {# Last Updated #}
+                    <div class="r-align-card">
+                        <div class="r-align-label">Last Updated</div>
+                        <div class="r-align-value">
+                            {% if alignment_info.last_updated %}
+                            {{ alignment_info.last_updated.strftime('%b %d, %Y %I:%M %p') }}
+                            {% else %}
+                            --
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                {# Coverage Bar #}
+                {% if alignment_info.coverage is not none %}
+                <div class="r-align-coverage-section">
+                    <div class="r-align-label">Audio Coverage</div>
+                    <div class="r-align-coverage-bar-bg">
+                        <div class="r-align-coverage-bar-fill{% if alignment_info.status == 'partial' %} r-align-coverage-bar-fill--partial{% endif %}" style="width: {{ (alignment_info.coverage * 100)|round(1) }}%"></div>
+                    </div>
+                    <div class="r-align-coverage-text">
+                        {{ '%.1f'|format(alignment_info.coverage_hours) }}h of {{ '%.1f'|format(alignment_info.total_hours) }}h aligned ({{ (alignment_info.coverage * 100)|round(1) }}%)
+                    </div>
+                </div>
+                {% endif %}
+
+                {% else %}
+                {# No alignment data #}
+                <div class="r-align-empty">
+                    <p>No alignment data found for this book.</p>
+                    {% if book.status in ('pending', 'processing') %}
+                    <p class="r-align-subtext">Alignment is currently being processed.</p>
+                    {% else %}
+                    <p class="r-align-subtext">Re-align to generate audio-text mapping for cross-format sync.</p>
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                {# Re-align button #}
+                {% if book.status not in ('pending', 'processing') %}
+                <div class="r-align-actions">
+                    <button class="btn btn-warning btn-sm" type="button"
+                            onclick="showRdConfirm('Re-align', 'This will delete existing alignment data and re-process the book. This may take several minutes depending on your transcription method.', 'realign')">
+                        Re-align Book
+                    </button>
+                </div>
+                {% else %}
+                <div class="r-align-actions">
+                    <span class="r-align-processing">Processing...</span>
+                </div>
+                {% endif %}
             </div>
         </div>
         {% endif %}
@@ -889,6 +982,14 @@
                 form.action = '/delete/' + encodeURIComponent(_rdAbsId);
                 document.body.appendChild(form);
                 form.submit();
+            } else if (action === 'realign') {
+                fetch('/api/realign/' + encodeURIComponent(_rdAbsId), { method: 'POST', headers: {'Content-Type': 'application/json'} })
+                .then(function(r) {
+                    if (!r.ok) throw new Error('Request failed');
+                    return r.json();
+                })
+                .then(function(d) { if (d.success) location.reload(); else alert(d.error || 'Error'); })
+                .catch(function() { alert('Failed to start re-alignment'); });
             } else if (action === 'delete-journal') {
                 var jid = _rdPendingJournalId;
                 _rdPendingJournalId = null;

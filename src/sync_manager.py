@@ -294,6 +294,13 @@ class SyncManager:
             # ABS-only, nothing to compare across formats
             return None
 
+        # Ensure epub is available locally (download from Booklore if needed)
+        if book.ebook_filename and hasattr(self, 'books_dir'):
+            try:
+                self._get_local_epub(book.ebook_filename)
+            except Exception as e:
+                logger.debug(f"'{book.abs_id}' EPUB prefetch failed: {sanitize_exception(e)}")
+
         if not has_abs:
             # Ebook-only path: normalize via character offsets in the shared EPUB
             if not book.ebook_filename or len(ebook_clients) < 2:
@@ -786,6 +793,13 @@ class SyncManager:
         leader, leader_pct = self._determine_leader(config, book, abs_id, title_snip)
         if not leader:
             return
+
+        # Ensure epub is available locally (download from Booklore if needed)
+        if book.ebook_filename and hasattr(self, 'books_dir'):
+            try:
+                self._get_local_epub(book.ebook_filename)
+            except Exception as e:
+                logger.debug(f"'{book.abs_id}' EPUB prefetch failed: {sanitize_exception(e)}")
 
         leader_client = self.sync_clients[leader]
         leader_state = config[leader]

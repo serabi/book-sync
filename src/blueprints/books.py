@@ -81,6 +81,25 @@ def retry_transcription(abs_id):
     return jsonify({"success": True})
 
 
+@books_bp.route('/api/realign/<abs_id>', methods=['POST'])
+def realign_book(abs_id):
+    """Delete existing alignment and requeue book for re-processing."""
+    database_service = get_database_service()
+    book = database_service.get_book(abs_id)
+    if not book:
+        return jsonify({"success": False, "error": "Book not found"}), 404
+
+    if book.sync_mode == 'ebook_only':
+        return jsonify({"success": False, "error": "Ebook-only books do not use alignment"}), 400
+
+    container = get_container()
+    alignment_service = container.alignment_service()
+
+    logger.info(f"Re-aligning '{sanitize_log_data(book.abs_title or abs_id)}'")
+    alignment_service.realign_book(abs_id)
+    return jsonify({"success": True})
+
+
 @books_bp.route('/api/sync-now/<abs_id>', methods=['POST'])
 def sync_now(abs_id):
     manager = get_manager()

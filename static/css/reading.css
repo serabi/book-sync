@@ -3804,3 +3804,111 @@ a.r-service-row-name:hover { text-decoration: underline; }
   background: rgba(255, 255, 255, 0.08);
   border-color: rgba(255, 255, 255, 0.08);
 }
+
+/* ── Alignment Tab ── */
+
+.r-align-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.r-align-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
+.r-align-label {
+  font-size: 11px;
+  color: var(--color-text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+.r-align-value {
+  font-size: 15px;
+  color: var(--color-text);
+}
+
+.r-align-status {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.r-align-status--active {
+  color: var(--color-success);
+  background: var(--color-success-light, rgba(46, 204, 113, 0.12));
+}
+
+.r-align-status--partial {
+  color: var(--color-warning);
+  background: rgba(241, 196, 15, 0.12);
+}
+
+.r-align-coverage-section {
+  margin-bottom: 20px;
+}
+
+.r-align-coverage-bar-bg {
+  height: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+  margin: 6px 0;
+  overflow: hidden;
+}
+
+.r-align-coverage-bar-fill {
+  height: 100%;
+  background: var(--color-success);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.r-align-coverage-bar-fill--partial {
+  background: var(--color-warning);
+}
+
+.r-align-coverage-text {
+  font-size: 13px;
+  color: var(--color-text-faint);
+}
+
+.r-align-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--color-text-faint);
+}
+
+.r-align-empty p {
+  margin: 0;
+}
+
+.r-align-subtext {
+  font-size: 13px;
+  margin-top: 6px !important;
+  opacity: 0.7;
+}
+
+.r-align-actions {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border);
+}
+
+.r-align-processing {
+  font-size: 13px;
+  color: var(--color-text-faint);
+  font-style: italic;
+}
+
+.r-tab-badge--warn {
+  color: var(--color-warning);
+  background: rgba(241, 196, 15, 0.15);
+}

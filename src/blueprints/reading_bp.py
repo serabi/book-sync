@@ -290,10 +290,7 @@ def reading_index():
 @reading_bp.route('/reading/book/<abs_id>')
 def reading_detail(abs_id):
     """Render the book detail view with journal."""
-    valid_tabs = ('overview', 'journal', 'highlights')
     active_tab = request.args.get('tab', 'overview')
-    if active_tab not in valid_tabs:
-        active_tab = 'overview'
 
     database_service = get_database_service()
     abs_service = get_abs_service()
@@ -342,6 +339,41 @@ def reading_detail(abs_id):
     # Check if this book already has a linked TBR item
     has_linked_tbr = database_service.find_tbr_by_abs_id(abs_id) is not None
 
+    # Alignment tab data
+    alignment_info = None
+    show_alignment_tab = book.sync_mode != 'ebook_only'
+
+    # Validate active_tab against actually available tabs
+    valid_tabs = {'overview', 'journal'}
+    if bf_highlights:
+        valid_tabs.add('highlights')
+    if show_alignment_tab:
+        valid_tabs.add('alignment')
+    if active_tab not in valid_tabs:
+        active_tab = 'overview'
+    if show_alignment_tab:
+        try:
+            alignment_service = container.alignment_service()
+            alignment_info = alignment_service.get_alignment_info(abs_id)
+            if alignment_info:
+                book_duration = book.duration
+                max_ts = alignment_info['max_timestamp']
+                if book_duration and book_duration > 0:
+                    coverage = min(max_ts / book_duration, 1.0)
+                    alignment_info['coverage'] = coverage
+                    alignment_info['coverage_hours'] = max_ts / 3600
+                    alignment_info['total_hours'] = book_duration / 3600
+                    alignment_info['status'] = 'active' if coverage >= 0.9 else 'partial'
+                else:
+                    alignment_info['coverage'] = None
+                    alignment_info['status'] = 'active'
+
+                # Infer source for legacy data
+                if not alignment_info['source'] and book.storyteller_uuid:
+                    alignment_info['source'] = 'storyteller'
+        except Exception as e:
+            logger.debug(f"Failed to load alignment info for {abs_id}: {e}")
+
     return render_template(
         'reading_detail.html',
         book=book_data,
@@ -358,6 +390,8 @@ def reading_detail(abs_id):
         ),
         hardcover_linked=bool(hardcover and hardcover.hardcover_book_id),
         active_tab=active_tab,
+        show_alignment_tab=show_alignment_tab,
+        alignment_info=alignment_info,
     )
 
 
