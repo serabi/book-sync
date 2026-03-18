@@ -44,7 +44,7 @@ def build_book_metadata(book, container, database_service, abs_service, booklore
         metadata['duration'] = f"{hrs}h {mins}m" if hrs else f"{mins}m"
 
     # Hardcover details (ISBN, ASIN, pages, slug)
-    hardcover = database_service.get_hardcover_details(abs_id)
+    hardcover = database_service.get_hardcover_details(book.id)
     if hardcover:
         metadata['isbn'] = hardcover.isbn
         metadata['asin'] = hardcover.asin
@@ -84,7 +84,7 @@ def build_book_metadata(book, container, database_service, abs_service, booklore
 
     # Booklore metadata (description, publisher, language)
     if book.ebook_filename:
-        bl_client = booklore_client or container.booklore_client()
+        bl_client = booklore_client or container.booklore_client_group()
         try:
             if bl_client and bl_client.is_configured():
                 bl_book = bl_client.find_book_by_filename(book.ebook_filename, allow_refresh=False)
@@ -93,7 +93,9 @@ def build_book_metadata(book, container, database_service, abs_service, booklore
                 if bl_book:
                     if not metadata.get('description') and bl_book.get('description'):
                         metadata['description'] = bl_book['description']
-                    bl_base = get_service_web_url('BOOKLORE') or bl_client.base_url
+                    instance_id = bl_book.get('_instance_id', 'default')
+                    bl_prefix = f"BOOKLORE{'_2' if instance_id == '2' else ''}"
+                    bl_base = get_service_web_url(bl_prefix) or getattr(bl_client, 'base_url', '')
                     bl_url = f"{bl_base}/book/{bl_book.get('id')}?tab=view"
                     metadata['booklore_url'] = bl_url
         except Exception as e:
@@ -124,13 +126,12 @@ def build_service_info(book, states_by_book, container, abs_service, metadata,
 
     Returns (service_states, integrations, services_enabled).
     """
-    abs_id = book.abs_id
     sync_mode = getattr(book, 'sync_mode', 'audiobook')
     hardcover = metadata.get('_hardcover')
 
     # Build per-service state data for the Services tab
     service_states = {}
-    for state in states_by_book.get(abs_id, []):
+    for state in states_by_book.get(book.id, []):
         pct = round(state.percentage * 100, 1) if state.percentage else 0
         service_states[state.client_name] = {'percentage': pct, 'timestamp': state.timestamp}
 

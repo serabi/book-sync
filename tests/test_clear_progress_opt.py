@@ -23,9 +23,10 @@ def test_clear_progress_optimization():
     db_service = MagicMock()
     alignment_service = MagicMock()
 
-    book = Book(abs_id="test_book", abs_title="Test Book", status="active")
-    db_service.get_book.return_value = book
+    book = Book(abs_id="test_book", title="Test Book", status="active")
+    db_service.get_book_by_ref.return_value = book
     db_service.delete_states_for_book.return_value = 5
+    db_service.get_kosync_documents_for_book_by_book_id.return_value = []
 
     sync_manager = SyncManager(
         database_service=db_service,

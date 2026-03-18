@@ -6,7 +6,7 @@ import re
 import requests
 from flask import Blueprint, Response, jsonify
 
-from src.blueprints.helpers import get_abs_service, get_container
+from src.blueprints.helpers import get_abs_service, get_book_or_404, get_container
 
 logger = logging.getLogger(__name__)
 
@@ -23,12 +23,17 @@ def get_abs_libraries():
     return jsonify(libraries)
 
 
-@abs_bp.route('/api/cover-proxy/<abs_id>')
-def proxy_cover(abs_id):
+@abs_bp.route('/api/cover-proxy/<book_ref>')
+def proxy_cover(book_ref):
     """Proxy cover access to allow loading covers from local network ABS instances."""
     abs_service = get_abs_service()
     if not abs_service.is_available():
         return "ABS not configured", 404
+
+    book = get_book_or_404(book_ref)
+    abs_id = book.abs_id
+    if not abs_id:
+        return "Book has no ABS cover", 404
 
     if not re.fullmatch(r'[a-zA-Z0-9_\-]+', abs_id):
         return "Invalid ID", 400

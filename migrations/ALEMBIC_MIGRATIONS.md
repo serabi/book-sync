@@ -33,8 +33,9 @@ def __init__(self, db_path: str):
 
 ### Migration Process
 1. **New Databases**: Alembic creates the complete schema with all current fields including `duration`
-2. **Existing Databases**: Alembic adds the `duration` column to existing `books` tables
-3. **Fallback**: If Alembic fails, SQLAlchemy's `create_all()` provides basic table creation
+2. **Existing Databases**: Alembic upgrades them through the revision chain instead of relying on ad hoc schema mutation
+3. **Legacy Pre-Alembic Databases**: If the database has the original PageKeeper tables but no `alembic_version` table, startup stamps it at the initial Alembic revision and then runs the remaining migrations. This avoids replaying `initial_database_schema` against already-existing tables while still applying all newer transformations needed for skipped-version upgrades.
+4. **Fallback**: If Alembic fails, SQLAlchemy's `create_all()` provides basic table creation
 
 ## Benefits Over Manual Schema Changes
 
@@ -112,6 +113,7 @@ ALTER TABLE books DROP COLUMN duration;
 - **Test Migrations**: Test migration on copy of production data
 - **Monitor Logs**: Check application logs for migration status
 - **Graceful Fallback**: Application continues to work if Alembic fails
+- **Skipped Releases**: Migration bootstrap must execute the real Alembic chain for legacy databases, not just stamp them to `head`, otherwise future data transformations can be silently skipped
 
 ### Error Handling:
 The migration system includes robust error handling:

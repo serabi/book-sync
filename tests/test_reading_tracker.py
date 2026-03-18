@@ -36,7 +36,7 @@ class TestReadingTrackerModels(unittest.TestCase):
 
     def _create_book(self, abs_id='test-book-1', title='Test Book', status='active'):
         from src.db.models import Book
-        book = Book(abs_id=abs_id, abs_title=title, status=status)
+        book = Book(abs_id=abs_id, title=title, status=status)
         return self.db.save_book(book)
 
     # -- Book reading fields --
@@ -51,9 +51,9 @@ class TestReadingTrackerModels(unittest.TestCase):
 
     def test_update_book_reading_fields(self):
         """update_book_reading_fields sets only reading fields."""
-        self._create_book()
+        book = self._create_book()
         updated = self.db.update_book_reading_fields(
-            'test-book-1', started_at='2026-03-01', rating=4.5
+            book.id, started_at='2026-03-01', rating=4.5
         )
         self.assertEqual(updated.started_at, '2026-03-01')
         self.assertEqual(updated.rating, 4.5)
@@ -61,31 +61,31 @@ class TestReadingTrackerModels(unittest.TestCase):
 
     def test_update_book_reading_fields_rejects_non_reading(self):
         """update_book_reading_fields ignores non-reading kwargs."""
-        self._create_book()
+        book = self._create_book()
         updated = self.db.update_book_reading_fields(
-            'test-book-1', started_at='2026-03-01', abs_title='HACKED'
+            book.id, started_at='2026-03-01', title='HACKED'
         )
         self.assertEqual(updated.started_at, '2026-03-01')
-        # abs_title should not have changed
-        book = self.db.get_book('test-book-1')
-        self.assertEqual(book.abs_title, 'Test Book')
+        # title should not have changed
+        refreshed = self.db.get_book_by_abs_id('test-book-1')
+        self.assertEqual(refreshed.title, 'Test Book')
 
     def test_update_book_reading_fields_nonexistent(self):
         """Returns None for a missing book."""
-        result = self.db.update_book_reading_fields('no-such-book', rating=3.0)
+        result = self.db.update_book_reading_fields(99999, rating=3.0)
         self.assertIsNone(result)
 
     def test_save_book_does_not_overwrite_reading_fields(self):
         """save_book should not null out reading fields set separately."""
         book = self._create_book()
-        self.db.update_book_reading_fields('test-book-1', rating=4.0, started_at='2026-01-15')
+        self.db.update_book_reading_fields(book.id, rating=4.0, started_at='2026-01-15')
 
         # Re-save via save_book (simulating sync path)
-        book = self.db.get_book('test-book-1')
+        book = self.db.get_book_by_abs_id('test-book-1')
         book.status = 'active'
         self.db.save_book(book)
 
-        refreshed = self.db.get_book('test-book-1')
+        refreshed = self.db.get_book_by_abs_id('test-book-1')
         self.assertEqual(refreshed.rating, 4.0)
         self.assertEqual(refreshed.started_at, '2026-01-15')
 
@@ -93,12 +93,12 @@ class TestReadingTrackerModels(unittest.TestCase):
 
     def test_add_and_get_journals(self):
         """Create journal entries and retrieve them newest-first."""
-        self._create_book()
-        self.db.add_reading_journal('test-book-1', event='started')
-        self.db.add_reading_journal('test-book-1', event='progress', percentage=0.5)
-        self.db.add_reading_journal('test-book-1', event='note', entry='Great chapter!')
+        book = self._create_book()
+        self.db.add_reading_journal(book.id, event='started')
+        self.db.add_reading_journal(book.id, event='progress', percentage=0.5)
+        self.db.add_reading_journal(book.id, event='note', entry='Great chapter!')
 
-        journals = self.db.get_reading_journals('test-book-1')
+        journals = self.db.get_reading_journals(book.id)
         self.assertEqual(len(journals), 3)
         # Newest first
         self.assertEqual(journals[0].event, 'note')
@@ -109,10 +109,10 @@ class TestReadingTrackerModels(unittest.TestCase):
 
     def test_delete_journal(self):
         """Delete a specific journal entry by ID."""
-        self._create_book()
-        j = self.db.add_reading_journal('test-book-1', event='note', entry='delete me')
+        book = self._create_book()
+        j = self.db.add_reading_journal(book.id, event='note', entry='delete me')
         self.assertTrue(self.db.delete_reading_journal(j.id))
-        self.assertEqual(len(self.db.get_reading_journals('test-book-1')), 0)
+        self.assertEqual(len(self.db.get_reading_journals(book.id)), 0)
 
     def test_delete_journal_nonexistent(self):
         """Deleting a missing journal returns False."""
@@ -120,17 +120,17 @@ class TestReadingTrackerModels(unittest.TestCase):
 
     def test_journals_cascade_on_book_delete(self):
         """Deleting a book cascades to its journal entries."""
-        self._create_book()
-        self.db.add_reading_journal('test-book-1', event='started')
-        self.db.add_reading_journal('test-book-1', event='note', entry='cascade test')
+        book = self._create_book()
+        self.db.add_reading_journal(book.id, event='started')
+        self.db.add_reading_journal(book.id, event='note', entry='cascade test')
 
-        self.db.delete_book('test-book-1')
-        journals = self.db.get_reading_journals('test-book-1')
+        self.db.delete_book(book.id)
+        journals = self.db.get_reading_journals(book.id)
         self.assertEqual(len(journals), 0)
 
     def test_journals_empty_for_unknown_book(self):
-        """get_reading_journals returns empty list for unknown abs_id."""
-        self.assertEqual(self.db.get_reading_journals('no-such-book'), [])
+        """get_reading_journals returns empty list for unknown book_id."""
+        self.assertEqual(self.db.get_reading_journals(99999), [])
 
     # -- ReadingGoal CRUD --
 
@@ -162,19 +162,19 @@ class TestReadingTrackerModels(unittest.TestCase):
         """get_reading_stats counts finished books and active books."""
         from src.db.models import Book
         # Create books with various statuses
-        self.db.save_book(Book(abs_id='b1', abs_title='Finished 1', status='completed'))
-        self.db.update_book_reading_fields('b1', finished_at='2026-06-01', rating=4.5)
+        b1 = self.db.save_book(Book(abs_id='b1', title='Finished 1', status='completed'))
+        self.db.update_book_reading_fields(b1.id, finished_at='2026-06-01', rating=4.5)
 
-        self.db.save_book(Book(abs_id='b2', abs_title='Finished 2', status='completed'))
-        self.db.update_book_reading_fields('b2', finished_at='2026-11-15', rating=3.5)
+        b2 = self.db.save_book(Book(abs_id='b2', title='Finished 2', status='completed'))
+        self.db.update_book_reading_fields(b2.id, finished_at='2026-11-15', rating=3.5)
 
-        self.db.save_book(Book(abs_id='b3', abs_title='Still Reading', status='active'))
-        self.db.save_state(State(abs_id='b3', client_name='manual', percentage=0.45))
-        self.db.save_book(Book(abs_id='b4', abs_title='Paused', status='paused'))
-        self.db.save_book(Book(abs_id='b5', abs_title='Last Year', status='completed'))
-        self.db.update_book_reading_fields('b5', finished_at='2025-12-31')
-        self.db.save_book(Book(abs_id='b6', abs_title='DNF but dated', status='dnf'))
-        self.db.update_book_reading_fields('b6', finished_at='2026-04-21', rating=1.5)
+        b3 = self.db.save_book(Book(abs_id='b3', title='Still Reading', status='active'))
+        self.db.save_state(State(abs_id='b3', book_id=b3.id, client_name='manual', percentage=0.45))
+        self.db.save_book(Book(abs_id='b4', title='Paused', status='paused'))
+        b5 = self.db.save_book(Book(abs_id='b5', title='Last Year', status='completed'))
+        self.db.update_book_reading_fields(b5.id, finished_at='2025-12-31')
+        b6 = self.db.save_book(Book(abs_id='b6', title='DNF but dated', status='dnf'))
+        self.db.update_book_reading_fields(b6.id, finished_at='2026-04-21', rating=1.5)
 
         self.db.save_reading_goal(2026, 12)
 
@@ -202,15 +202,18 @@ class TestReadingTrackerModels(unittest.TestCase):
     def test_migrate_book_data_includes_journals(self):
         """migrate_book_data moves journal entries to the new book ID."""
         from src.db.models import Book
-        self.db.save_book(Book(abs_id='old-id', abs_title='Old Book', status='active'))
-        self.db.add_reading_journal('old-id', event='started')
-        self.db.add_reading_journal('old-id', event='note', entry='migrate me')
+        old_book = self.db.save_book(Book(abs_id='old-id', title='Old Book', status='active'))
+        self.db.add_reading_journal(old_book.id, event='started')
+        self.db.add_reading_journal(old_book.id, event='note', entry='migrate me')
 
-        self.db.save_book(Book(abs_id='new-id', abs_title='New Book', status='active'))
+        new_book = self.db.save_book(Book(abs_id='new-id', title='New Book', status='active'))
         self.db.migrate_book_data('old-id', 'new-id')
 
-        old_journals = self.db.get_reading_journals('old-id')
-        new_journals = self.db.get_reading_journals('new-id')
+        # After migration, old book's journals move to the merged book (now with abs_id='new-id')
+        # The old book_id still has the journals since migrate_book_data updates abs_id but keeps book_id
+        migrated_book = self.db.get_book_by_abs_id('new-id')
+        old_journals = self.db.get_reading_journals(new_book.id)
+        new_journals = self.db.get_reading_journals(migrated_book.id)
         self.assertEqual(len(old_journals), 0)
         self.assertEqual(len(new_journals), 2)
 

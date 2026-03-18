@@ -61,7 +61,7 @@ class BaseSyncCycleTestCase(unittest.TestCase, ABC):
         # Create Book model from test mapping
         self.test_book = Book(
             abs_id=self.test_mapping['abs_id'],
-            abs_title=self.test_mapping.get('abs_title'),
+            title=self.test_mapping.get('title'),
             ebook_filename=self.test_mapping.get('ebook_filename'),
             kosync_doc_id=self.test_mapping.get('kosync_doc_id'),
             storyteller_uuid=self.test_mapping.get('storyteller_uuid'), # [NEW] Added for strict sync

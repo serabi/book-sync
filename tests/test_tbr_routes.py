@@ -351,9 +351,9 @@ class TestTbrRoutes(unittest.TestCase):
         item = _make_tbr_item(id=1, book_abs_id='abs-1')
         self.db.get_tbr_item.return_value = item
 
-        book = Book(abs_id='abs-1', abs_title='Dune', status='paused')
+        book = Book(abs_id='abs-1', title='Dune', status='paused')
         book.started_at = None
-        self.db.get_book.return_value = book
+        self.db.get_book_by_abs_id.return_value = book
         self.db.save_book.return_value = book
         self.db.update_book_reading_fields.return_value = book
         self.db.add_reading_journal.return_value = Mock()
@@ -371,7 +371,7 @@ class TestTbrRoutes(unittest.TestCase):
         self.assertEqual(saved_book.status, 'active')
 
         # Journal entry added
-        self.db.add_reading_journal.assert_called_once_with('abs-1', event='started')
+        self.db.add_reading_journal.assert_called_once_with(None, event='started', abs_id='abs-1')
 
         # TBR item deleted
         self.db.delete_tbr_item.assert_called_once_with(1)
@@ -395,7 +395,7 @@ class TestTbrRoutes(unittest.TestCase):
         """Start with linked book that doesn't exist returns 404."""
         item = _make_tbr_item(id=1, book_abs_id='abs-gone')
         self.db.get_tbr_item.return_value = item
-        self.db.get_book.return_value = None
+        self.db.get_book_by_abs_id.return_value = None
 
         resp = self.client.post('/api/reading/tbr/1/start')
         self.assertEqual(resp.status_code, 404)
@@ -646,7 +646,7 @@ class TestTbrRoutes(unittest.TestCase):
         ]
         hc_detail = SimpleNamespace(hardcover_book_id=1, abs_id='abs-active')
         self.db.get_all_hardcover_details.return_value = [hc_detail]
-        active_book = Book(abs_id='abs-active', abs_title='Active Book', status='active')
+        active_book = Book(abs_id='abs-active', title='Active Book', status='active')
         self.db.get_all_books.return_value = [active_book]
         self.db.add_tbr_item.return_value = (_make_tbr_item(id=10), True)
 
@@ -666,7 +666,7 @@ class TestTbrRoutes(unittest.TestCase):
         ]
         hc_detail = SimpleNamespace(hardcover_book_id=5, abs_id='abs-done')
         self.db.get_all_hardcover_details.return_value = [hc_detail]
-        done_book = Book(abs_id='abs-done', abs_title='Done Book', status='completed')
+        done_book = Book(abs_id='abs-done', title='Done Book', status='completed')
         self.db.get_all_books.return_value = [done_book]
 
         resp = self.client.post('/api/reading/tbr/import-hardcover')
@@ -688,7 +688,7 @@ class TestTbrRoutes(unittest.TestCase):
         }
         hc_detail = SimpleNamespace(hardcover_book_id=10, abs_id='abs-reading')
         self.db.get_all_hardcover_details.return_value = [hc_detail]
-        reading_book = Book(abs_id='abs-reading', abs_title='Reading This', status='active')
+        reading_book = Book(abs_id='abs-reading', title='Reading This', status='active')
         self.db.get_all_books.return_value = [reading_book]
         self.db.add_tbr_item.return_value = (_make_tbr_item(id=20), True)
 

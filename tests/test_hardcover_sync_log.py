@@ -43,10 +43,10 @@ class TestHardcoverSyncLogModel(unittest.TestCase):
         self.assertTrue(saved.success)
 
     def test_create_log_with_book_fk(self):
-        book = Book(abs_id='hc-log-test', abs_title='FK Book', status='active')
-        self.db.save_book(book)
+        book = Book(abs_id='hc-log-test', title='FK Book', status='active')
+        book = self.db.save_book(book)
         entry = HardcoverSyncLog(
-            abs_id='hc-log-test', book_title='FK Book',
+            abs_id='hc-log-test', book_id=book.id, book_title='FK Book',
             direction='pull', action='status_pull',
         )
         saved = self.db.add_hardcover_sync_log(entry)
@@ -312,8 +312,8 @@ class TestHardcoverSyncLogInstrumentation(unittest.TestCase):
             abs_client=self.mock_abs,
         )
 
-        self.book = Book(abs_id='instr-test', abs_title='Instrumentation Book', status='active')
-        self.db.save_book(self.book)
+        self.book = Book(abs_id='instr-test', title='Instrumentation Book', status='active')
+        self.book = self.db.save_book(self.book)
 
     def tearDown(self):
         import shutil
@@ -322,7 +322,7 @@ class TestHardcoverSyncLogInstrumentation(unittest.TestCase):
     @patch('src.services.hardcover_service.record_write')
     def test_push_local_status_logs_success(self, mock_rw):
         details = HardcoverDetails(
-            abs_id='instr-test', hardcover_book_id='999',
+            abs_id='instr-test', book_id=self.book.id, hardcover_book_id='999',
             hardcover_edition_id='111', hardcover_pages=300,
         )
         self.db.save_hardcover_details(details)
@@ -338,7 +338,7 @@ class TestHardcoverSyncLogInstrumentation(unittest.TestCase):
     @patch('src.services.hardcover_service.record_write')
     def test_push_local_status_logs_error(self, mock_rw):
         details = HardcoverDetails(
-            abs_id='instr-test', hardcover_book_id='999',
+            abs_id='instr-test', book_id=self.book.id, hardcover_book_id='999',
             hardcover_edition_id='111',
         )
         self.db.save_hardcover_details(details)
@@ -354,7 +354,7 @@ class TestHardcoverSyncLogInstrumentation(unittest.TestCase):
     @patch('src.services.hardcover_service.record_write')
     def test_push_rating_logs(self, mock_rw):
         details = HardcoverDetails(
-            abs_id='instr-test', hardcover_book_id='999',
+            abs_id='instr-test', book_id=self.book.id, hardcover_book_id='999',
             hardcover_edition_id='111',
             hardcover_user_book_id=42, hardcover_status_id=2,
         )

@@ -9,10 +9,11 @@ from pathlib import Path
 from flask import Blueprint, render_template
 
 from src.blueprints.helpers import (
+    booklore_cover_proxy_prefix,
     get_abs_service,
-    get_booklore_client,
     get_container,
     get_database_service,
+    get_enabled_booklore_server_ids,
     get_hardcover_book_url,
     get_service_web_url,
 )
@@ -84,15 +85,12 @@ def index():
 
     # Fetch all hardcover details at once
     all_hardcover = database_service.get_all_hardcover_details()
-    hardcover_by_book = {h.abs_id: h for h in all_hardcover}
+    hardcover_by_book = {h.book_id: h for h in all_hardcover}
 
     # Fetch Booklore metadata for ebook-only title/author enrichment
-    booklore_by_filename = database_service.get_booklore_by_filename()
-
-    bl_client = get_booklore_client()
-    bl_base = None
-    if bl_client.is_configured():
-        bl_base = get_service_web_url("BOOKLORE") or bl_client.base_url
+    enabled_bl_ids = get_enabled_booklore_server_ids()
+    booklore_by_filename = database_service.get_booklore_by_filename(enabled_server_ids=enabled_bl_ids)
+    booklore_by_filename_all = database_service.get_booklore_by_filename()  # unfiltered fallback
 
     integrations = {}
     sync_clients = container.sync_clients()
@@ -122,8 +120,8 @@ def index():
             logger.warning(f"Could not fetch Storyteller submissions: {e}")
 
     # Bulk-fetch latest jobs for books in pending/processing/retry states (avoid N+1)
-    job_status_books = [b.abs_id for b in books if b.status in ("pending", "processing", "failed_retry_later")]
-    jobs_by_book = database_service.get_latest_jobs_bulk(job_status_books)
+    job_status_book_ids = [b.id for b in books if b.status in ("pending", "processing", "failed_retry_later")]
+    jobs_by_book = database_service.get_latest_jobs_bulk(job_status_book_ids)
 
     mappings = []
     books_needing_title_save = []
@@ -131,7 +129,7 @@ def index():
     total_listened = 0
 
     for book in books:
-        states = states_by_book.get(book.abs_id, [])
+        states = states_by_book.get(book.id, [])
         state_by_client = {state.client_name: state for state in states}
 
         sync_mode = getattr(book, "sync_mode", "audiobook")
@@ -144,6 +142,7 @@ def index():
 
         # Look up Booklore metadata by ebook_filename or original_ebook_filename
         # Prefer entries that have a title, since we use this for display enrichment
+        # bl_meta: filtered to enabled instances (used for covers/deep-links)
         bl_meta = None
         for fn in (book.ebook_filename, getattr(book, "original_ebook_filename", None)):
             if fn:
@@ -152,34 +151,45 @@ def index():
                 if bl_meta:
                     break
 
+        # bl_meta_enrichment: unfiltered fallback for title/author (stale metadata is fine)
+        bl_meta_enrichment = bl_meta
+        if not bl_meta_enrichment:
+            for fn in (book.ebook_filename, getattr(book, "original_ebook_filename", None)):
+                if fn:
+                    candidates = booklore_by_filename_all.get(fn.lower(), [])
+                    bl_meta_enrichment = next((b for b in candidates if b.title), candidates[0] if candidates else None)
+                    if bl_meta_enrichment:
+                        break
+
         # Skip ABS metadata enrichment for ebook-only books (synthetic ID won't resolve)
         if book_type == "ebook-only":
             abs_subtitle = ""
-            abs_author = (bl_meta.authors or "") if bl_meta else ""
+            abs_author = (bl_meta_enrichment.authors or "") if bl_meta_enrichment else ""
         else:
             _abs_meta = abs_metadata_by_id.get(book.abs_id, {})
             abs_subtitle = _abs_meta.get("subtitle", "")
             abs_author = _abs_meta.get("author", "")
 
         # Enrich title from Booklore if stored title looks like a filename
-        enriched_title = book.abs_title
-        if bl_meta and bl_meta.title:
+        enriched_title = book.title
+        if bl_meta_enrichment and bl_meta_enrichment.title:
             stems = set()
             for fn in (book.ebook_filename, getattr(book, "original_ebook_filename", None)):
                 if fn:
                     stems.add(Path(fn).stem)
-            if book.abs_title in stems or book.abs_title in (
+            if book.title in stems or book.title in (
                 book.ebook_filename,
                 getattr(book, "original_ebook_filename", None),
             ):
-                enriched_title = bl_meta.title
+                enriched_title = bl_meta_enrichment.title
                 # Persist the improved title so it sticks (batched after loop)
-                book.abs_title = bl_meta.title
+                book.title = bl_meta_enrichment.title
                 books_needing_title_save.append(book)
 
         mapping = {
+            "id": book.id,
             "abs_id": book.abs_id,
-            "abs_title": enriched_title,
+            "title": enriched_title,
             "abs_subtitle": abs_subtitle,
             "abs_author": abs_author,
             "ebook_filename": book.ebook_filename,
@@ -198,12 +208,12 @@ def index():
         }
 
         # Storyteller submission status (from bulk-fetched dict)
-        st_submission = st_submissions_by_book.get(book.abs_id)
+        st_submission = st_submissions_by_book.get(book.abs_id)  # still keyed by abs_id from bulk query
         if st_submission:
             mapping["storyteller_submission_status"] = st_submission.status
 
         if book.status in ("pending", "processing", "failed_retry_later"):
-            job = jobs_by_book.get(book.abs_id)
+            job = jobs_by_book.get(book.id)
             if job:
                 mapping["job_progress"] = round((job.progress or 0.0) * 100, 1)
                 mapping["retry_count"] = job.retry_count or 0
@@ -229,7 +239,7 @@ def index():
                 max_progress = max(max_progress, progress_pct)
 
         # Hardcover details
-        hardcover_details = hardcover_by_book.get(book.abs_id)
+        hardcover_details = hardcover_by_book.get(book.id)
         if hardcover_details:
             # HC out-of-sync indicator: cached HC status ≠ local status means push pending/failed
             hc_to_local = {1: "not_started", 2: "active", 3: "completed", 4: "paused", 5: "dnf"}
@@ -249,7 +259,7 @@ def index():
                     "asin": hardcover_details.asin,
                     "matched_by": hardcover_details.matched_by,
                     "hardcover_linked": True,
-                    "hardcover_title": book.abs_title,
+                    "hardcover_title": book.title,
                     "hardcover_cover_url": hardcover_details.hardcover_cover_url,
                     "hardcover_status_mismatch": hc_mismatch,
                 }
@@ -287,9 +297,11 @@ def index():
         mapping["booklore_id"] = None
         mapping["booklore_url"] = None
         bl_id = bl_meta.raw_metadata_dict.get("id") if bl_meta else None
-        if bl_id and bl_base:
+        if bl_id:
             mapping["booklore_id"] = bl_id
-            mapping["booklore_url"] = f"{bl_base}/book/{bl_id}?tab=view"
+            bl_prefix = f"BOOKLORE{'_2' if bl_meta.server_id == '2' else ''}"
+            bl_web = get_service_web_url(bl_prefix)
+            mapping["booklore_url"] = f"{bl_web}/book/{bl_id}?tab=view" if bl_web else None
 
         if mapping.get("hardcover_slug"):
             mapping["hardcover_url"] = get_hardcover_book_url(mapping["hardcover_slug"])
@@ -299,9 +311,9 @@ def index():
             mapping["hardcover_url"] = None
 
         # BookFusion link data
-        is_bf_linked = (book.abs_id in bf_linked_ids) or book.abs_id.startswith("bf-")
+        is_bf_linked = (book.abs_id in bf_linked_ids) or (book.abs_id or "").startswith("bf-")
         mapping["bookfusion_linked"] = is_bf_linked
-        mapping["bookfusion_highlight_count"] = bf_highlight_counts.get(book.abs_id, 0)
+        mapping["bookfusion_highlight_count"] = bf_highlight_counts.get(book.abs_id, 0) if book.abs_id else 0
 
         mapping["unified_progress"] = min(max_progress, 100.0)
         mapping["latest_activity_at"] = latest_update_time or None
@@ -327,8 +339,13 @@ def index():
             mapping["cover_url"] = book.custom_cover_url
 
         # Booklore cover fallback for books without an ABS or custom cover
-        if not mapping["cover_url"] and mapping.get("booklore_id"):
-            mapping["cover_url"] = f"/api/cover-proxy/booklore/{mapping['booklore_id']}"
+        if not mapping["cover_url"] and mapping.get("booklore_id") and bl_meta:
+            prefix = booklore_cover_proxy_prefix(bl_meta.server_id)
+            mapping["cover_url"] = f"{prefix}/{mapping['booklore_id']}"
+
+        # KOSync cover fallback (lazy extraction — covers endpoint extracts on demand)
+        if not mapping["cover_url"] and book.kosync_doc_id:
+            mapping["cover_url"] = f'/covers/{book.kosync_doc_id}.jpg'
 
         # Hardcover cover fallback
         if not mapping["cover_url"] and mapping.get("hardcover_cover_url"):

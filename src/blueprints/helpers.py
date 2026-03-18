@@ -13,8 +13,9 @@ import signal
 import time
 from pathlib import Path
 
-from flask import current_app
+from flask import abort, current_app
 
+from src.sync_clients.abs_sync_client import TRANSCRIPT_DB_MANAGED
 from src.utils.path_utils import is_safe_path_within
 from src.utils.service_url_helper import get_hardcover_book_url, get_service_web_url  # noqa: F401
 
@@ -45,6 +46,14 @@ def get_covers_dir():
 
 def get_abs_service():
     return current_app.config['abs_service']
+
+
+def get_book_or_404(ref):
+    """Resolve a book by canonical book_id or legacy abs_id and abort if missing."""
+    book = get_database_service().get_book_by_ref(ref)
+    if not book:
+        abort(404)
+    return book
 
 
 # --------------- Booklore helpers ---------------
@@ -79,6 +88,22 @@ def _resolve_booklore_instance(instance_id):
     if instance_id == '2':
         return container.booklore_client_2()
     return container.booklore_client()
+
+
+def get_enabled_booklore_server_ids():
+    """Return set of server_ids for enabled Booklore instances."""
+    group = get_booklore_client()
+    active = getattr(group, '_active', None)
+    if not isinstance(active, (list, tuple)):
+        return set()
+    return {c.instance_id for c in active}
+
+
+def booklore_cover_proxy_prefix(server_id):
+    """Return the cover-proxy URL path prefix for a Booklore instance."""
+    if server_id == '2':
+        return '/api/cover-proxy/booklore2'
+    return '/api/cover-proxy/booklore'
 
 
 def any_booklore_configured():
@@ -414,7 +439,7 @@ def cleanup_mapping_resources(book):
     manager = get_manager()
     database_service = get_database_service()
 
-    if book.transcript_file and book.transcript_file != "DB_MANAGED":
+    if book.transcript_file and book.transcript_file != TRANSCRIPT_DB_MANAGED:
         data_dir = container.data_dir()
         transcript_dir = data_dir / "transcripts"
         transcript_path = Path(book.transcript_file)

@@ -24,7 +24,7 @@ class TestNoChangesDetectedSync(BaseSyncCycleTestCase):
         """Return no changes test mapping configuration."""
         return {
             'abs_id': 'test-abs-id-nochange',
-            'abs_title': 'No Changes Test Book',
+            'title': 'No Changes Test Book',
             'kosync_doc_id': 'test-kosync-doc-nochange',
             'ebook_filename': 'test-book.epub',
             'transcript_file': str(Path(self.temp_dir) / 'test_transcript.json'),

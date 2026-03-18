@@ -10,8 +10,10 @@ from flask import Blueprint, abort, jsonify, render_template, request
 
 from src.blueprints.helpers import (
     get_abs_service,
+    get_book_or_404,
     get_container,
     get_database_service,
+    get_enabled_booklore_server_ids,
     get_hardcover_book_url,
 )
 from src.services.book_metadata_service import build_book_metadata, build_service_info
@@ -57,11 +59,11 @@ def _build_book_reading_data(book, database_service, abs_service, states_by_book
         book_type = 'linked'
 
     # Get unified progress from states
-    states = states_by_book.get(book.abs_id, [])
+    states = states_by_book.get(book.id, [])
     max_progress = ReadingService.max_progress(states, as_percent=True)
 
     # Enrich title/author from Booklore or ABS metadata when available
-    display_title = book.abs_title or ''
+    display_title = book.title or ''
     display_author = ''
     bl_meta = None
     if booklore_by_filename:
@@ -95,8 +97,9 @@ def _build_book_reading_data(book, database_service, abs_service, states_by_book
                                  booklore_meta=bl_meta)
 
     return {
+        'id': book.id,
         'abs_id': book.abs_id,
-        'abs_title': display_title,
+        'title': display_title,
         'abs_author': display_author,
         'ebook_filename': book.ebook_filename,
         'kosync_doc_id': book.kosync_doc_id,
@@ -160,7 +163,8 @@ def reading_index():
     states_by_book = database_service.get_states_by_book()
 
     # Fetch Booklore metadata for title enrichment
-    booklore_by_filename = database_service.get_booklore_by_filename()
+    enabled_bl_ids = get_enabled_booklore_server_ids()
+    booklore_by_filename = database_service.get_booklore_by_filename(enabled_server_ids=enabled_bl_ids)
 
     all_book_data = [
         _build_book_reading_data(
@@ -204,9 +208,9 @@ def reading_index():
     # Sort each section for default ordering
     currently_reading.sort(key=lambda b: b['unified_progress'], reverse=True)
     finished.sort(key=lambda b: b['finished_at'] or '', reverse=True)
-    paused.sort(key=lambda b: (b['abs_title'] or '').lower())
-    dnf.sort(key=lambda b: (b['abs_title'] or '').lower())
-    not_started.sort(key=lambda b: (b['abs_title'] or '').lower())
+    paused.sort(key=lambda b: (b['title'] or '').lower())
+    dnf.sort(key=lambda b: (b['title'] or '').lower())
+    not_started.sort(key=lambda b: (b['title'] or '').lower())
 
     section_counts = {
         'reading': len(currently_reading),
@@ -287,45 +291,44 @@ def reading_index():
     )
 
 
-@reading_bp.route('/reading/book/<abs_id>')
-def reading_detail(abs_id):
+@reading_bp.route('/reading/book/<book_ref>')
+def reading_detail(book_ref):
     """Render the book detail view with journal."""
     active_tab = request.args.get('tab', 'overview')
 
     database_service = get_database_service()
     abs_service = get_abs_service()
 
-    book = database_service.get_book(abs_id)
-    if not book:
-        abort(404)
+    book = get_book_or_404(book_ref)
 
     states_by_book = database_service.get_states_by_book()
 
     # Booklore enrichment
-    booklore_by_filename = database_service.get_booklore_by_filename()
+    enabled_bl_ids = get_enabled_booklore_server_ids()
+    booklore_by_filename = database_service.get_booklore_by_filename(enabled_server_ids=enabled_bl_ids)
 
     book_data = _build_book_reading_data(book, database_service, abs_service, states_by_book,
                                          booklore_by_filename)
-    journals = database_service.get_reading_journals(abs_id)
+    journals = database_service.get_reading_journals(book.id)
 
     # Synthesize started/finished timeline entries from book dates if missing
     existing_events = {j.event for j in journals}
     synthetic = []
     if book.started_at and 'started' not in existing_events:
-        synthetic.append(_synthetic_journal(abs_id, 'started', book.started_at))
+        synthetic.append(_synthetic_journal(book.abs_id, 'started', book.started_at))
     if book.finished_at and 'finished' not in existing_events:
-        synthetic.append(_synthetic_journal(abs_id, 'finished', book.finished_at, percentage=1.0))
+        synthetic.append(_synthetic_journal(book.abs_id, 'finished', book.finished_at, percentage=1.0))
     if synthetic:
         journals = list(journals) + synthetic
         journals.sort(key=lambda j: j.created_at or datetime.min, reverse=True)
 
     # BookFusion highlights matched to this book
-    bf_highlights = database_service.get_bookfusion_highlights_for_book(abs_id)
+    bf_highlights = database_service.get_bookfusion_highlights_for_book(book.abs_id)
 
     has_bookfusion_link = (
-        abs_id.startswith('bf-')
+        (book.abs_id or '').startswith('bf-')
         or len(bf_highlights) > 0
-        or database_service.is_bookfusion_linked(abs_id)
+        or database_service.is_bookfusion_linked(book.abs_id)
     )
 
     container = get_container()
@@ -337,7 +340,7 @@ def reading_detail(abs_id):
     )
 
     # Check if this book already has a linked TBR item
-    has_linked_tbr = database_service.find_tbr_by_abs_id(abs_id) is not None
+    has_linked_tbr = database_service.find_tbr_by_book_id(book.id) is not None
 
     # Alignment tab data
     alignment_info = None
@@ -354,7 +357,7 @@ def reading_detail(abs_id):
     if show_alignment_tab:
         try:
             alignment_service = container.alignment_service()
-            alignment_info = alignment_service.get_alignment_info(abs_id)
+            alignment_info = alignment_service.get_alignment_info(book.abs_id or str(book.id))
             if alignment_info:
                 book_duration = book.duration
                 max_ts = alignment_info['max_timestamp']
@@ -372,7 +375,7 @@ def reading_detail(abs_id):
                 if not alignment_info['source'] and book.storyteller_uuid:
                     alignment_info['source'] = 'storyteller'
         except Exception as e:
-            logger.debug(f"Failed to load alignment info for {abs_id}: {e}")
+            logger.debug(f"Failed to load alignment info for book {book.id}: {e}")
 
     return render_template(
         'reading_detail.html',
@@ -409,8 +412,10 @@ def tbr_detail(item_id):
 
     # Resolve linked library book
     linked_book = None
-    if item.book_abs_id:
-        linked_book = database_service.get_book(item.book_abs_id)
+    if item.book_id:
+        linked_book = database_service.get_book_by_id(item.book_id)
+    elif item.book_abs_id:
+        linked_book = database_service.get_book_by_abs_id(item.book_abs_id)
 
     # Check HC configuration
     try:
@@ -431,10 +436,11 @@ def tbr_detail(item_id):
 # ─── API Endpoints ───────────────────────────────────────────────────
 
 
-@reading_bp.route('/api/reading/book/<abs_id>/rating', methods=['POST'])
-def update_rating(abs_id):
+@reading_bp.route('/api/reading/book/<book_ref>/rating', methods=['POST'])
+def update_rating(book_ref):
     """Set or update the rating for a book."""
     database_service = get_database_service()
+    book = get_book_or_404(book_ref)
     data = request.json or {}
     rating = data.get('rating')
 
@@ -448,7 +454,7 @@ def update_rating(abs_id):
         if abs((rating * 2) - round(rating * 2)) > 1e-9:
             return jsonify({"success": False, "error": "Rating must be in 0.5 increments"}), 400
 
-    book = database_service.update_book_reading_fields(abs_id, rating=rating)
+    book = database_service.update_book_reading_fields(book.id, rating=rating)
     if not book:
         return jsonify({"success": False, "error": "Book not found"}), 404
 
@@ -472,9 +478,10 @@ def update_rating(abs_id):
     })
 
 
-@reading_bp.route('/api/reading/book/<abs_id>/progress', methods=['POST'])
-def update_progress(abs_id):
+@reading_bp.route('/api/reading/book/<book_ref>/progress', methods=['POST'])
+def update_progress(book_ref):
     """Manually set reading progress for a book (e.g. BookFusion books without auto-sync)."""
+    book = get_book_or_404(book_ref)
     data = request.json or {}
     percentage = data.get('percentage')
 
@@ -490,17 +497,18 @@ def update_progress(abs_id):
         return jsonify({"success": False, "error": "percentage must be between 0 and 1"}), 400
 
     container = get_container()
-    result = _get_reading_service().set_progress(abs_id, percentage, container)
+    result = _get_reading_service().set_progress(book.id, percentage, container)
     if not result['success']:
         return jsonify(result), 404
 
     return jsonify({"success": True, "percentage": percentage})
 
 
-@reading_bp.route('/api/reading/book/<abs_id>/dates', methods=['POST'])
-def update_dates(abs_id):
+@reading_bp.route('/api/reading/book/<book_ref>/dates', methods=['POST'])
+def update_dates(book_ref):
     """Update started_at and/or finished_at dates."""
     database_service = get_database_service()
+    book = get_book_or_404(book_ref)
     data = request.json or {}
     updates = {}
 
@@ -517,17 +525,12 @@ def update_dates(abs_id):
     if not updates:
         return jsonify({"success": False, "error": "No date fields provided"}), 400
 
-    # Cross-validate against existing DB values when only one date is provided
-    book = database_service.get_book(abs_id)
-    if not book:
-        return jsonify({"success": False, "error": "Book not found"}), 404
-
     effective_started = updates.get('started_at') or (book.started_at if 'started_at' not in updates else None)
     effective_finished = updates.get('finished_at') or (book.finished_at if 'finished_at' not in updates else None)
     if effective_started and effective_finished and effective_started > effective_finished:
         return jsonify({"success": False, "error": "started_at cannot be after finished_at"}), 400
 
-    book = database_service.update_book_reading_fields(abs_id, **updates)
+    book = database_service.update_book_reading_fields(book.id, **updates)
     if not book:
         return jsonify({"success": False, "error": "Book not found"}), 404
 
@@ -535,7 +538,7 @@ def update_dates(abs_id):
     event_map = {'started_at': 'started', 'finished_at': 'finished'}
     for field, event in event_map.items():
         if field in updates:
-            journal = database_service.find_journal_by_event(abs_id, event)
+            journal = database_service.find_journal_by_event(book.id, event)
             if journal:
                 new_date = updates[field]
                 if new_date:
@@ -549,56 +552,46 @@ def update_dates(abs_id):
     })
 
 
-@reading_bp.route('/api/reading/book/<abs_id>/dates/sync-hardcover', methods=['POST'])
-def sync_dates_to_hardcover(abs_id):
+@reading_bp.route('/api/reading/book/<book_ref>/dates/sync-hardcover', methods=['POST'])
+def sync_dates_to_hardcover(book_ref):
     """Push local started_at/finished_at to Hardcover, overwriting HC dates."""
-    database_service = get_database_service()
-    book = database_service.get_book(abs_id)
-    if not book:
-        return jsonify({"success": False, "error": "Book not found"}), 404
-
+    book = get_book_or_404(book_ref)
     container = get_container()
-    synced, message = container.reading_date_service().push_dates_to_hardcover(abs_id, force=True)
+    synced, message = container.reading_date_service().push_dates_to_hardcover(book.id, force=True)
     if synced:
         return jsonify({"success": True, "message": message})
     return jsonify({"success": False, "error": message}), 400
 
 
-@reading_bp.route('/api/reading/book/<abs_id>/dates/pull-hardcover', methods=['POST'])
-def pull_dates_from_hardcover(abs_id):
+@reading_bp.route('/api/reading/book/<book_ref>/dates/pull-hardcover', methods=['POST'])
+def pull_dates_from_hardcover(book_ref):
     """Pull started_at/finished_at from Hardcover into local DB."""
-    database_service = get_database_service()
-    book = database_service.get_book(abs_id)
-    if not book:
-        return jsonify({"success": False, "error": "Book not found"}), 404
-
+    book = get_book_or_404(book_ref)
     container = get_container()
-    success, message, dates = container.reading_date_service().pull_dates_from_hardcover(abs_id)
+    success, message, dates = container.reading_date_service().pull_dates_from_hardcover(book.id)
     if success:
         return jsonify({"success": True, "message": message, "dates": dates})
     return jsonify({"success": False, "error": message}), 400
 
 
-@reading_bp.route('/api/reading/book/<abs_id>/journal', methods=['POST'])
-def add_journal(abs_id):
+@reading_bp.route('/api/reading/book/<book_ref>/journal', methods=['POST'])
+def add_journal(book_ref):
     """Add a journal note for a book."""
     database_service = get_database_service()
+    book = get_book_or_404(book_ref)
     data = request.json or {}
     entry = (data.get('entry') or '').strip()
 
     if not entry:
         return jsonify({"success": False, "error": "Entry text is required"}), 400
 
-    book = database_service.get_book(abs_id)
-    if not book:
-        return jsonify({"success": False, "error": "Book not found"}), 404
-
     # Get current progress for the journal entry
-    book_states = database_service.get_states_for_book(abs_id)
+    book_states = database_service.get_states_for_book(book.id)
     max_pct = ReadingService.max_progress(book_states)
 
     journal = database_service.add_reading_journal(
-        abs_id, event='note', entry=entry, percentage=max_pct if max_pct > 0 else None
+        book.id, event='note', entry=entry, percentage=max_pct if max_pct > 0 else None,
+        abs_id=book.abs_id,
     )
 
     return jsonify({
@@ -623,7 +616,7 @@ def delete_journal(journal_id):
     if not journal:
         return jsonify({"success": False, "error": "Journal entry not found"}), 404
 
-    abs_id = journal.abs_id
+    book_id = journal.book_id
     event = journal.event
 
     deleted = database_service.delete_reading_journal(journal_id)
@@ -633,10 +626,10 @@ def delete_journal(journal_id):
     # If this was the last started/finished journal, clear the corresponding book field
     cleared_field = None
     if event in ('started', 'finished'):
-        remaining = database_service.find_journal_by_event(abs_id, event)
+        remaining = database_service.find_journal_by_event(book_id, event)
         if not remaining:
             cleared_field = 'started_at' if event == 'started' else 'finished_at'
-            database_service.update_book_reading_fields(abs_id, **{cleared_field: None})
+            database_service.update_book_reading_fields(book_id, **{cleared_field: None})
 
     return jsonify({"success": True, "cleared_field": cleared_field})
 
@@ -664,7 +657,7 @@ def update_journal(journal_id):
         journal = database_service.update_reading_journal(journal_id, created_at=new_dt)
         # Also update the corresponding book field
         field = 'started_at' if existing.event == 'started' else 'finished_at'
-        database_service.update_book_reading_fields(existing.abs_id, **{field: date_str})
+        database_service.update_book_reading_fields(existing.book_id, **{field: date_str})
         return jsonify({
             "success": True,
             "journal": {
@@ -745,16 +738,16 @@ def get_reading_books():
     all_states = database_service.get_all_states()
     states_by_book = {}
     for state in all_states:
-        states_by_book.setdefault(state.abs_id, []).append(state)
+        states_by_book.setdefault(state.book_id, []).append(state)
 
     result = []
     for book in books:
-        states = states_by_book.get(book.abs_id, [])
+        states = states_by_book.get(book.id, [])
         max_progress = ReadingService.max_progress(states, as_percent=True)
 
         result.append({
             'abs_id': book.abs_id,
-            'abs_title': book.abs_title,
+            'title': book.title,
             'status': book.status,
             'unified_progress': min(max_progress, 100.0),
             'started_at': book.started_at,
@@ -766,19 +759,17 @@ def get_reading_books():
     return jsonify(result)
 
 
-@reading_bp.route('/api/reading/book/<abs_id>', methods=['GET'])
-def get_reading_book(abs_id):
+@reading_bp.route('/api/reading/book/<book_ref>', methods=['GET'])
+def get_reading_book(book_ref):
     """Single book detail with journals."""
     database_service = get_database_service()
 
-    book = database_service.get_book(abs_id)
-    if not book:
-        return jsonify({"error": "Book not found"}), 404
+    book = get_book_or_404(book_ref)
 
-    states = database_service.get_states_for_book(abs_id)
+    states = database_service.get_states_for_book(book.id)
     max_progress = ReadingService.max_progress(states, as_percent=True)
 
-    journals = database_service.get_reading_journals(abs_id)
+    journals = database_service.get_reading_journals(book.id)
     journal_list = [{
         'id': j.id,
         'event': j.event,
@@ -789,7 +780,7 @@ def get_reading_book(abs_id):
 
     return jsonify({
         'abs_id': book.abs_id,
-        'abs_title': book.abs_title,
+        'title': book.title,
         'status': book.status,
         'unified_progress': min(max_progress, 100.0),
         'started_at': book.started_at,
@@ -800,17 +791,18 @@ def get_reading_book(abs_id):
     })
 
 
-@reading_bp.route('/api/reading/book/<abs_id>/status', methods=['POST'])
-def update_status(abs_id):
+@reading_bp.route('/api/reading/book/<book_ref>/status', methods=['POST'])
+def update_status(book_ref):
     """Update reading status for a book (with journal auto-creation).
 
     Accepts: {"status": "active"|"completed"|"paused"|"dnf"|"not_started"}
     """
+    book = get_book_or_404(book_ref)
     data = request.json or {}
     new_status = data.get('status')
 
     container = get_container()
-    result = _get_reading_service().update_status(abs_id, new_status, container)
+    result = _get_reading_service().update_status(book.id, new_status, container)
     if not result['success']:
         code = 404 if result.get('error') == 'Book not found' else 400
         return jsonify(result), code

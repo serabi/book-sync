@@ -37,12 +37,13 @@ class KoSyncRepository(BaseRepository):
             order_by=KosyncDocument.last_updated.desc(),
         )
 
-    def link_kosync_document(self, document_hash, abs_id):
+    def link_kosync_document(self, document_hash, book_id, abs_id=None):
         with self.get_session() as session:
             doc = session.query(KosyncDocument).filter(
                 KosyncDocument.document_hash == document_hash
             ).first()
             if doc:
+                doc.linked_book_id = book_id
                 doc.linked_abs_id = abs_id
                 doc.last_updated = datetime.now(UTC)
                 return True
@@ -55,6 +56,7 @@ class KoSyncRepository(BaseRepository):
             ).first()
             if doc:
                 doc.linked_abs_id = None
+                doc.linked_book_id = None
                 doc.last_updated = datetime.now(UTC)
                 return True
             return False
@@ -63,10 +65,18 @@ class KoSyncRepository(BaseRepository):
         return self._delete_one(KosyncDocument, KosyncDocument.document_hash == document_hash)
 
     def get_kosync_document_by_linked_book(self, abs_id):
+        """Get by abs_id (backward compat)."""
         return self._get_one(KosyncDocument, KosyncDocument.linked_abs_id == abs_id)
 
+    def get_kosync_document_by_linked_book_id(self, book_id):
+        return self._get_one(KosyncDocument, KosyncDocument.linked_book_id == book_id)
+
     def get_kosync_documents_for_book(self, abs_id):
+        """Get by abs_id (backward compat)."""
         return self._get_all(KosyncDocument, KosyncDocument.linked_abs_id == abs_id)
+
+    def get_kosync_documents_for_book_by_book_id(self, book_id):
+        return self._get_all(KosyncDocument, KosyncDocument.linked_book_id == book_id)
 
     def get_kosync_doc_by_filename(self, filename):
         if filename is None:

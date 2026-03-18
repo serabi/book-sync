@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>Reading Log - PageKeeper</title>
+    <title>{{ title_prefix }}Reading Log - PageKeeper</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="icon" type="image/png" href="/static/icon.png">
     <link rel="apple-touch-icon" href="/static/icon.png">
@@ -22,9 +22,6 @@
 <img src="{{ book.cover_url|e }}" alt="" loading="lazy" class="r-cover-img"
     {% if book.kosync_doc_id %}data-fallback-id="{{ book.kosync_doc_id|e }}"{% endif %}>
 <div class="r-cover-placeholder hidden"></div>
-{% elif book.kosync_doc_id %}
-<img src="/covers/{{ book.kosync_doc_id|urlencode }}.jpg" alt="" loading="lazy" class="r-cover-img">
-<div class="r-cover-placeholder hidden"></div>
 {% else %}
 <div class="r-cover-placeholder"></div>
 {% endif %}
@@ -40,9 +37,9 @@
 
 {% macro book_card(book, section_id) %}
 {% set recent_activity = book.finished_at or book.started_at or '' %}
-<a href="/reading/book/{{ book.abs_id }}"
+<a href="/reading/book/{{ book.id }}"
    class="r-book-card"
-   data-title="{{ book.abs_title|e }}"
+   data-title="{{ book.title|e }}"
    data-author="{{ book.abs_author|e }}"
    data-status="{{ book.display_status }}"
    data-section="{{ section_id }}"
@@ -58,7 +55,7 @@
     <div class="r-card-body">
         <div class="r-card-main">
             <div class="r-card-head">
-                <span class="r-card-title">{{ book.abs_title|e }}</span>
+                <span class="r-card-title">{{ book.title|e }}</span>
                 {% if book.abs_author %}
                 <span class="r-card-author">{{ book.abs_author|e }}</span>
                 {% endif %}
@@ -285,7 +282,7 @@
                 <div class="r-tbr-section-label">In Your Library — {{ not_started_count }} book{{ 's' if not_started_count != 1 }}</div>
                 <div class="r-library-backlog-grid">
                     {% for book in not_started_books %}
-                    <div class="r-tbr-card r-tbr-card--library" data-abs-id="{{ book.abs_id }}">
+                    <div class="r-tbr-card r-tbr-card--library" data-book-id="{{ book.id }}">
                         <div class="r-tbr-card-cover">
                             {% if book.cover_url %}
                             <img src="{{ book.cover_url|e }}" alt="" loading="lazy"
@@ -295,7 +292,7 @@
                             {% endif %}
                         </div>
                         <div class="r-tbr-card-body">
-                            <div class="r-tbr-card-title" title="{{ book.abs_title|e }}">{{ book.abs_title|e }}</div>
+                            <div class="r-tbr-card-title" title="{{ book.title|e }}">{{ book.title|e }}</div>
                             {% if book.abs_author %}
                             <div class="r-tbr-card-author">{{ book.abs_author|e }}</div>
                             {% endif %}
@@ -304,10 +301,10 @@
                             </div>
                             <div class="r-library-card-actions">
                                 <button class="btn btn-primary btn-sm r-library-start-btn" type="button"
-                                        data-abs-id="{{ book.abs_id }}">Start Reading</button>
+                                        data-book-id="{{ book.id }}">Start Reading</button>
                                 {% if book.abs_id not in tbr_linked_abs_ids %}
                                 <button class="btn btn-secondary btn-sm r-library-tbr-btn" type="button"
-                                        data-abs-id="{{ book.abs_id }}">+ Want to Read</button>
+                                        data-book-id="{{ book.id }}">+ Want to Read</button>
                                 {% endif %}
                             </div>
                         </div>

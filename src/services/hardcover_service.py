@@ -46,12 +46,13 @@ class HardcoverService:
     def is_configured(self) -> bool:
         return self.hardcover_client.is_configured()
 
-    def _require_hardcover_details(self, abs_id):
+    def _require_hardcover_details(self, book):
         """Fetch HardcoverDetails and return them only if a book_id is linked.
 
         Returns HardcoverDetails or None. Used as a guard in internal methods.
+        Accepts a Book object and looks up by book.id (integer PK).
         """
-        details = self.database_service.get_hardcover_details(abs_id)
+        details = self.database_service.get_hardcover_details(book.id)
         if not details or not details.hardcover_book_id:
             return None
         return details
@@ -115,7 +116,7 @@ class HardcoverService:
         if not hc_status_id:
             return
 
-        hardcover_details = self._require_hardcover_details(book.abs_id)
+        hardcover_details = self._require_hardcover_details(book)
         if not hardcover_details:
             return
 
@@ -132,18 +133,18 @@ class HardcoverService:
 
             log_hardcover_action(
                 self.database_service, abs_id=book.abs_id,
-                book_title=sanitize_log_data(book.abs_title),
+                book_title=sanitize_log_data(book.title),
                 direction='push', action='status_update',
                 detail={'status_label': status_label, 'hc_status_id': hc_status_id},
             )
             logger.info(
-                f"Local → Hardcover status: '{sanitize_log_data(book.abs_title)}' "
+                f"Local → Hardcover status: '{sanitize_log_data(book.title)}' "
                 f"set to {status_label} (HC status {hc_status_id})"
             )
         except Exception as e:
             log_hardcover_action(
                 self.database_service, abs_id=book.abs_id,
-                book_title=sanitize_log_data(book.abs_title),
+                book_title=sanitize_log_data(book.title),
                 direction='push', action='status_update',
                 success=False, error_message=str(e),
                 detail={'status_label': status_label, 'hc_status_id': hc_status_id},
@@ -157,7 +158,7 @@ class HardcoverService:
         if not self.is_configured():
             return {'hardcover_synced': False, 'hardcover_error': 'Hardcover not configured'}
 
-        hardcover_details = self._require_hardcover_details(book.abs_id)
+        hardcover_details = self._require_hardcover_details(book)
         if not hardcover_details:
             return {'hardcover_synced': False, 'hardcover_error': 'Book is not linked to Hardcover'}
 
@@ -176,7 +177,7 @@ class HardcoverService:
             record_write('Hardcover', book.abs_id, {'rating': rating})
             log_hardcover_action(
                 self.database_service, abs_id=book.abs_id,
-                book_title=sanitize_log_data(book.abs_title),
+                book_title=sanitize_log_data(book.title),
                 direction='push', action='rating',
                 detail={'rating': rating},
             )
@@ -184,7 +185,7 @@ class HardcoverService:
         except Exception as e:
             log_hardcover_action(
                 self.database_service, abs_id=book.abs_id,
-                book_title=sanitize_log_data(book.abs_title),
+                book_title=sanitize_log_data(book.title),
                 direction='push', action='rating',
                 success=False, error_message=str(e),
                 detail={'rating': rating},
@@ -215,13 +216,13 @@ class HardcoverService:
             self.database_service.save_hardcover_details(hardcover_details)
             log_hardcover_action(
                 self.database_service, abs_id=book.abs_id,
-                book_title=sanitize_log_data(book.abs_title),
+                book_title=sanitize_log_data(book.title),
                 direction='pull', action='adopt_user_book',
                 detail={'user_book_id': ub['id'], 'status_id': ub.get('status_id')},
             )
             logger.info(
                 f"Hardcover: adopted existing user_book {ub['id']} "
-                f"(status {ub.get('status_id')}) for '{sanitize_log_data(book.abs_title)}'"
+                f"(status {ub.get('status_id')}) for '{sanitize_log_data(book.title)}'"
             )
             return ub
 
@@ -246,19 +247,21 @@ class HardcoverService:
         record_write('Hardcover', book.abs_id, {'status': hardcover_details.hardcover_status_id})
         log_hardcover_action(
             self.database_service, abs_id=book.abs_id,
-            book_title=sanitize_log_data(book.abs_title),
+            book_title=sanitize_log_data(book.title),
             direction='push', action='create_user_book',
             detail={'user_book_id': result['id'], 'status_id': hardcover_details.hardcover_status_id},
         )
         return result
 
-    def _pull_dates_at_match(self, abs_id):
-        """Pull reading dates from Hardcover at match time (one-time fill)."""
+    def _pull_dates_at_match(self, book):
+        """Pull reading dates from Hardcover at match time (one-time fill).
+
+        Accepts a Book object (must be persisted with a valid .id).
+        """
         try:
-            book = self.database_service.get_book(abs_id)
             if not book:
                 return
-            hc_details = self._require_hardcover_details(abs_id)
+            hc_details = self._require_hardcover_details(book)
             if not hc_details:
                 return
             user_book = self.hardcover_client.find_user_book(int(hc_details.hardcover_book_id))
@@ -274,16 +277,16 @@ class HardcoverService:
             if not book.finished_at and read.get("finished_at"):
                 updates['finished_at'] = read["finished_at"]
             if updates:
-                self.database_service.update_book_reading_fields(abs_id, **updates)
-                logger.info(f"Pulled dates at match time for '{abs_id}': {updates}")
+                self.database_service.update_book_reading_fields(book.id, **updates)
+                logger.info(f"Pulled dates at match time for '{book.abs_id}': {updates}")
         except Exception as e:
-            logger.debug(f"Could not pull dates at match time for '{abs_id}': {e}")
+            logger.debug(f"Could not pull dates at match time for '{book.abs_id}': {e}")
 
     # ── Initial Progress Push ─────────────────────────────────────────
 
     def push_initial_progress(self, book, hardcover_sync_client):
         """Push current local progress to Hardcover after initial linking."""
-        states = self.database_service.get_states_for_book(book.abs_id)
+        states = self.database_service.get_states_for_book(book.id)
         percentages = [s.percentage for s in states if s.percentage is not None]
         max_pct = max(percentages) if percentages else 0.0
         if max_pct <= 0:
@@ -299,6 +302,7 @@ class HardcoverService:
                 pct = result.updated_state.get('pct', max_pct) if result.updated_state else max_pct
                 state = State(
                     abs_id=book.abs_id,
+                    book_id=book.id,
                     client_name='hardcover',
                     last_updated=time.time(),
                     percentage=pct,
@@ -306,7 +310,7 @@ class HardcoverService:
                 self.database_service.save_state(state)
             logger.info(
                 f"Hardcover: pushed initial progress {max_pct:.1%} for "
-                f"'{sanitize_log_data(book.abs_title)}'"
+                f"'{sanitize_log_data(book.title)}'"
             )
         except Exception as e:
             logger.warning(f"Failed to push initial progress to Hardcover: {e}")
@@ -329,7 +333,7 @@ class HardcoverService:
                 continue
 
             # Check if a Hardcover state already exists
-            states = self.database_service.get_states_for_book(details.abs_id)
+            states = self.database_service.get_states_for_book(details.book_id)
             hc_states = [s for s in states if s.client_name == 'hardcover']
             if hc_states:
                 continue
@@ -342,6 +346,7 @@ class HardcoverService:
 
             state = State(
                 abs_id=details.abs_id,
+                book_id=details.book_id,
                 client_name='hardcover',
                 last_updated=time.time(),
                 percentage=max_pct,
@@ -372,12 +377,12 @@ class HardcoverService:
         if not self.hardcover_client.is_configured():
             return
 
-        existing_details = self.database_service.get_hardcover_details(book.abs_id)
+        existing_details = self.database_service.get_hardcover_details(book.id)
         if existing_details:
             return
 
         if not self.abs_client or not self.abs_client.is_configured():
-            logger.debug(f"Skipping Hardcover automatch for '{sanitize_log_data(book.abs_title)}': ABS not available")
+            logger.debug(f"Skipping Hardcover automatch for '{sanitize_log_data(book.title)}': ABS not available")
             return
 
         item = self.abs_client.get_item_details(book.abs_id)
@@ -404,7 +409,7 @@ class HardcoverService:
 
         for search_func, strategy_name, condition in search_strategies:
             if not match and condition:
-                valid_match, rejected_match = self._try_match_with_strategy(search_func, strategy_name, book.abs_title)
+                valid_match, rejected_match = self._try_match_with_strategy(search_func, strategy_name, book.title)
                 if valid_match:
                     match = valid_match
                     matched_by = strategy_name
@@ -438,6 +443,7 @@ class HardcoverService:
         if match:
             hardcover_details = HardcoverDetails(
                 abs_id=book.abs_id,
+                book_id=book.id,
                 hardcover_book_id=match.get('book_id'),
                 hardcover_slug=match.get('slug'),
                 hardcover_edition_id=match.get('edition_id'),
@@ -452,7 +458,7 @@ class HardcoverService:
             self.database_service.save_hardcover_details(hardcover_details)
             self.resolve_editions(hardcover_details)
             self._get_or_create_user_book(book, hardcover_details, match.get('edition_id'))
-            self._pull_dates_at_match(book.abs_id)
+            self._pull_dates_at_match(book)
             log_hardcover_action(
                 self.database_service, abs_id=book.abs_id,
                 book_title=sanitize_log_data(meta.get('title')),
@@ -490,8 +496,11 @@ class HardcoverService:
             except Exception as e:
                 logger.warning(f"Failed to fetch ABS details during manual match: {e}")
 
+        book = self.database_service.get_book_by_ref(book_abs_id)
+        book_id = book.id if book else None
         details = HardcoverDetails(
             abs_id=book_abs_id,
+            book_id=book_id,
             hardcover_book_id=match['book_id'],
             hardcover_slug=match.get('slug'),
             hardcover_edition_id=match.get('edition_id'),
@@ -505,7 +514,7 @@ class HardcoverService:
         self.database_service.save_hardcover_details(details)
         self.resolve_editions(details)
         log_hardcover_action(
-            self.database_service, abs_id=book_abs_id,
+            self.database_service, abs_id=book_abs_id, book_id=book_id,
             book_title=sanitize_log_data(match.get('title', '')),
             direction='push', action='manual_match',
             detail={'hardcover_book_id': match['book_id'], 'slug': match.get('slug'),
@@ -513,9 +522,8 @@ class HardcoverService:
         )
         logger.info(f"Manually matched ABS {book_abs_id} to Hardcover {match['book_id']} ({match.get('title')})")
 
-        book = self.database_service.get_book(book_abs_id)
         if not book:
-            book = Book(abs_id=book_abs_id, abs_title='', status='')
+            book = Book(abs_id=book_abs_id, title='', status='')
         self._get_or_create_user_book(book, details, match.get('edition_id'))
-        self._pull_dates_at_match(book_abs_id)
+        self._pull_dates_at_match(book)
         return True

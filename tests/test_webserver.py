@@ -27,6 +27,7 @@ class MockContainer:
         self.mock_storyteller_client = Mock()
         self.mock_database_service = Mock()
         self.mock_database_service.get_all_settings.return_value = {}  # Default empty settings
+        self.mock_database_service.get_book_by_ref.return_value = None
         self.mock_database_service.get_bookfusion_linked_abs_ids.return_value = set()
         self.mock_database_service.get_bookfusion_highlight_counts.return_value = {}
         self.mock_ebook_parser = Mock()
@@ -159,7 +160,7 @@ class CleanFlaskIntegrationTest(unittest.TestCase):
         from src.db.models import Book
         test_book = Book(
             abs_id='test-book-123',
-            abs_title='Test Book',
+            title='Test Book',
             ebook_filename='test.epub',
             kosync_doc_id='test-doc-id',
             status='active',
@@ -202,7 +203,7 @@ class CleanFlaskIntegrationTest(unittest.TestCase):
         self.mock_database_service.get_all_books.return_value = [test_book]
         self.mock_database_service.get_states_for_book.return_value = mock_states
         self.mock_database_service.get_all_states.return_value = mock_states
-        self.mock_database_service.get_states_by_book.return_value = {'test-book-123': mock_states}
+        self.mock_database_service.get_states_by_book.return_value = {None: mock_states}
         self.mock_database_service.get_booklore_by_filename.return_value = {}
         self.mock_database_service.get_hardcover_details.return_value = None
         self.mock_database_service.get_all_hardcover_details.return_value = []
@@ -259,7 +260,7 @@ class CleanFlaskIntegrationTest(unittest.TestCase):
 
             # Check mapping contains expected book data
             self.assertEqual(mapping['abs_id'], 'test-book-123')
-            self.assertEqual(mapping['abs_title'], 'Test Book')
+            self.assertEqual(mapping['title'], 'Test Book')
             self.assertEqual(mapping['ebook_filename'], 'test.epub')
             self.assertEqual(mapping['status'], 'active')
 
@@ -323,7 +324,7 @@ class CleanFlaskIntegrationTest(unittest.TestCase):
         from src.db.models import Book
         test_book = Book(
             abs_id='api-test-book-123',
-            abs_title='API Test Book',
+            title='API Test Book',
             ebook_filename='api-test.epub',
             kosync_doc_id='api-test-doc-id',
             status='active',
@@ -357,7 +358,7 @@ class CleanFlaskIntegrationTest(unittest.TestCase):
         from src.db.models import Book, State
         test_book = Book(
             abs_id='scale-test-123',
-            abs_title='Scale Test',
+            title='Scale Test',
             ebook_filename='scale.epub',
             kosync_doc_id='scale-doc',
             status='active'
@@ -428,7 +429,8 @@ class CleanFlaskIntegrationTest(unittest.TestCase):
 
             # Configure get_book_by_kosync_id to return None (no existing book to merge)
             self.mock_database_service.get_book_by_kosync_id.return_value = None
-            self.mock_database_service.get_book.return_value = None
+            self.mock_database_service.get_book_by_abs_id.return_value = None
+            self.mock_database_service.get_book_by_ref.return_value = None
 
             # Make HTTP POST request
             response = self.client.post('/match', data={
@@ -449,7 +451,7 @@ class CleanFlaskIntegrationTest(unittest.TestCase):
 
             # Verify the Book object has correct attributes
             self.assertEqual(saved_book.abs_id, 'test-audiobook-123')
-            self.assertEqual(saved_book.abs_title, 'Test Book Title')  # From mock manager
+            self.assertEqual(saved_book.title, 'Test Book Title')  # From mock manager
             self.assertEqual(saved_book.ebook_filename, 'test-book.epub')
             self.assertEqual(saved_book.kosync_doc_id, 'test-kosync-id')
             self.assertEqual(saved_book.status, 'pending')
@@ -471,13 +473,14 @@ class CleanFlaskIntegrationTest(unittest.TestCase):
         from src.db.models import Book
         test_book = Book(
             abs_id='clear-test-book',
-            abs_title='Clear Test Book',
+            title='Clear Test Book',
             ebook_filename='clear-test.epub',
             kosync_doc_id='clear-test-doc-id',
             status='active'
         )
+        test_book.id = 77
 
-        self.mock_database_service.get_book.return_value = test_book
+        self.mock_database_service.get_book_by_ref.return_value = test_book
 
         # Make HTTP request
         response = self.client.post('/clear-progress/clear-test-book')
@@ -491,9 +494,32 @@ class CleanFlaskIntegrationTest(unittest.TestCase):
             if self.mock_manager.clear_progress.call_count:
                 break
             time.sleep(0.01)
-        self.mock_manager.clear_progress.assert_called_once_with('clear-test-book')
+        self.mock_manager.clear_progress.assert_called_once_with(77)
 
         print("[OK] Clear progress endpoint test passed with clean DI")
+
+    def test_clear_progress_endpoint_accepts_numeric_book_ref(self):
+        """Numeric book IDs should resolve through the compatibility helper."""
+        from src.db.models import Book
+        test_book = Book(
+            abs_id='clear-test-book',
+            title='Clear Test Book',
+            ebook_filename='clear-test.epub',
+            kosync_doc_id='clear-test-doc-id',
+            status='active'
+        )
+        test_book.id = 77
+        self.mock_database_service.get_book_by_ref.return_value = test_book
+
+        response = self.client.post('/clear-progress/77')
+
+        self.assertEqual(response.status_code, 302)
+        for _ in range(20):
+            if self.mock_manager.clear_progress.call_count:
+                break
+            time.sleep(0.01)
+        self.mock_database_service.get_book_by_ref.assert_called_with('77')
+        self.mock_manager.clear_progress.assert_called_with(77)
 
     def test_settings_endpoint_clean_di(self):
         """Test settings endpoint with clean dependency injection."""
@@ -613,8 +639,8 @@ class CleanFlaskIntegrationTest(unittest.TestCase):
             self.mock_database_service.save_book.assert_called_once()
 
             saved_book = self.mock_database_service.save_book.call_args[0][0]
-            self.assertTrue(saved_book.abs_id.startswith('ebook-'))
-            self.assertEqual(saved_book.abs_title, 'Test Ebook Title')
+            self.assertIsNone(saved_book.abs_id)
+            self.assertEqual(saved_book.title, 'Test Ebook Title')
             self.assertEqual(saved_book.ebook_filename, 'test-ebook.epub')
             self.assertEqual(saved_book.kosync_doc_id, 'abcdef1234567890aabbccdd')
             self.assertEqual(saved_book.status, 'not_started')
@@ -635,13 +661,14 @@ class CleanFlaskIntegrationTest(unittest.TestCase):
         from src.db.models import Book
         existing_book = Book(
             abs_id='audio-book-456',
-            abs_title='Existing Audio Book',
+            title='Existing Audio Book',
             ebook_filename=None,
             kosync_doc_id=None,
             status='active',
             sync_mode='audiobook',
         )
-        self.mock_database_service.get_book.return_value = existing_book
+        self.mock_database_service.get_book_by_abs_id.return_value = existing_book
+        self.mock_database_service.get_book_by_ref.return_value = existing_book
         self.mock_booklore_client.is_configured.return_value = False
 
         try:
@@ -669,13 +696,14 @@ class CleanFlaskIntegrationTest(unittest.TestCase):
         from src.db.models import Book
         ebook_book = Book(
             abs_id='ebook-abc123',
-            abs_title='Ebook Only Book',
+            title='Ebook Only Book',
             ebook_filename='mybook.epub',
             kosync_doc_id='ebook-hash-123',
             status='active',
             sync_mode='ebook_only',
         )
-        self.mock_database_service.get_book.return_value = ebook_book
+        self.mock_database_service.get_book_by_abs_id.return_value = ebook_book
+        self.mock_database_service.get_book_by_ref.return_value = ebook_book
 
         # Configure mock sync_clients to return a dict with .get() support
         mock_hardcover = Mock(is_configured=Mock(return_value=False))
@@ -711,7 +739,7 @@ class CleanFlaskIntegrationTest(unittest.TestCase):
         self.assertEqual(saved_book.sync_mode, 'audiobook')
 
         self.mock_database_service.migrate_book_data.assert_called_once_with('ebook-abc123', 'real-audiobook-789')
-        self.mock_database_service.delete_book.assert_called_once_with('ebook-abc123')
+        self.mock_database_service.delete_book.assert_called_once_with(None)
         self.mock_abs_client.add_to_collection.assert_called_once()
 
         print("[OK] Attach audiobook test passed")
@@ -737,8 +765,8 @@ class CleanFlaskIntegrationTest(unittest.TestCase):
             self.mock_database_service.save_book.assert_called_once()
 
             saved_book = self.mock_database_service.save_book.call_args[0][0]
-            self.assertTrue(saved_book.abs_id.startswith('ebook-'))
-            self.assertEqual(saved_book.abs_title, 'Combo Book')
+            self.assertIsNone(saved_book.abs_id)
+            self.assertEqual(saved_book.title, 'Combo Book')
             self.assertEqual(saved_book.ebook_filename, 'combo-ebook.epub')
             self.assertEqual(saved_book.kosync_doc_id, 'abcdef1234567890aabbccdd')
             self.assertEqual(saved_book.storyteller_uuid, 'st-uuid-combo-123')
@@ -750,8 +778,6 @@ class CleanFlaskIntegrationTest(unittest.TestCase):
 
     def test_storyteller_only_match(self):
         """Test Storyteller-only import creates book with synthetic ID and no ebook."""
-        import hashlib
-
         response = self.client.post('/match', data={
             'storyteller_uuid': 'st-uuid-only-456',
             'storyteller_title': 'My Storyteller Book',
@@ -762,9 +788,8 @@ class CleanFlaskIntegrationTest(unittest.TestCase):
         self.mock_database_service.save_book.assert_called_once()
 
         saved_book = self.mock_database_service.save_book.call_args[0][0]
-        expected_hash = hashlib.md5(b'st-uuid-only-456').hexdigest()[:16]
-        self.assertEqual(saved_book.abs_id, f'ebook-{expected_hash}')
-        self.assertEqual(saved_book.abs_title, 'My Storyteller Book')
+        self.assertIsNone(saved_book.abs_id)
+        self.assertEqual(saved_book.title, 'My Storyteller Book')
         self.assertIsNone(saved_book.ebook_filename)
         self.assertIsNone(saved_book.kosync_doc_id)
         self.assertEqual(saved_book.storyteller_uuid, 'st-uuid-only-456')

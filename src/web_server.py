@@ -40,10 +40,12 @@ def _reconfigure_logging():
 def apply_settings(app):
     """Hot-reload settings that don't propagate automatically via os.environ.
 
-    Handles the three edge cases that previously required a full server restart:
+    Handles the five edge cases that previously required a full server restart:
     1. LOG_LEVEL — reconfigure the root logger
     2. SYNC_PERIOD_MINS — clear and re-register the schedule job
     3. ABS Socket.IO listener — start/stop/restart to match current config
+    4. Refresh config values that blueprints read from app.config
+    5. Telegram logging handler — add/remove/update handler to match current config
     """
     errors = []
 
@@ -74,6 +76,13 @@ def apply_settings(app):
     # 4. Refresh config values that blueprints read from app.config
     app.config['ABS_COLLECTION_NAME'] = os.environ.get('ABS_COLLECTION_NAME', 'Synced with KOReader')
     app.config['SUGGESTIONS_ENABLED'] = os.environ.get('SUGGESTIONS_ENABLED', 'false').lower() == 'true'
+
+    # 5. Reconcile Telegram logging handler state
+    try:
+        from src.utils.logging_utils import reconcile_telegram_logging
+        reconcile_telegram_logging()
+    except Exception as e:
+        errors.append(f"telegram logging reconciliation failed: {e}")
 
     if errors:
         error_message = "; ".join(errors)
@@ -267,6 +276,10 @@ def inject_global_vars():
             - get_bool (callable): get_bool(key) returns `True` if get_val(key, 'false')
               yields a case-insensitive value in ('true', '1', 'yes', 'on'), `False` otherwise.
     """
+    pagekeeper_env = os.environ.get('PAGEKEEPER_ENV', '').strip().lower()
+    is_dev_container = pagekeeper_env == 'dev'
+    title_prefix = '[DEV] ' if is_dev_container else ''
+
     def get_val(key, default_val=None):
         if key in os.environ: return os.environ[key]
         DEFAULTS = {
@@ -334,6 +347,9 @@ def inject_global_vars():
     return dict(
         abs_server=os.environ.get("ABS_SERVER", ""),
         booklore_server=os.environ.get("BOOKLORE_SERVER", ""),
+        pagekeeper_env=pagekeeper_env,
+        is_dev_container=is_dev_container,
+        title_prefix=title_prefix,
         get_val=get_val,
         get_bool=get_bool,
         get_header_service_url=get_header_service_url,

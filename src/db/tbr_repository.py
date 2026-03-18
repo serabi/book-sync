@@ -1,9 +1,13 @@
 """Repository for TBR (To Be Read) list management."""
 
+import logging
+
 from sqlalchemy import func
 
 from .base_repository import BaseRepository
 from .models import TbrItem
+
+logger = logging.getLogger(__name__)
 
 # Fields that can be passed to add/update — keeps validation in one place.
 ENRICHMENT_FIELDS = (
@@ -37,11 +41,10 @@ class TbrRepository(BaseRepository):
                      source='manual', hardcover_book_id=None, hardcover_slug=None,
                      ol_work_key=None, isbn=None,
                      hardcover_list_id=None, hardcover_list_name=None,
-                     book_abs_id=None, **enrichment):
+                     book_abs_id=None, book_id=None, **enrichment):
         """Add a TBR item, deduplicating by hardcover_book_id or ol_work_key.
 
         Returns (item, created) tuple — created=False if duplicate found.
-        Dedup check and insert run in a single session to avoid race conditions.
         Extra keyword arguments matching ENRICHMENT_FIELDS are stored on the item.
         """
         with self.get_session() as session:
@@ -70,7 +73,7 @@ class TbrRepository(BaseRepository):
                 source=source, hardcover_book_id=hardcover_book_id,
                 hardcover_slug=hardcover_slug, ol_work_key=ol_work_key, isbn=isbn,
                 hardcover_list_id=hardcover_list_id, hardcover_list_name=hardcover_list_name,
-                book_abs_id=book_abs_id, **extras,
+                book_abs_id=book_abs_id, book_id=book_id, **extras,
             )
             session.add(item)
             session.flush()
@@ -99,13 +102,14 @@ class TbrRepository(BaseRepository):
         """Remove a TBR item. Returns True if deleted."""
         return self._delete_one(TbrItem, TbrItem.id == item_id)
 
-    def link_tbr_to_book(self, item_id, abs_id):
-        """Set book_abs_id on a TBR item (linking it to an owned book)."""
+    def link_tbr_to_book(self, item_id, book_id, book_abs_id=None):
+        """Set book_id on a TBR item (linking it to an owned book)."""
         with self.get_session() as session:
             item = session.query(TbrItem).filter(TbrItem.id == item_id).first()
             if not item:
                 return None
-            item.book_abs_id = abs_id
+            item.book_id = book_id
+            item.book_abs_id = book_abs_id
             session.flush()
             session.refresh(item)
             session.expunge(item)
@@ -120,22 +124,47 @@ class TbrRepository(BaseRepository):
         with self.get_session() as session:
             return session.query(func.count(TbrItem.id)).scalar()
 
+    def find_by_book_id(self, book_id):
+        """Find a TBR item linked to a given library book."""
+        return self._get_one(TbrItem, TbrItem.book_id == book_id)
+
     def find_by_abs_id(self, abs_id):
-        """Find a TBR item linked to a given library book abs_id."""
+        """Find a TBR item linked to a given abs_id (legacy)."""
         return self._get_one(TbrItem, TbrItem.book_abs_id == abs_id)
 
+    def delete_by_book_id(self, book_id):
+        """Delete any TBR items linked to the given book_id. Returns count deleted."""
+        with self.get_session() as session:
+            count = session.query(TbrItem).filter(TbrItem.book_id == book_id).delete()
+            return count
+
     def delete_by_abs_id(self, abs_id):
-        """Delete any TBR items linked to the given abs_id. Returns count deleted."""
+        """Delete any TBR items linked to the given abs_id (legacy). Returns count deleted."""
         with self.get_session() as session:
             count = session.query(TbrItem).filter(TbrItem.book_abs_id == abs_id).delete()
             return count
 
     def get_unlinked_items(self):
-        """Return TBR items where book_abs_id is NULL (not linked to a library book)."""
+        """Return TBR items where book_id is NULL (not linked to a library book)."""
         with self.get_session() as session:
             items = session.query(TbrItem).filter(
-                TbrItem.book_abs_id.is_(None)
+                TbrItem.book_id.is_(None)
             ).all()
             for item in items:
                 session.expunge(item)
             return items
+
+    def auto_link_by_title(self, book):
+        """Auto-link unlinked TBR items by normalized title match."""
+        try:
+            unlinked = self.get_unlinked_items()
+            if not unlinked:
+                return
+            norm_title = book.title.lower().strip()
+            for item in unlinked:
+                if item.title and item.title.lower().strip() == norm_title:
+                    self.link_tbr_to_book(item.id, book.id, book_abs_id=book.abs_id)
+                    logger.info(f"Auto-linked TBR item '{item.title}' to book {book.id}")
+                    break
+        except Exception as e:
+            logger.warning(f"TBR auto-link failed: {e}")

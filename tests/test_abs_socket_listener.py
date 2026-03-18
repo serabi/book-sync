@@ -28,17 +28,18 @@ class TestABSSocketListenerDebounce(unittest.TestCase):
         # Override debounce window to 1s for fast tests
         self.listener._debounce_window = 1
 
-    def _make_active_book(self, abs_id: str, title: str = "Test Book"):
+    def _make_active_book(self, abs_id: str, title: str = "Test Book", book_id: int = 1):
         book = MagicMock()
+        book.id = book_id
         book.abs_id = abs_id
-        book.abs_title = title
+        book.title = title
         book.status = "active"
         return book
 
     def test_ignores_non_active_books(self):
         """Events for books not in DB or not active should be ignored."""
         # Book not in DB
-        self.mock_db.get_book.return_value = None
+        self.mock_db.get_book_by_abs_id.return_value = None
         self.listener._handle_progress_event({"id": "prog-1", "data": {"libraryItemId": "unknown-id"}})
 
         self.assertEqual(len(self.listener._pending), 0)
@@ -46,7 +47,7 @@ class TestABSSocketListenerDebounce(unittest.TestCase):
         # Book exists but not active
         inactive = self._make_active_book("inactive-id")
         inactive.status = "pending"
-        self.mock_db.get_book.return_value = inactive
+        self.mock_db.get_book_by_abs_id.return_value = inactive
         self.listener._handle_progress_event({"id": "prog-2", "data": {"libraryItemId": "inactive-id"}})
 
         self.assertEqual(len(self.listener._pending), 0)
@@ -54,7 +55,7 @@ class TestABSSocketListenerDebounce(unittest.TestCase):
     def test_records_active_book_event(self):
         """Events for active books should be recorded in pending dict."""
         book = self._make_active_book("book-1")
-        self.mock_db.get_book.return_value = book
+        self.mock_db.get_book_by_abs_id.return_value = book
 
         self.listener._handle_progress_event({"id": "prog-3", "data": {"libraryItemId": "book-1"}})
 
@@ -63,7 +64,7 @@ class TestABSSocketListenerDebounce(unittest.TestCase):
     def test_debounce_does_not_fire_before_window(self):
         """Sync should NOT fire if debounce window hasn't elapsed."""
         book = self._make_active_book("book-2")
-        self.mock_db.get_book.return_value = book
+        self.mock_db.get_book_by_abs_id.return_value = book
 
         self.listener._handle_progress_event({"id": "prog-4", "data": {"libraryItemId": "book-2"}})
         self.listener._check_and_fire()
@@ -72,8 +73,8 @@ class TestABSSocketListenerDebounce(unittest.TestCase):
 
     def test_debounce_fires_after_window(self):
         """Sync SHOULD fire after debounce window elapses."""
-        book = self._make_active_book("book-3", "Debounce Test")
-        self.mock_db.get_book.return_value = book
+        book = self._make_active_book("book-3", "Debounce Test", book_id=3)
+        self.mock_db.get_book_by_abs_id.return_value = book
 
         self.listener._handle_progress_event({"id": "prog-5", "data": {"libraryItemId": "book-3"}})
 
@@ -83,12 +84,12 @@ class TestABSSocketListenerDebounce(unittest.TestCase):
 
         # Give the daemon thread a moment
         time.sleep(0.1)
-        self.mock_sync.sync_cycle.assert_called_once_with(target_abs_id="book-3")
+        self.mock_sync.sync_cycle.assert_called_once_with(target_book_id=3)
 
     def test_no_double_fire(self):
         """Same event should not trigger sync twice."""
         book = self._make_active_book("book-4")
-        self.mock_db.get_book.return_value = book
+        self.mock_db.get_book_by_abs_id.return_value = book
 
         self.listener._pending["book-4"] = time.time() - 2
         self.listener._check_and_fire()
@@ -105,7 +106,7 @@ class TestABSSocketListenerDebounce(unittest.TestCase):
     def test_new_event_after_fire_retriggers(self):
         """A new event after sync fired should start a fresh debounce."""
         book = self._make_active_book("book-5")
-        self.mock_db.get_book.return_value = book
+        self.mock_db.get_book_by_abs_id.return_value = book
 
         # First event + fire
         self.listener._pending["book-5"] = time.time() - 2
@@ -126,7 +127,7 @@ class TestABSSocketListenerDebounce(unittest.TestCase):
     def test_handles_nested_data_format(self):
         """Should handle the real ABS event format: {id, sessionId, data: {libraryItemId}}."""
         book = self._make_active_book("nested-id")
-        self.mock_db.get_book.return_value = book
+        self.mock_db.get_book_by_abs_id.return_value = book
 
         self.listener._handle_progress_event({
             "id": "34621755-32df-4876-b235-abc123",
@@ -139,7 +140,7 @@ class TestABSSocketListenerDebounce(unittest.TestCase):
     def test_handles_top_level_library_item_id(self):
         """Should handle older ABS format with top-level libraryItemId."""
         book = self._make_active_book("top-level-id")
-        self.mock_db.get_book.return_value = book
+        self.mock_db.get_book_by_abs_id.return_value = book
 
         self.listener._handle_progress_event({"libraryItemId": "top-level-id"})
         self.assertIn("top-level-id", self.listener._pending)
@@ -148,7 +149,7 @@ class TestABSSocketListenerDebounce(unittest.TestCase):
         """Should silently ignore events with no libraryItemId."""
         self.listener._handle_progress_event({"someOtherField": "value"})
         self.assertEqual(len(self.listener._pending), 0)
-        self.mock_db.get_book.assert_not_called()
+        self.mock_db.get_book_by_abs_id.assert_not_called()
 
     def test_url_stripping(self):
         """Server URL should strip trailing /api for socket connection."""
@@ -217,7 +218,7 @@ class TestKosyncPutInstantSync(unittest.TestCase):
         try:
             mock_book = MagicMock()
             mock_book.abs_id = "test-instant-sync"
-            mock_book.abs_title = "Instant Sync Book"
+            mock_book.title = "Instant Sync Book"
             mock_book.status = "active"
             mock_book.kosync_doc_id = "x" * 32
 
@@ -227,7 +228,7 @@ class TestKosyncPutInstantSync(unittest.TestCase):
             mock_doc.device_id = "D1"
 
             mock_db.get_kosync_document.return_value = mock_doc
-            mock_db.get_book.return_value = mock_book
+            mock_db.get_book_by_abs_id.return_value = mock_book
             mock_db.get_book_by_kosync_id.return_value = None
 
             with self._make_put_context('x' * 32):
@@ -260,7 +261,7 @@ class TestKosyncPutInstantSync(unittest.TestCase):
         try:
             mock_book = MagicMock()
             mock_book.abs_id = "test-disabled"
-            mock_book.abs_title = "Disabled Book"
+            mock_book.title = "Disabled Book"
             mock_book.status = "active"
             mock_book.kosync_doc_id = "d" * 32
 
@@ -270,7 +271,7 @@ class TestKosyncPutInstantSync(unittest.TestCase):
             mock_doc.device_id = "D1"
 
             mock_db.get_kosync_document.return_value = mock_doc
-            mock_db.get_book.return_value = mock_book
+            mock_db.get_book_by_abs_id.return_value = mock_book
             mock_db.get_book_by_kosync_id.return_value = None
 
             with self._make_put_context('d' * 32):
@@ -297,7 +298,7 @@ class TestKosyncPutInstantSync(unittest.TestCase):
         try:
             mock_book = MagicMock()
             mock_book.abs_id = "test-inactive"
-            mock_book.abs_title = "Inactive Book"
+            mock_book.title = "Inactive Book"
             mock_book.status = "pending"
 
             mock_doc = MagicMock()
@@ -306,7 +307,7 @@ class TestKosyncPutInstantSync(unittest.TestCase):
             mock_doc.device_id = "D1"
 
             mock_db.get_kosync_document.return_value = mock_doc
-            mock_db.get_book.return_value = mock_book
+            mock_db.get_book_by_abs_id.return_value = mock_book
             mock_db.get_book_by_kosync_id.return_value = None
 
             with self._make_put_context('y' * 32):

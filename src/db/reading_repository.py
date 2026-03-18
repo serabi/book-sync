@@ -6,14 +6,14 @@ from .base_repository import BaseRepository
 from .models import Book, BookfusionHighlight, ReadingGoal, ReadingJournal
 
 VALID_JOURNAL_EVENTS = {'started', 'progress', 'finished', 'paused', 'dnf', 'resumed', 'note', 'highlight'}
-BOOKFUSION_IMPORT_PREFIX = "📖 "
-BOOKFUSION_ENTRY_SPLIT = "\n— "
+BOOKFUSION_IMPORT_PREFIX = "\U0001f4d6 "
+BOOKFUSION_ENTRY_SPLIT = "\n\u2014 "
 BOOKFUSION_CHAPTER_PREFIX = re.compile(r'^#{1,6}\s*')
 
 
 class ReadingRepository(BaseRepository):
 
-    def update_book_reading_fields(self, abs_id, **kwargs):
+    def update_book_reading_fields(self, book_id, **kwargs):
         """Update reading-specific fields on a book (started_at, finished_at, rating, read_count)."""
         allowed = {'started_at', 'finished_at', 'rating', 'read_count'}
         rating = kwargs.get('rating')
@@ -23,7 +23,7 @@ class ReadingRepository(BaseRepository):
         if read_count is not None and read_count < 1:
             raise ValueError("read_count must be >= 1")
         with self.get_session() as session:
-            book = session.query(Book).filter(Book.abs_id == abs_id).first()
+            book = session.query(Book).filter(Book.id == book_id).first()
             if not book:
                 return None
             for key, value in kwargs.items():
@@ -34,23 +34,26 @@ class ReadingRepository(BaseRepository):
             session.expunge(book)
             return book
 
-    def get_reading_journals(self, abs_id):
+    def get_reading_journals(self, book_id):
         return self._get_all(
             ReadingJournal,
-            ReadingJournal.abs_id == abs_id,
+            ReadingJournal.book_id == book_id,
             order_by=ReadingJournal.created_at.desc(),
         )
 
     def get_reading_journal(self, journal_id):
         return self._get_one(ReadingJournal, ReadingJournal.id == journal_id)
 
-    def add_reading_journal(self, abs_id, event, entry=None, percentage=None, created_at=None):
+    def add_reading_journal(self, book_id, event, entry=None, percentage=None,
+                            created_at=None, abs_id=None):
+        """Add a journal entry using book_id directly."""
         if event not in VALID_JOURNAL_EVENTS:
             raise ValueError(f"event must be one of {VALID_JOURNAL_EVENTS}")
         if percentage is not None and not (0.0 <= percentage <= 1.0):
             raise ValueError("percentage must be between 0.0 and 1.0")
         return self._save_new(
-            ReadingJournal(abs_id=abs_id, event=event, entry=entry, percentage=percentage, created_at=created_at)
+            ReadingJournal(book_id=book_id, abs_id=abs_id or '', event=event,
+                           entry=entry, percentage=percentage, created_at=created_at)
         )
 
     def update_reading_journal(self, journal_id, *, entry=None, created_at=None):
@@ -67,18 +70,18 @@ class ReadingRepository(BaseRepository):
             session.expunge(journal)
             return journal
 
-    def find_journal_by_event(self, abs_id, event):
+    def find_journal_by_event(self, book_id, event):
         """Find the most recent journal entry for a book with a given event type."""
         with self.get_session() as session:
             journal = session.query(ReadingJournal).filter(
-                ReadingJournal.abs_id == abs_id,
+                ReadingJournal.book_id == book_id,
                 ReadingJournal.event == event,
             ).order_by(ReadingJournal.created_at.desc()).first()
             if journal:
                 session.expunge(journal)
             return journal
 
-    def cleanup_bookfusion_import_notes(self, abs_id=None):
+    def cleanup_bookfusion_import_notes(self, book_id=None):
         """Strip the legacy emoji prefix and backfill timestamps when a cached highlight matches."""
         def _normalize_entry(entry):
             if not entry:
@@ -86,7 +89,7 @@ class ReadingRepository(BaseRepository):
             text = entry
             if text.startswith(BOOKFUSION_IMPORT_PREFIX):
                 text = text[len(BOOKFUSION_IMPORT_PREFIX):]
-            elif text.startswith('📖'):
+            elif text.startswith('\U0001f4d6'):
                 text = text[1:].lstrip()
 
             quote, chapter = text, ''
@@ -104,25 +107,25 @@ class ReadingRepository(BaseRepository):
             journal_query = session.query(ReadingJournal).filter(
                 ReadingJournal.event.in_(('note', 'highlight')),
                 ReadingJournal.entry.is_not(None),
-                (ReadingJournal.entry.startswith(BOOKFUSION_IMPORT_PREFIX) | ReadingJournal.entry.startswith('📖')),
+                (ReadingJournal.entry.startswith(BOOKFUSION_IMPORT_PREFIX) | ReadingJournal.entry.startswith('\U0001f4d6')),
             )
-            if abs_id:
-                journal_query = journal_query.filter(ReadingJournal.abs_id == abs_id)
+            if book_id:
+                journal_query = journal_query.filter(ReadingJournal.book_id == book_id)
             journals = journal_query.order_by(ReadingJournal.id.asc()).all()
             if not journals:
                 return {'entries_cleaned': 0, 'timestamps_backfilled': 0}
 
             highlight_query = session.query(BookfusionHighlight).filter(
-                BookfusionHighlight.matched_abs_id.is_not(None)
+                BookfusionHighlight.matched_book_id.is_not(None)
             )
-            if abs_id:
-                highlight_query = highlight_query.filter(BookfusionHighlight.matched_abs_id == abs_id)
+            if book_id:
+                highlight_query = highlight_query.filter(BookfusionHighlight.matched_book_id == book_id)
             highlights = highlight_query.all()
 
             highlight_map = {}
             for hl in highlights:
                 key = (
-                    hl.matched_abs_id,
+                    hl.matched_book_id,
                     *_normalize_highlight(hl.quote_text or hl.content, hl.chapter_heading),
                 )
                 if not key[1]:
@@ -145,7 +148,7 @@ class ReadingRepository(BaseRepository):
                     journal.entry = cleaned_entry
                     entries_cleaned += 1
 
-                key = (journal.abs_id, quote, chapter)
+                key = (journal.book_id, quote, chapter)
                 if quote and key in highlight_map and highlight_map[key]:
                     highlighted_at = highlight_map[key].pop(0)
                     if journal.event != 'highlight':

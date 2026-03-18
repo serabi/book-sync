@@ -66,14 +66,14 @@ class StatusMachine:
         self.database_service.save_book(book)
 
         # Journal entry
-        self._record_journal(book.abs_id, new_status, old_status, source, container)
+        self._record_journal(book, new_status, old_status, source, container)
 
         # Date filling
         self._fill_dates(book, new_status, old_status, source, container, dates)
 
         if new_status in ('active', 'paused', 'dnf', 'completed'):
             logger.info(f"Book status changed to '{new_status}': "
-                        f"'{sanitize_log_data(book.abs_title or book.abs_id)}'")
+                        f"'{sanitize_log_data(book.title or book.abs_id)}'")
 
         # HC push
         if source in ('local', 'auto_complete') and container:
@@ -91,28 +91,28 @@ class StatusMachine:
 
     def _cleanup_tbr(self, book):
         """Remove any TBR item for this book, falling back to HC book ID lookup."""
-        deleted = self.database_service.delete_tbr_by_abs_id(book.abs_id)
+        deleted = self.database_service.delete_tbr_by_book_id(book.id)
         if not deleted:
-            hc = self.database_service.get_hardcover_details(book.abs_id)
+            hc = self.database_service.get_hardcover_details(book.id)
             if hc and hc.hardcover_book_id:
                 tbr = self.database_service.find_tbr_by_hardcover_id(int(hc.hardcover_book_id))
                 if tbr:
                     self.database_service.delete_tbr_item(tbr.id)
 
-    def _record_journal(self, abs_id, new_status, old_status, source, container):
+    def _record_journal(self, book, new_status, old_status, source, container):
         """Create journal entry for the transition."""
         if new_status == 'active':
             # Use old_status to decide: unread→started, anything else→resumed
             if old_status in ('not_started', 'unread'):
-                self.database_service.add_reading_journal(abs_id, event='started')
+                self.database_service.add_reading_journal(book.id, event='started', abs_id=book.abs_id)
             else:
-                self.database_service.add_reading_journal(abs_id, event='resumed')
+                self.database_service.add_reading_journal(book.id, event='resumed', abs_id=book.abs_id)
             return
 
         event = EVENT_MAP.get(new_status)
         if event:
             pct = 1.0 if event == 'finished' else None
-            self.database_service.add_reading_journal(abs_id, event=event, percentage=pct)
+            self.database_service.add_reading_journal(book.id, event=event, percentage=pct, abs_id=book.abs_id)
 
     def _fill_dates(self, book, new_status, old_status, source, container, dates):
         """Fill in started_at/finished_at based on the transition."""
@@ -120,29 +120,29 @@ class StatusMachine:
 
         if new_status == 'active':
             if not book.started_at:
-                updates['started_at'] = self._resolve_started_at(book.abs_id, container, dates)
+                updates['started_at'] = self._resolve_started_at(book.id, container, dates)
         elif new_status == 'completed':
             if not book.finished_at:
                 updates['finished_at'] = (dates or {}).get('finished_at') or date.today().isoformat()
                 if not book.started_at:
-                    updates['started_at'] = self._resolve_started_at(book.abs_id, container, dates)
+                    updates['started_at'] = self._resolve_started_at(book.id, container, dates)
             else:
                 # Re-read — increment read count
                 updates['read_count'] = (book.read_count or 1) + 1
 
         if updates:
-            self.database_service.update_book_reading_fields(book.abs_id, **updates)
+            self.database_service.update_book_reading_fields(book.id, **updates)
 
-    def _resolve_started_at(self, abs_id, container, dates):
+    def _resolve_started_at(self, book_id, container, dates):
         """Get started_at from provided dates, external pull, or today."""
         if dates and dates.get('started_at'):
             return dates['started_at']
         if container:
             try:
-                pulled = container.reading_date_service().pull_reading_dates(abs_id)
+                pulled = container.reading_date_service().pull_reading_dates(book_id)
                 return pulled.get('started_at', date.today().isoformat())
             except Exception as e:
-                logger.debug("Could not pull started_at for %s: %s", abs_id, e)
+                logger.debug("Could not pull started_at for book_id=%s: %s", book_id, e)
         return date.today().isoformat()
 
     def _push_to_hardcover(self, book, new_status, container):

@@ -237,7 +237,7 @@ function initDashboard() {
             .then(data => {
                 if (!data || !data.mappings) return;
                 data.mappings.forEach(book => {
-                    const card = document.querySelector(`.book-card[data-abs-id="${CSS.escape(book.abs_id)}"]`);
+                    const card = document.querySelector(`.book-card[data-book-id="${CSS.escape(String(book.id))}"]`);
                     if (!card) return;
 
                     const progressPercent = card.querySelector('.progress-percent');
@@ -332,9 +332,9 @@ function initDashboard() {
 
                 let anyStillProcessing = false;
                 let shouldReload = false;
-                for (const absId of ids) {
-                    const info = data[absId];
-                    const card = processingSection.querySelector(`.book-card[data-abs-id="${CSS.escape(absId)}"]`);
+                for (const bookId of ids) {
+                    const info = data[bookId];
+                    const card = processingSection.querySelector(`.book-card[data-book-id="${CSS.escape(bookId)}"]`);
                     if (!card) continue;
 
                     const cardStatus = card.dataset.status;
@@ -359,7 +359,7 @@ function initDashboard() {
                 if (!shouldReload) {
                     const processingCards = processingSection.querySelectorAll('.book-card');
                     for (const card of processingCards) {
-                        if (!data[card.dataset.absId]) {
+                        if (!data[card.dataset.bookId]) {
                             shouldReload = true;
                             break;
                         }
@@ -386,7 +386,7 @@ function initDashboard() {
 function updateKoSyncHash(event) {
     event.stopPropagation();
     const item = event.currentTarget;
-    const absId = item.dataset.absId;
+    const bookId = item.dataset.bookId;
     const title = item.dataset.title;
     const currentHash = item.dataset.hash;
 
@@ -396,7 +396,7 @@ function updateKoSyncHash(event) {
     if (input !== null) {
         const form = document.createElement('form');
         form.method = 'POST';
-        form.action = `/update-hash/${encodeURIComponent(absId)}`;
+        form.action = `/update-hash/${encodeURIComponent(bookId)}`;
         const inputField = document.createElement('input');
         inputField.type = 'hidden';
         inputField.name = 'new_hash';
@@ -408,12 +408,12 @@ function updateKoSyncHash(event) {
     }
 }
 
-function syncNow(absId, btn) {
+function syncNow(bookId, btn) {
     btn.disabled = true;
     const originalText = btn.textContent;
     btn.textContent = "...";
 
-    fetch('/api/sync-now/' + encodeURIComponent(absId), {
+    fetch('/api/sync-now/' + encodeURIComponent(bookId), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
     }).then(response => response.json())
@@ -447,12 +447,12 @@ function syncNow(absId, btn) {
             }, 2000);
         });
 }
-function pauseBook(absId, btn) {
+function pauseBook(bookId, btn) {
     btn.disabled = true;
     const originalText = btn.textContent;
     btn.textContent = "...";
 
-    fetch('/api/pause/' + encodeURIComponent(absId), {
+    fetch('/api/pause/' + encodeURIComponent(bookId), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
     }).then(response => response.json())
@@ -477,7 +477,7 @@ function pauseBook(absId, btn) {
         });
 }
 
-function addToWantToRead(absId, btn) {
+function addToWantToRead(bookId, btn) {
     btn.disabled = true;
     const originalText = btn.textContent;
     btn.textContent = "...";
@@ -486,7 +486,7 @@ function addToWantToRead(absId, btn) {
     fetch('/api/reading/tbr/from-library', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ abs_id: absId })
+        body: JSON.stringify({ abs_id: bookId })
     }).then(response => response.json())
         .then(data => {
             if (data.success) {
@@ -514,12 +514,12 @@ function addToWantToRead(absId, btn) {
         });
 }
 
-function resumeBook(absId, btn) {
+function resumeBook(bookId, btn) {
     btn.disabled = true;
     const originalText = btn.textContent;
     btn.textContent = "...";
 
-    fetch('/api/resume/' + encodeURIComponent(absId), {
+    fetch('/api/resume/' + encodeURIComponent(bookId), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
     }).then(response => response.json())
@@ -544,13 +544,13 @@ function resumeBook(absId, btn) {
         });
 }
 
-function dnfBook(absId, title) {
+function dnfBook(bookId, title) {
     closeAllMenus();
     if (!confirm('Mark "' + title + '" as Did Not Finish? This book will be excluded from syncing.')) {
         return;
     }
 
-    fetch('/api/dnf/' + encodeURIComponent(absId), {
+    fetch('/api/dnf/' + encodeURIComponent(bookId), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
     }).then(response => response.json())
@@ -566,12 +566,12 @@ function dnfBook(absId, title) {
         });
 }
 
-function retryTranscription(absId, btn) {
+function retryTranscription(bookId, btn) {
     btn.disabled = true;
     const originalText = btn.textContent;
     btn.textContent = "...";
 
-    fetch('/api/retry-transcription/' + encodeURIComponent(absId), {
+    fetch('/api/retry-transcription/' + encodeURIComponent(bookId), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
     }).then(response => response.json())
@@ -596,12 +596,12 @@ function retryTranscription(absId, btn) {
         });
 }
 
-function markComplete(absId, title) {
+function markComplete(bookId, title) {
     closeAllMenus();
     if (!confirm('Are you sure you want to mark "' + title + '" as complete? This will set progress to 100% on all synced platforms.')) {
         return;
     }
-    window._mcAbsId = absId;
+    window._mcBookId = bookId;
     const modal = document.getElementById('delete-mapping-modal');
     if (modal) modal.style.display = 'flex';
 }
@@ -609,11 +609,11 @@ function markComplete(absId, title) {
 function closeDeleteMappingModal() {
     const modal = document.getElementById('delete-mapping-modal');
     if (modal) modal.style.display = 'none';
-    window._mcAbsId = null;
+    window._mcBookId = null;
 }
-function _dmExecuteFetch(absId, shouldDelete) {
+function _dmExecuteFetch(bookId, shouldDelete) {
     closeDeleteMappingModal();
-    fetch('/api/mark-complete/' + encodeURIComponent(absId), {
+    fetch('/api/mark-complete/' + encodeURIComponent(bookId), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ delete: shouldDelete })
@@ -621,7 +621,7 @@ function _dmExecuteFetch(absId, shouldDelete) {
         .then(data => {
             if (data.success) {
                 if (shouldDelete) {
-                    const cardElement = document.querySelector('.book-card[data-abs-id="' + CSS.escape(absId) + '"]');
+                    const cardElement = document.querySelector('.book-card[data-book-id="' + CSS.escape(bookId) + '"]');
                     if (cardElement) {
                         cardElement.remove();
                     } else {
@@ -639,8 +639,8 @@ function _dmExecuteFetch(absId, shouldDelete) {
         });
 }
 
-function _dmYesDelete() { _dmExecuteFetch(window._mcAbsId, true); }
-function _dmNoKeepMapping() { _dmExecuteFetch(window._mcAbsId, false); }
+function _dmYesDelete() { _dmExecuteFetch(window._mcBookId, true); }
+function _dmNoKeepMapping() { _dmExecuteFetch(window._mcBookId, false); }
 
 let _panelSourceMenu = null;
 

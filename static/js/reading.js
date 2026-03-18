@@ -435,7 +435,7 @@ function initReadingDetail() {
   // ── Rating stars (5 stars, half-star support) ──
   const rc = document.getElementById('rating-stars');
   if (rc) {
-    const absId = rc.dataset.absId;
+    const bookId = rc.dataset.bookId;
     const hardcoverSyncAvailable = rc.dataset.hardcoverSyncAvailable === 'true';
     const stars = rc.querySelectorAll('.r-star-btn');
     const label = document.getElementById('rating-label');
@@ -470,7 +470,7 @@ function initReadingDetail() {
     }
 
     function submitRating(value) {
-      fetch(`/api/reading/book/${absId}/rating`, {
+      fetch(`/api/reading/book/${bookId}/rating`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rating: value }),
@@ -548,7 +548,7 @@ function initReadingDetail() {
     input.addEventListener('change', () => {
       const payload = {};
       payload[field] = input.value || null;
-      fetch(`/api/reading/book/${input.dataset.absId}/dates`, {
+      fetch(`/api/reading/book/${input.dataset.bookId}/dates`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -602,7 +602,7 @@ function initReadingDetail() {
     hcSyncBtn.addEventListener('click', () => {
       hcSyncBtn.disabled = true;
       if (hcSyncStatus) { hcSyncStatus.hidden = true; }
-      fetch(`/api/reading/book/${hcSyncBtn.dataset.absId}/dates/sync-hardcover`, {
+      fetch(`/api/reading/book/${hcSyncBtn.dataset.bookId}/dates/sync-hardcover`, {
         method: 'POST',
       })
         .then(r => {
@@ -638,7 +638,7 @@ function initReadingDetail() {
     hcPullBtn.addEventListener('click', () => {
       hcPullBtn.disabled = true;
       if (hcPullStatus) { hcPullStatus.hidden = true; }
-      fetch(`/api/reading/book/${hcPullBtn.dataset.absId}/dates/pull-hardcover`, {
+      fetch(`/api/reading/book/${hcPullBtn.dataset.bookId}/dates/pull-hardcover`, {
         method: 'POST',
       })
         .then(r => {
@@ -686,7 +686,7 @@ function initReadingDetail() {
   // ── Journal ──
   const form = document.getElementById('journal-form');
   if (form) {
-    const absId = form.dataset.absId;
+    const bookId = form.dataset.bookId;
     const textarea = document.getElementById('journal-entry');
     const timeline = document.getElementById('journal-timeline');
     const submitBtn = document.getElementById('journal-submit');
@@ -707,7 +707,7 @@ function initReadingDetail() {
       const method = editJournalId ? 'PATCH' : 'POST';
       const url = editJournalId
         ? `/api/reading/journal/${editJournalId}`
-        : `/api/reading/book/${absId}/journal`;
+        : `/api/reading/book/${bookId}/journal`;
 
       fetch(url, {
         method,
@@ -1491,10 +1491,10 @@ function initTbrTab(hcConfigured) {
   document.querySelectorAll('.r-library-start-btn').forEach(btn => {
     btn.addEventListener('click', function(e) {
       e.stopPropagation();
-      const absId = this.dataset.absId;
+      const bookId = this.dataset.bookId;
       this.disabled = true;
       this.textContent = 'Starting...';
-      fetch('/api/reading/book/' + encodeURIComponent(absId) + '/status', {
+      fetch('/api/reading/book/' + encodeURIComponent(bookId) + '/status', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: 'active' }),
@@ -1502,7 +1502,7 @@ function initTbrTab(hcConfigured) {
         .then(r => r.json())
         .then(data => {
           if (data.success) {
-            window.location.href = '/reading/book/' + encodeURIComponent(absId);
+            window.location.href = '/reading/book/' + encodeURIComponent(bookId);
           } else {
             showToast(data.error || 'Failed to start reading');
             this.disabled = false;
@@ -1520,13 +1520,13 @@ function initTbrTab(hcConfigured) {
   document.querySelectorAll('.r-library-tbr-btn').forEach(btn => {
     btn.addEventListener('click', function(e) {
       e.stopPropagation();
-      const absId = this.dataset.absId;
+      const bookId = this.dataset.bookId;
       this.disabled = true;
       this.textContent = 'Adding...';
       fetch('/api/reading/tbr/from-library', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ abs_id: absId }),
+        body: JSON.stringify({ abs_id: bookId }),
       })
         .then(r => r.json())
         .then(data => {

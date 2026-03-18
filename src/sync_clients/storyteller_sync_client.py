@@ -127,7 +127,7 @@ class StorytellerSyncClient(SyncClient):
                     logger.debug(f"Write tracker not available for Storyteller: {e}")
         else:
             # Strict mode: Do not update if not linked via UUID
-            logger.debug(f"Skipping Storyteller update for {book.abs_title}: No linked UUID")
+            logger.debug(f"Skipping Storyteller update for {book.title}: No linked UUID")
             success = False
 
         return SyncResult(pct, success)

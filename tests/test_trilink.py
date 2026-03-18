@@ -34,7 +34,7 @@ class TestBookModelStorytellerUUID(unittest.TestCase):
 
         book = Book(
             abs_id='test-abs-123',
-            abs_title='Test Book',
+            title='Test Book',
             ebook_filename='test.epub',
             storyteller_uuid='abc-123-def-456'
         )
@@ -47,7 +47,7 @@ class TestBookModelStorytellerUUID(unittest.TestCase):
 
         book = Book(
             abs_id='test-abs-124',
-            abs_title='Test Book Without UUID'
+            title='Test Book Without UUID'
         )
 
         self.assertIsNone(book.storyteller_uuid)

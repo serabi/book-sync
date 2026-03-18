@@ -1,7 +1,7 @@
 """
 Alignment Service.
-Handles the core logic for aligning ebook text with audio transcriptions
-and storing the results in the database.
+Handles the core logic for aligning ebook text with audio transcriptions,
+cross-format position normalization, and storing results in the database.
 """
 
 import json
@@ -10,10 +10,135 @@ import re
 from datetime import datetime
 
 from src.db.models import Book, BookAlignment, Job
-from src.utils.logging_utils import time_execution
+from src.utils.logging_utils import sanitize_exception, time_execution
 from src.utils.polisher import Polisher
 
 logger = logging.getLogger(__name__)
+
+
+def normalize_for_cross_format_comparison(book, config, sync_clients, ebook_parser, alignment_service):
+    """Normalize positions for cross-format comparison (audiobook vs ebook).
+
+    When syncing between audiobook (ABS) and ebook clients (KoSync, etc.),
+    raw percentages are not comparable because:
+    - Audiobook % = time position / total duration
+    - Ebook % = text position / total text
+
+    These don't correlate linearly. This function converts ebook positions
+    to equivalent audiobook timestamps using text-matching, enabling
+    accurate comparison of "who is further in the story".
+
+    Args:
+        book: Book model instance
+        config: dict of {client_name: ServiceState}
+        sync_clients: dict of {client_name: SyncClient}
+        ebook_parser: EbookUtils instance for epub operations
+        alignment_service: AlignmentService instance (or None)
+
+    Returns:
+        dict of {client_name: normalized_value} for comparison, or None
+    """
+    has_abs = 'ABS' in config
+    ebook_clients = [k for k in config.keys() if k != 'ABS']
+
+    if not ebook_clients:
+        return None
+
+    if not has_abs:
+        # Ebook-only: normalize via character offsets in the shared EPUB
+        if not book.ebook_filename or len(ebook_clients) < 2:
+            return None
+        try:
+            book_path = ebook_parser.resolve_book_path(book.ebook_filename)
+            full_text, _ = ebook_parser.extract_text_and_map(book_path)
+            total_text_len = len(full_text)
+        except Exception as e:
+            logger.debug(f"'{book.abs_id}' Could not load ebook for normalization: {e}")
+            return None
+        if not total_text_len:
+            return None
+        normalized = {}
+        for client_name in ebook_clients:
+            client = sync_clients.get(client_name)
+            if not client:
+                continue
+            client_state = config[client_name]
+            client_pct = client_state.current.get('pct', 0)
+            try:
+                client_pct = max(0.0, min(1.0, float(client_pct)))
+            except (TypeError, ValueError):
+                client_pct = 0.0
+            try:
+                text_snippet = client.get_text_from_current_state(book, client_state)
+                if text_snippet:
+                    loc = ebook_parser.find_text_location(
+                        book.ebook_filename, text_snippet,
+                        hint_percentage=client_pct
+                    )
+                    if loc and loc.match_index is not None:
+                        normalized[client_name] = loc.match_index
+                        logger.debug(f"'{book.abs_id}' Normalized '{client_name}' {client_pct:.2%} -> char {loc.match_index}")
+                        continue
+            except Exception as e:
+                logger.debug(f"'{book.abs_id}' Text-based normalization failed for '{client_name}': {e}")
+            normalized[client_name] = int(client_pct * total_text_len)
+            logger.debug(f"'{book.abs_id}' Normalized '{client_name}' {client_pct:.2%} -> char {int(client_pct * total_text_len)} (pct fallback)")
+        return normalized if len(normalized) > 1 else None
+
+    # Audio + ebook path
+    if not book.transcript_file:
+        logger.debug(f"'{book.abs_id}' No transcript available for cross-format normalization")
+        return None
+
+    normalized = {}
+
+    abs_state = config['ABS']
+    abs_ts = abs_state.current.get('ts', 0)
+    normalized['ABS'] = abs_ts
+
+    for client_name in ebook_clients:
+        client = sync_clients.get(client_name)
+        if not client:
+            continue
+
+        client_state = config[client_name]
+        client_pct = client_state.current.get('pct', 0)
+        try:
+            client_pct = max(0.0, min(1.0, float(client_pct)))
+        except (TypeError, ValueError):
+            client_pct = 0.0
+
+        try:
+            book_path = ebook_parser.resolve_book_path(book.ebook_filename)
+            full_text, _ = ebook_parser.extract_text_and_map(book_path)
+            total_text_len = len(full_text)
+
+            char_offset = int(client_pct * total_text_len)
+            txt = full_text[max(0, char_offset - 400):min(total_text_len, char_offset + 400)]
+
+            if not txt:
+                logger.debug(f"'{book.abs_id}' Could not get text from '{client_name}' for normalization")
+                continue
+
+            if alignment_service:
+                ts_for_text = alignment_service.get_time_for_text(
+                    book.abs_id,
+                    char_offset_hint=char_offset
+                )
+            else:
+                ts_for_text = None
+
+            if ts_for_text is not None:
+                normalized[client_name] = ts_for_text
+                logger.debug(f"'{book.abs_id}' Normalized '{client_name}' {client_pct:.2%} -> {ts_for_text:.1f}s")
+            else:
+                logger.debug(f"'{book.abs_id}' Could not find timestamp for '{client_name}' text")
+        except Exception as e:
+            logger.warning(f"'{book.abs_id}' Cross-format normalization failed for '{client_name}': {sanitize_exception(e)}")
+
+    if len(normalized) > 1:
+        return normalized
+    return None
 
 class AlignmentService:
     def __init__(self, database_service, polisher: Polisher):
@@ -459,7 +584,7 @@ class AlignmentService:
                 book.status = 'pending'
             logger.info(f"Re-alignment queued for {abs_id}")
 
-    def _save_alignment(self, abs_id: str, alignment_map: list[dict], source: str = None):
+    def _save_alignment(self, abs_id: str, alignment_map: list[dict], source: str = None, book_id: int = None):
         """Upsert alignment to SQLite."""
         if not alignment_map:
             logger.warning(f"Refusing to save empty alignment map for {abs_id}")
@@ -476,7 +601,10 @@ class AlignmentService:
                 if source:
                     existing.source = source
             else:
-                new_align = BookAlignment(abs_id=abs_id, alignment_map_json=json_blob, source=source)
+                if book_id is None:
+                    book = self.database_service.get_book_by_abs_id(abs_id)
+                    book_id = book.id if book else None
+                new_align = BookAlignment(abs_id=abs_id, book_id=book_id, alignment_map_json=json_blob, source=source)
                 session.add(new_align)
 
             # Context manager handles commit

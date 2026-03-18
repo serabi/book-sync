@@ -33,7 +33,7 @@ class TestKoSyncXPathSafety(unittest.TestCase):
     def test_update_progress_falls_back_to_percentage_only_when_xpath_unrecoverable(self):
         self.ebook_parser.get_sentence_level_ko_xpath.return_value = None
         self.kosync_api.update_progress.return_value = True
-        book = SimpleNamespace(kosync_doc_id="doc-1", ebook_filename="book.epub", abs_title="Book")
+        book = SimpleNamespace(kosync_doc_id="doc-1", ebook_filename="book.epub", title="Book")
         locator = LocatorResult(percentage=0.42, xpath="bad-xpath")
         request = UpdateProgressRequest(locator_result=locator)
 
@@ -43,7 +43,7 @@ class TestKoSyncXPathSafety(unittest.TestCase):
         self.kosync_api.update_progress.assert_called_once_with("doc-1", 0.42, "")
 
     def test_update_progress_skips_when_no_percentage(self):
-        book = SimpleNamespace(kosync_doc_id="doc-5", ebook_filename="book.epub", abs_title="Book")
+        book = SimpleNamespace(kosync_doc_id="doc-5", ebook_filename="book.epub", title="Book")
         locator = LocatorResult(percentage=None, xpath=None)
         request = UpdateProgressRequest(locator_result=locator)
 
@@ -56,7 +56,7 @@ class TestKoSyncXPathSafety(unittest.TestCase):
     def test_update_progress_recovers_malformed_xpath_from_percentage(self):
         self.ebook_parser.get_sentence_level_ko_xpath.return_value = "/body/DocFragment[4]/body/p[1]/text().0"
         self.kosync_api.update_progress.return_value = True
-        book = SimpleNamespace(kosync_doc_id="doc-2", ebook_filename="book.epub", abs_title="Book")
+        book = SimpleNamespace(kosync_doc_id="doc-2", ebook_filename="book.epub", title="Book")
         locator = LocatorResult(percentage=0.73, xpath="bad-xpath")
         request = UpdateProgressRequest(locator_result=locator)
 
@@ -72,7 +72,7 @@ class TestKoSyncXPathSafety(unittest.TestCase):
     def test_update_progress_replaces_fragile_inline_xpath(self):
         self.ebook_parser.get_sentence_level_ko_xpath.return_value = "/body/DocFragment[24]/body/p[15]/text().0"
         self.kosync_api.update_progress.return_value = True
-        book = SimpleNamespace(kosync_doc_id="doc-4", ebook_filename="book.epub", abs_title="Book")
+        book = SimpleNamespace(kosync_doc_id="doc-4", ebook_filename="book.epub", title="Book")
         locator = LocatorResult(
             percentage=0.61,
             xpath="/body/DocFragment[24]/body/p[15]/span[2]/text().0",
@@ -91,7 +91,7 @@ class TestKoSyncXPathSafety(unittest.TestCase):
 
     def test_update_progress_clear_flow_forces_empty_xpath(self):
         self.kosync_api.update_progress.return_value = True
-        book = SimpleNamespace(kosync_doc_id="doc-3", ebook_filename="book.epub", abs_title="Book")
+        book = SimpleNamespace(kosync_doc_id="doc-3", ebook_filename="book.epub", title="Book")
         locator = LocatorResult(percentage=0.0, xpath="bad-xpath")
         request = UpdateProgressRequest(locator_result=locator)
 

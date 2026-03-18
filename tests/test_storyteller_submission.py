@@ -223,8 +223,8 @@ class TestStorytellerSubmission(unittest.TestCase):
 
         book = Mock()
         book.storyteller_uuid = None
-        book.abs_title = "Test Book"
-        self.mock_db.get_book.return_value = book
+        book.title = "Test Book"
+        self.mock_db.get_book_by_abs_id.return_value = book
 
         assert self.service.check_status("book-123") == "processing"
         self.mock_db.update_storyteller_submission_status.assert_called()
@@ -239,8 +239,8 @@ class TestStorytellerSubmission(unittest.TestCase):
 
         book = Mock()
         book.storyteller_uuid = None
-        book.abs_title = "Test Book"
-        self.mock_db.get_book.return_value = book
+        book.title = "Test Book"
+        self.mock_db.get_book_by_abs_id.return_value = book
 
         # Create fake transcription directory
         with tempfile.TemporaryDirectory() as assets_dir:
@@ -320,8 +320,8 @@ class TestStorytellerSubmission(unittest.TestCase):
 
         book = Mock()
         book.storyteller_uuid = "book-uuid-abc"
-        book.abs_title = "Test Book"
-        self.mock_db.get_book.return_value = book
+        book.title = "Test Book"
+        self.mock_db.get_book_by_abs_id.return_value = book
         self.mock_storyteller.is_configured.return_value = False
 
         self.service.check_status("book-123")
@@ -341,8 +341,8 @@ class TestStorytellerSubmission(unittest.TestCase):
 
         book = Mock()
         book.storyteller_uuid = None
-        book.abs_title = "Test Book"
-        self.mock_db.get_book.return_value = book
+        book.title = "Test Book"
+        self.mock_db.get_book_by_abs_id.return_value = book
         self.mock_storyteller.is_configured.return_value = False
 
         result = self.service.check_status("book-123")
@@ -362,8 +362,8 @@ class TestStorytellerSubmission(unittest.TestCase):
 
         book = Mock()
         book.storyteller_uuid = None
-        book.abs_title = "Bury Our Bones in the Midnight Soil"
-        self.mock_db.get_book.return_value = book
+        book.title = "Bury Our Bones in the Midnight Soil"
+        self.mock_db.get_book_by_abs_id.return_value = book
         self.mock_storyteller.is_configured.return_value = False
 
         with tempfile.TemporaryDirectory() as assets_dir:
@@ -388,8 +388,8 @@ class TestStorytellerSubmission(unittest.TestCase):
 
         book = Mock()
         book.storyteller_uuid = None
-        book.abs_title = "Test Book"
-        self.mock_db.get_book.return_value = book
+        book.title = "Test Book"
+        self.mock_db.get_book_by_abs_id.return_value = book
         self.mock_storyteller.is_configured.return_value = False
 
         with tempfile.TemporaryDirectory() as assets_dir:
@@ -413,8 +413,8 @@ class TestStorytellerSubmission(unittest.TestCase):
 
         book = Mock()
         book.storyteller_uuid = None
-        book.abs_title = "What If [Revised]"
-        self.mock_db.get_book.return_value = book
+        book.title = "What If [Revised]"
+        self.mock_db.get_book_by_abs_id.return_value = book
         self.mock_storyteller.is_configured.return_value = False
 
         with tempfile.TemporaryDirectory() as assets_dir:

@@ -129,6 +129,24 @@ class TelegramHandler(logging.Handler):
             logger.error(f"TelegramHandler failed to send message: {str(e)}")  # Never raise from logging
 
 
+telegram_log_handler = None
+
+
+def _remove_telegram_handlers():
+    """Remove any Telegram handlers from the root logger."""
+    root_logger = logging.getLogger()
+    removed = False
+    for handler in list(root_logger.handlers):
+        if isinstance(handler, TelegramHandler):
+            root_logger.removeHandler(handler)
+            try:
+                handler.close()
+            except Exception:
+                pass
+            removed = True
+    return removed
+
+
 def setup_telegram_logging():
     """Setup Telegram logging handler if environment variables are set."""
     bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
@@ -151,6 +169,15 @@ def setup_telegram_logging():
     root_logger = logging.getLogger()
     root_logger.addHandler(handler)
     return handler
+
+
+def reconcile_telegram_logging():
+    """Refresh Telegram logging to match current environment settings."""
+    global telegram_log_handler
+
+    _remove_telegram_handlers()
+    telegram_log_handler = setup_telegram_logging()
+    return telegram_log_handler
 
 
 _SECRET_ENV_VARS = ('KOSYNC_KEY', 'HARDCOVER_TOKEN', 'TELEGRAM_BOT_TOKEN')

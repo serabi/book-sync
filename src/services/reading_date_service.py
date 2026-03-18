@@ -33,7 +33,7 @@ class ReadingDateService:
         self.hardcover_client = hardcover_client
         self.abs_client = abs_client
 
-    def pull_reading_dates(self, abs_id):
+    def pull_reading_dates(self, book_id):
         """Pull started_at and finished_at from ABS for a book.
 
         Hardcover dates are only pulled once at match time (via HardcoverService._pull_dates_at_match),
@@ -45,21 +45,25 @@ class ReadingDateService:
         dates = {}
 
         try:
+            book = self.database_service.get_book_by_id(book_id)
+            if not book or not book.abs_id:
+                return dates
+
             if self.abs_client.is_configured():
-                progress = self.abs_client.get_progress(abs_id)
+                progress = self.abs_client.get_progress(book.abs_id)
                 if progress:
                     if progress.get("startedAt"):
                         dates['started_at'] = datetime.fromtimestamp(progress["startedAt"] / 1000, tz=UTC).date().isoformat()
                     if progress.get("finishedAt"):
                         dates['finished_at'] = datetime.fromtimestamp(progress["finishedAt"] / 1000, tz=UTC).date().isoformat()
                     if dates:
-                        logger.debug(f"Pulled dates from ABS for '{abs_id}': {dates}")
+                        logger.debug(f"Pulled dates from ABS for '{book.abs_id}': {dates}")
         except Exception as e:
-            logger.debug(f"Could not pull dates from ABS for '{abs_id}': {e}")
+            logger.debug(f"Could not pull dates from ABS for book_id={book_id}: {e}")
 
         return dates
 
-    def push_dates_to_hardcover(self, abs_id, *, force=False):
+    def push_dates_to_hardcover(self, book_id, *, force=False):
         """Push local started_at/finished_at to Hardcover.
 
         By default, only fills in missing dates on the Hardcover side.
@@ -71,11 +75,11 @@ class ReadingDateService:
             if not self.hardcover_client.is_configured():
                 return False, "Hardcover is not configured"
 
-            hc_details = self.database_service.get_hardcover_details(abs_id)
+            hc_details = self.database_service.get_hardcover_details(book_id)
             if not hc_details or not hc_details.hardcover_book_id:
                 return False, "Book is not linked to Hardcover"
 
-            book = self.database_service.get_book(abs_id)
+            book = self.database_service.get_book_by_id(book_id)
             if not book:
                 return False, "Book not found"
 
@@ -98,12 +102,12 @@ class ReadingDateService:
                 if not new_read_id:
                     return False, "Failed to create reading session on Hardcover"
                 log_hardcover_action(
-                    self.database_service, abs_id=abs_id,
+                    self.database_service, abs_id=book.abs_id,
                     direction='push', action='date_push',
                     detail={'started_at': book.started_at, 'finished_at': book.finished_at,
                             'created_read': True, 'force': force},
                 )
-                logger.info(f"Created HC reading session with dates for '{abs_id}'")
+                logger.info(f"Created HC reading session with dates for '{book.abs_id}'")
                 return True, "Created reading session and synced dates to Hardcover"
 
             read = reads[0]
@@ -139,23 +143,23 @@ class ReadingDateService:
                 finished_at=push_finished or hc_finished,
             )
             if not success:
-                logger.warning(f"Hardcover rejected date update for '{abs_id}'")
+                logger.warning(f"Hardcover rejected date update for '{book.abs_id}'")
                 return False, "Hardcover rejected the date update"
 
             log_hardcover_action(
-                self.database_service, abs_id=abs_id,
+                self.database_service, abs_id=book.abs_id,
                 direction='push', action='date_push',
                 detail={'started_at': push_started, 'finished_at': push_finished,
                         'force': force},
             )
-            logger.info(f"Pushed dates to Hardcover for '{abs_id}' (force={force})")
+            logger.info(f"Pushed dates to Hardcover for '{book.abs_id}' (force={force})")
             return True, "Dates synced to Hardcover"
 
         except Exception as e:
-            logger.debug(f"Could not push dates to Hardcover for '{abs_id}': {e}")
+            logger.debug(f"Could not push dates to Hardcover for book_id={book_id}: {e}")
             return False, "Unexpected error syncing dates"
 
-    def pull_dates_from_hardcover(self, abs_id):
+    def pull_dates_from_hardcover(self, book_id):
         """Pull started_at/finished_at from Hardcover into local DB.
 
         Overwrites local dates with HC dates. Only updates fields where HC has a value.
@@ -165,11 +169,11 @@ class ReadingDateService:
             if not self.hardcover_client.is_configured():
                 return False, "Hardcover is not configured", {}
 
-            hc_details = self.database_service.get_hardcover_details(abs_id)
+            hc_details = self.database_service.get_hardcover_details(book_id)
             if not hc_details or not hc_details.hardcover_book_id:
                 return False, "Book is not linked to Hardcover", {}
 
-            book = self.database_service.get_book(abs_id)
+            book = self.database_service.get_book_by_id(book_id)
             if not book:
                 return False, "Book not found", {}
 
@@ -203,17 +207,17 @@ class ReadingDateService:
             if not updates:
                 return False, "Local dates already match Hardcover", {}
 
-            self.database_service.update_book_reading_fields(abs_id, **updates)
+            self.database_service.update_book_reading_fields(book_id, **updates)
 
             log_hardcover_action(
-                self.database_service, abs_id=abs_id,
+                self.database_service, abs_id=book.abs_id,
                 direction='pull', action='date_pull',
                 detail=updates,
             )
-            logger.info(f"Pulled dates from Hardcover for '{abs_id}': {updates}")
+            logger.info(f"Pulled dates from Hardcover for '{book.abs_id}': {updates}")
 
             # Return the full date state after update
-            updated_book = self.database_service.get_book(abs_id)
+            updated_book = self.database_service.get_book_by_ref(book_id)
             result_dates = {
                 'started_at': updated_book.started_at,
                 'finished_at': updated_book.finished_at,
@@ -221,7 +225,7 @@ class ReadingDateService:
             return True, "Dates pulled from Hardcover", result_dates
 
         except Exception as e:
-            logger.debug(f"Could not pull dates from Hardcover for '{abs_id}': {e}")
+            logger.debug(f"Could not pull dates from Hardcover for book_id={book_id}: {e}")
             return False, "Unexpected error pulling dates", {}
 
     def auto_complete_finished_books(self, container):
@@ -242,28 +246,28 @@ class ReadingDateService:
             if book.status != 'active':
                 continue
             try:
-                if self._is_finished_by_state(book.abs_id):
-                    dates = self.pull_reading_dates(book.abs_id)
+                if self._is_finished_by_state(book.id):
+                    dates = self.pull_reading_dates(book.id)
                     machine.transition(book, 'completed', 'auto_complete',
                                        container=container, dates=dates)
                     self._push_completion_to_clients(book, container)
                     stats['completed'] += 1
-                    logger.info(f"Marked '{book.abs_title}' as completed (client progress >= 99%)")
+                    logger.info(f"Marked '{book.title}' as completed (client progress >= 99%)")
             except Exception as e:
                 stats['errors'] += 1
-                logger.debug(f"Could not auto-complete '{book.abs_title}': {e}")
+                logger.debug(f"Could not auto-complete '{book.title}': {e}")
 
         return stats
 
-    def _max_state_progress(self, abs_id):
+    def _max_state_progress(self, book_id):
         """Return the maximum percentage across all sync clients for a book."""
-        states = self.database_service.get_states_for_book(abs_id)
+        states = self.database_service.get_states_for_book(book_id)
         percentages = [s.percentage for s in states if s.percentage is not None]
         return max(percentages) if percentages else 0.0
 
-    def _is_finished_by_state(self, abs_id):
+    def _is_finished_by_state(self, book_id):
         """Check if any sync client reports >= 99% progress for this book."""
-        return self._max_state_progress(abs_id) >= PROGRESS_COMPLETE_THRESHOLD
+        return self._max_state_progress(book_id) >= PROGRESS_COMPLETE_THRESHOLD
 
     def _push_completion_to_clients(self, book, container):
         """Push 100% progress to all sync clients and set Booklore read status."""
@@ -283,15 +287,16 @@ class ReadingDateService:
 
                 state = State(
                     abs_id=book.abs_id,
+                    book_id=book.id,
                     client_name=client_name.lower(),
                     percentage=1.0,
                     timestamp=int(time.time()),
                     last_updated=int(time.time())
                 )
                 self.database_service.save_state(state)
-                logger.debug(f"Pushed completion to '{client_name}' for '{book.abs_title}'")
+                logger.debug(f"Pushed completion to '{client_name}' for '{book.title}'")
             except Exception as e:
-                logger.warning(f"Failed to push completion to '{client_name}' for '{book.abs_title}': {e}")
+                logger.warning(f"Failed to push completion to '{client_name}' for '{book.title}': {e}")
 
         if book.ebook_filename:
             push_booklore_read_status(book, container, 'READ')

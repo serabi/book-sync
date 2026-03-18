@@ -12,6 +12,9 @@ from src.utils.transcriber import AudioTranscriber
 
 logger = logging.getLogger(__name__)
 
+TRANSCRIPT_DB_MANAGED = "DB_MANAGED"
+
+
 class ABSSyncClient(SyncClient):
     def __init__(self, abs_client: ABSClient, transcriber: AudioTranscriber, ebook_parser: EbookParser, alignment_service=None, data_dir=None):
         super().__init__(ebook_parser)
@@ -86,7 +89,7 @@ class ABSSyncClient(SyncClient):
         if not transcript_path:
             return None
 
-        if transcript_path == "DB_MANAGED":
+        if transcript_path == TRANSCRIPT_DB_MANAGED:
              if self.alignment_service:
                  dur = self.alignment_service.get_book_duration(book.abs_id)
                  if dur:
@@ -115,7 +118,7 @@ class ABSSyncClient(SyncClient):
             return None
 
         # DB Managed (Unified Architecture)
-        if book.transcript_file == "DB_MANAGED" and self.alignment_service:
+        if book.transcript_file == TRANSCRIPT_DB_MANAGED and self.alignment_service:
             # Inverse lookup: Time -> Char -> Text
             char_offset = self.alignment_service.get_char_for_time(book.abs_id, abs_ts)
             if char_offset is not None:
@@ -156,7 +159,7 @@ class ABSSyncClient(SyncClient):
         if not book or abs_ts is None:
             return None
 
-        if book.transcript_file == "DB_MANAGED" and self.alignment_service:
+        if book.transcript_file == TRANSCRIPT_DB_MANAGED and self.alignment_service:
              # Just look a bit earlier?
              earlier_ts = max(0, abs_ts - 10)
              return self.get_text_from_current_state(book, ServiceState({'ts': earlier_ts}))
@@ -164,7 +167,7 @@ class ABSSyncClient(SyncClient):
         return self.transcriber.get_previous_segment_text(book.transcript_file, abs_ts)
 
     def update_progress(self, book: Book, request: UpdateProgressRequest) -> SyncResult:
-        book_title = book.abs_title or 'Unknown Book'
+        book_title = book.title or 'Unknown Book'
         if request.locator_result.percentage == 0.0:
             logger.info(f"'{book_title}' Locator percentage is 0.0% — Setting ABS progress to start of book")
             result, final_ts = self._update_abs_progress_with_offset(book.abs_id, 0.0)
@@ -177,7 +180,7 @@ class ABSSyncClient(SyncClient):
         # [FIX] Route DB_MANAGED books to AlignmentService, Legacy books to Transcriber
         ts_for_text = None
 
-        if book.transcript_file == "DB_MANAGED" and self.alignment_service:
+        if book.transcript_file == TRANSCRIPT_DB_MANAGED and self.alignment_service:
             # New Path: Use Database Alignment
             # We use the match_index (character offset) found by the EbookParser
             char_index = request.locator_result.match_index
@@ -189,7 +192,7 @@ class ABSSyncClient(SyncClient):
             else:
                 logger.debug(f"'{book_title}' Alignment lookup skipped: No character index provided in request")
 
-        elif book.transcript_file and book.transcript_file != "DB_MANAGED":
+        elif book.transcript_file and book.transcript_file != TRANSCRIPT_DB_MANAGED:
             # Legacy Path: Use JSON File
             ts_for_text = self.transcriber.find_time_for_text(
                 book.transcript_file, request.txt,

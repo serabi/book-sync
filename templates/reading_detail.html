@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>{{ book.abs_title }} - PageKeeper</title>
+    <title>{{ title_prefix }}{{ book.title }} - PageKeeper</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="icon" type="image/png" href="/static/icon.png">
     <link rel="apple-touch-icon" href="/static/icon.png">
@@ -45,10 +45,6 @@
                     <img src="{{ book.cover_url }}" alt=""
                         onerror="{% if book.fallback_cover_url and book.fallback_cover_url != book.cover_url %}this.onerror={% if book.kosync_doc_id %}function(){this.onerror=null; this.src='/covers/{{ book.kosync_doc_id }}.jpg';}{% else %}null{% endif %}; this.src='{{ book.fallback_cover_url|e }}';{% elif book.kosync_doc_id %}this.onerror=null; this.src='/covers/{{ book.kosync_doc_id }}.jpg';{% else %}this.style.display='none'; this.nextElementSibling.classList.remove('hidden');{% endif %}">
                     <div class="r-cover-placeholder hidden"></div>
-                    {% elif book.kosync_doc_id %}
-                    <img src="/covers/{{ book.kosync_doc_id }}.jpg" alt=""
-                        onerror="this.style.display='none'; this.nextElementSibling.classList.remove('hidden');">
-                    <div class="r-cover-placeholder hidden"></div>
                     {% else %}
                     <div class="r-cover-placeholder"></div>
                     {% endif %}
@@ -58,7 +54,7 @@
                     </button>
                 </div>
                 <div class="r-hero-info">
-                    <h1 class="r-detail-title">{{ book.abs_title }}{% if metadata.subtitle %}: {{ metadata.subtitle }}{% endif %}</h1>
+                    <h1 class="r-detail-title">{{ book.title }}{% if metadata.subtitle %}: {{ metadata.subtitle }}{% endif %}</h1>
                     {% if metadata.author %}
                     <div class="r-detail-author">{{ metadata.author }}</div>
                     {% endif %}
@@ -110,7 +106,7 @@
                     {% endif %}
 
                     {# Rating stars #}
-                    <div class="r-detail-rating" id="rating-stars" data-abs-id="{{ book.abs_id }}" data-rating="{{ book.rating or 0 }}" data-hardcover-sync-available="{{ 'true' if hardcover_rating_sync_available else 'false' }}">
+                    <div class="r-detail-rating" id="rating-stars" data-book-id="{{ book.id }}" data-rating="{{ book.rating or 0 }}" data-hardcover-sync-available="{{ 'true' if hardcover_rating_sync_available else 'false' }}">
                         {% set rating = book.rating or 0 %}
                         {% for i in range(1, 6) %}
                         {% if rating >= i %}
@@ -145,7 +141,7 @@
                         {% elif book.status == 'not_started' %}
                         <button class="r-hero-action-btn" onclick="rdAction('resume')">Start Reading</button>
                         {% if not has_linked_tbr %}
-                        <button class="r-hero-action-btn" id="btn-add-to-tbr" data-abs-id="{{ book.abs_id }}">+ Want to Read</button>
+                        <button class="r-hero-action-btn" id="btn-add-to-tbr" data-book-id="{{ book.id }}">+ Want to Read</button>
                         {% endif %}
                         <button class="r-hero-action-btn" onclick="rdAction('pause')">Pause</button>
                         <button class="r-hero-action-btn" onclick="rdAction('dnf')">Mark DNF</button>
@@ -192,7 +188,7 @@
                         </span>
                     </div>
                     {% elif services_enabled.abs and book.book_type == 'ebook-only' %}
-                    <a href="/match?search={{ book.abs_title|urlencode }}&link_to={{ book.abs_id }}" class="r-service-row r-service-row--unlinked">
+                    <a href="/match?search={{ book.title|urlencode }}&link_to={{ book.id }}" class="r-service-row r-service-row--unlinked">
                         <img src="/static/audiobookshelf.png" alt="ABS" class="r-service-row-icon">
                         <span class="r-service-row-name">Audiobookshelf</span>
                         <span class="r-service-row-link-action">Link</span>
@@ -267,7 +263,7 @@
                         {% if metadata.hardcover_status %}
                         <span class="r-service-row-hc-status r-hc-status-{{ metadata.hardcover_status_id }}">{{ metadata.hardcover_status }}</span>
                         {% endif %}
-                        <button type="button" class="r-service-row-action" data-abs-id="{{ book.abs_id }}" onclick="openHcRelink(this)">Edit</button>
+                        <button type="button" class="r-service-row-action" data-book-id="{{ book.id }}" onclick="openHcRelink(this)">Edit</button>
                         <span class="r-service-row-value">
                             {% if service_states.hardcover is defined %}{{ '%.1f' | format(service_states.hardcover.percentage) }}%{% else %}--{% endif %}
                         </span>
@@ -276,7 +272,7 @@
                     <div class="r-service-row r-service-row--unlinked">
                         <img src="/static/hardcover.svg" alt="HC" class="r-service-row-icon">
                         <span class="r-service-row-name">Hardcover</span>
-                        <button type="button" class="r-service-row-link-action" data-abs-id="{{ book.abs_id }}" onclick="openHcRelink(this)">Link</button>
+                        <button type="button" class="r-service-row-link-action" data-book-id="{{ book.id }}" onclick="openHcRelink(this)">Link</button>
                     </div>
                     {% endif %}
                     {% endif %}
@@ -290,7 +286,7 @@
                         <span class="r-service-row-value">Linked</span>
                     </div>
                     {% else %}
-                    <a href="/bookfusion?tab=library&q={{ book.abs_title|urlencode }}" class="r-service-row r-service-row--unlinked">
+                    <a href="/bookfusion?tab=library&q={{ book.title|urlencode }}" class="r-service-row r-service-row--unlinked">
                         <img src="/static/bookfusion-logo.svg" alt="BF" class="r-service-row-icon">
                         <span class="r-service-row-name">BookFusion</span>
                         <span class="r-service-row-link-action">Link</span>
@@ -448,27 +444,27 @@
                     <div class="r-journal-meta">
                         <label class="r-date-field r-journal-date-field">
                             <span class="r-date-label">Started</span>
-                            <input type="date" id="started-at" class="input-inline" value="{{ book.started_at or '' }}" data-abs-id="{{ book.abs_id }}">
+                            <input type="date" id="started-at" class="input-inline" value="{{ book.started_at or '' }}" data-book-id="{{ book.id }}">
                         </label>
                         <label class="r-date-field r-journal-date-field">
                             <span class="r-date-label">Finished</span>
-                            <input type="date" id="finished-at" class="input-inline" value="{{ book.finished_at or '' }}" data-abs-id="{{ book.abs_id }}">
+                            <input type="date" id="finished-at" class="input-inline" value="{{ book.finished_at or '' }}" data-book-id="{{ book.id }}">
                         </label>
                     </div>
                     {% if hardcover_rating_sync_available %}
-                    <button type="button" class="r-hc-date-sync-btn" id="hc-date-sync" data-abs-id="{{ book.abs_id }}">
+                    <button type="button" class="r-hc-date-sync-btn" id="hc-date-sync" data-book-id="{{ book.id }}">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
                         Sync Dates to Hardcover
                     </button>
                     <span class="r-hc-date-sync-status" id="hc-date-sync-status" hidden></span>
-                    <button type="button" class="r-hc-date-sync-btn" id="hc-date-pull" data-abs-id="{{ book.abs_id }}">
+                    <button type="button" class="r-hc-date-sync-btn" id="hc-date-pull" data-book-id="{{ book.id }}">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                         Pull Dates from Hardcover
                     </button>
                     <span class="r-hc-date-sync-status" id="hc-date-pull-status" hidden></span>
                     {% endif %}
 
-                    <form class="r-journal-form" id="journal-form" data-abs-id="{{ book.abs_id }}">
+                    <form class="r-journal-form" id="journal-form" data-book-id="{{ book.id }}">
                         <div class="r-journal-compose">
                             <label for="journal-entry" class="r-journal-compose-label">Add Note</label>
                             <textarea id="journal-entry" placeholder="What stood out in this session?" rows="3"></textarea>
@@ -537,7 +533,7 @@
                     <p class="r-section-description">{{ bf_highlights|length }} highlight{{ 's' if bf_highlights|length != 1 }}</p>
                 </div>
                 <button class="btn btn-primary btn-sm" id="bulk-import-highlights" type="button"
-                        data-abs-id="{{ book.abs_id }}">Import All to Journal</button>
+                        data-book-id="{{ book.id }}">Import All to Journal</button>
             </div>
             <div class="r-highlights-body">
                 {% set current_chapter = namespace(value='') %}
@@ -793,8 +789,8 @@
     <script>
         initReadingDetail();
 
-        var _rdAbsId = {{ book.abs_id | tojson }};
-        var _rdTitle = {{ book.abs_title | tojson }};
+        var _rdBookId = {{ book.id }};
+        var _rdTitle = {{ book.title | tojson }};
         var _rdPendingJournalId = null;
 
         {% if active_tab != 'overview' %}
@@ -805,15 +801,15 @@
             var btn = document.getElementById('change-cover-btn');
             if (btn) {
                 btn.addEventListener('click', function() {
-                    openCoverPicker(_rdAbsId, _rdTitle);
+                    openCoverPicker(_rdBookId, _rdTitle);
                 });
             }
         })();
 
         // Hardcover re-link
         function openHcRelink(btn) {
-            hardcoverModalState.absId = btn.dataset.absId;
-            hardcoverModalState.bookTitle = btn.dataset.title || '{{ book.abs_title|e }}';
+            hardcoverModalState.bookId = btn.dataset.bookId;
+            hardcoverModalState.bookTitle = btn.dataset.title || '{{ book.title|e }}';
             hardcoverModalState.bookData = null;
             hardcoverModalState.selectedEditionId = null;
             openHardcoverModal();
@@ -1053,7 +1049,7 @@
                 fetch('/api/reading/tbr/from-library', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ abs_id: tbrBtn.dataset.absId }),
+                    body: JSON.stringify({ abs_id: tbrBtn.dataset.bookId }),
                 })
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
@@ -1076,14 +1072,14 @@
             var importBtn = document.getElementById('bulk-import-highlights');
             if (!importBtn) return;
             importBtn.addEventListener('click', function() {
-                var absId = importBtn.dataset.absId;
+                var bookId = importBtn.dataset.bookId;
                 importBtn.disabled = true;
                 importBtn.textContent = 'Importing...';
 
                 fetch('/api/bookfusion/save-journal', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ abs_id: absId }),
+                    body: JSON.stringify({ abs_id: bookId }),
                 })
                 .then(function(r) { return r.json(); })
                 .then(function(data) {

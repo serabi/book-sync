@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>Batch Match - PageKeeper</title>
+    <title>{{ title_prefix }}Batch Match - PageKeeper</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/css/variables.css">
@@ -62,13 +62,11 @@
                         Process Ready
                     </button>
                 </form>
-                <form method="POST" action="/batch-match">
-                    <input type="hidden" name="action" value="clear_queue">
-                    <button type="submit" class="btn btn-danger"
-                        onclick="return confirm('Clear entire queue?')" {% if not queue_summary.total_count %}disabled{% endif %}>
-                        Clear All
-                    </button>
-                </form>
+                <button type="button" class="btn btn-danger"
+                    onclick="showConfirmModal('Clear All', 'Clear entire queue? This cannot be undone.', '/batch-match', 'danger')"
+                    {% if not queue_summary.total_count %}disabled{% endif %}>
+                    Clear All
+                </button>
             </div>
         </section>
 
@@ -265,7 +263,7 @@
                                     <div class="batch-queue-cover batch-queue-cover-placeholder"></div>
                                     {% endif %}
                                     <div class="batch-queue-book-copy">
-                                        <div class="batch-queue-title" title="{{ item.abs_title }}">{{ item.abs_title }}</div>
+                                        <div class="batch-queue-title" title="{{ item.title }}">{{ item.title }}</div>
                                         <div class="batch-queue-subtitle">{{ item.abs_id }}</div>
                                     </div>
                                 </div>
@@ -428,6 +426,53 @@
 
             updateBatchActionState();
         })();
+    </script>
+
+    <!-- Confirm Modal -->
+    <div id="confirm-modal" class="confirm-modal" style="display:none;">
+        <div class="confirm-modal-overlay" onclick="closeConfirmModal()"></div>
+        <div class="confirm-modal-box">
+            <div class="confirm-modal-icon" id="confirm-modal-icon"></div>
+            <h3 class="confirm-modal-title" id="confirm-modal-title"></h3>
+            <p class="confirm-modal-message" id="confirm-modal-message"></p>
+            <div class="confirm-modal-actions">
+                <button class="btn btn-secondary" onclick="closeConfirmModal()">Cancel</button>
+                <form id="confirm-modal-form" method="POST" style="margin:0;">
+                    <input type="hidden" name="action" id="confirm-modal-action" value="">
+                    <button type="submit" class="btn" id="confirm-modal-submit">Confirm</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    function showConfirmModal(title, message, formAction, accentType) {
+        const modal = document.getElementById('confirm-modal');
+        if (!modal) return;
+        document.getElementById('confirm-modal-title').textContent = title;
+        document.getElementById('confirm-modal-message').textContent = message;
+        document.getElementById('confirm-modal-form').action = formAction;
+        document.getElementById('confirm-modal-action').value = 'clear_queue';
+        const submitBtn = document.getElementById('confirm-modal-submit');
+        const iconEl = document.getElementById('confirm-modal-icon');
+        submitBtn.className = 'btn';
+        iconEl.className = 'confirm-modal-icon';
+        if (accentType === 'danger') {
+            submitBtn.classList.add('btn-danger');
+            iconEl.textContent = '\u26A0';
+            iconEl.classList.add('confirm-icon-danger');
+        } else {
+            submitBtn.classList.add('btn-warning');
+            iconEl.textContent = '\u26A0';
+            iconEl.classList.add('confirm-icon-warning');
+        }
+        submitBtn.textContent = title;
+        modal.style.display = 'flex';
+    }
+    function closeConfirmModal() {
+        const modal = document.getElementById('confirm-modal');
+        if (modal) modal.style.display = 'none';
+    }
     </script>
 </body>
 

@@ -3,7 +3,7 @@
  * Allows linking a PageKeeper book to a Booklore book by searching and selecting.
  */
 
-var bookloreModalState = { absId: null, searchRequestId: 0 };
+var bookloreModalState = { bookId: null, searchRequestId: 0 };
 
 function _blEl(tag, className, text) {
     var e = document.createElement(tag);
@@ -12,9 +12,9 @@ function _blEl(tag, className, text) {
     return e;
 }
 
-function openBookloreModal(absId, title) {
+function openBookloreModal(bookId, title) {
     if (typeof closeActionPanel === 'function') closeActionPanel();
-    bookloreModalState.absId = absId;
+    bookloreModalState.bookId = bookId;
     document.getElementById('bl-modal-title').textContent = 'Link to Booklore: ' + title;
     document.getElementById('bl-modal').style.display = 'flex';
     document.getElementById('bl-search-input').value = title;
@@ -26,7 +26,7 @@ function openBookloreModal(absId, title) {
 
 function closeBookloreModal() {
     document.getElementById('bl-modal').style.display = 'none';
-    bookloreModalState.absId = null;
+    bookloreModalState.bookId = null;
     bookloreModalState.searchRequestId += 1;
 }
 
@@ -99,13 +99,13 @@ function searchBooklore() {
 }
 
 function linkBooklore(filename) {
-    if (!bookloreModalState.absId) return;
+    if (!bookloreModalState.bookId) return;
 
     var resultsDiv = document.getElementById('bl-results');
     while (resultsDiv.firstChild) resultsDiv.removeChild(resultsDiv.firstChild);
     resultsDiv.appendChild(_blEl('div', 'st-loading', 'Linking...'));
 
-    fetch('/api/booklore/link/' + encodeURIComponent(bookloreModalState.absId), {
+    fetch('/api/booklore/link/' + encodeURIComponent(bookloreModalState.bookId), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ filename: filename })

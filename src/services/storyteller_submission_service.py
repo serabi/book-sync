@@ -134,8 +134,11 @@ class StorytellerSubmissionService:
                     existing.id, "queued", submission_dir=dir_name,
                 )
             else:
+                book = self.database_service.get_book_by_abs_id(abs_id)
+                book_id = book.id if book else None
                 submission = StorytellerSubmission(
                     abs_id=abs_id,
+                    book_id=book_id,
                     status="queued",
                     submission_dir=dir_name,
                 )
@@ -185,7 +188,7 @@ class StorytellerSubmissionService:
 
         # Fix 1: Propagate book's UUID to submission if missing
         if not submission.storyteller_uuid:
-            book = self.database_service.get_book(abs_id)
+            book = self.database_service.get_book_by_abs_id(abs_id)
             if book and book.storyteller_uuid:
                 submission.storyteller_uuid = book.storyteller_uuid
                 self._update_submission_status(submission, submission.status)
@@ -196,9 +199,9 @@ class StorytellerSubmissionService:
 
         # Look up book title once for use in filesystem fallbacks
         book_title = None
-        book = self.database_service.get_book(abs_id)
-        if book and book.abs_title:
-            book_title = book.abs_title
+        book = self.database_service.get_book_by_abs_id(abs_id)
+        if book and book.title:
+            book_title = book.title
 
         # Check if Storyteller has produced transcription output
         assets_dir = os.environ.get("STORYTELLER_ASSETS_DIR", "").strip()
@@ -256,13 +259,13 @@ class StorytellerSubmissionService:
         # Check 3: Try to discover the storyteller_uuid via API title search
         if not submission.storyteller_uuid and self.storyteller_client and self.storyteller_client.is_configured():
             checks_attempted.append("api_search")
-            book = self.database_service.get_book(abs_id)
-            if book and book.abs_title:
+            book = self.database_service.get_book_by_abs_id(abs_id)
+            if book and book.title:
                 try:
-                    results = self.storyteller_client.search_books(book.abs_title)
+                    results = self.storyteller_client.search_books(book.title)
                     # Only accept a single exact title match to avoid misidentification
                     exact = [r for r in results
-                             if r.get("title", "").strip().lower() == book.abs_title.strip().lower()]
+                             if r.get("title", "").strip().lower() == book.title.strip().lower()]
                     if len(exact) == 1:
                         storyteller_uuid = exact[0].get("uuid")
                         submission.storyteller_uuid = storyteller_uuid
@@ -278,7 +281,7 @@ class StorytellerSubmissionService:
                     else:
                         logger.debug(
                             f"Storyteller API search: {len(results)} results, {len(exact)} exact matches "
-                            f"for '{book.abs_title}' (need exactly 1)"
+                            f"for '{book.title}' (need exactly 1)"
                         )
                 except Exception as e:
                     logger.warning(f"Storyteller book search failed for abs_id={abs_id}: {e}")

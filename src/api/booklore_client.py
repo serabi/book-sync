@@ -386,7 +386,6 @@ class BookloreClient:
                 self._update_cached_progress(book)
 
         self._cache_timestamp = time.time()
-        # self._save_cache() # DB is updated inside _process_book_detail
         return True
 
     def _process_book_detail(self, detail):

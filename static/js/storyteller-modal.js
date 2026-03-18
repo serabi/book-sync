@@ -3,11 +3,11 @@
  * Handles searching and linking Storyteller books to existing ABS books.
  */
 
-let currentAbsId = null;
+let currentBookId = null;
 
-function openStorytellerModal(absId, title) {
+function openStorytellerModal(bookId, title) {
     if (typeof closeActionPanel === 'function') closeActionPanel();
-    currentAbsId = absId;
+    currentBookId = bookId;
     document.getElementById('st-modal-title').textContent = `Link Storyteller: ${title}`;
     document.getElementById('st-modal').classList.remove('hidden');
     document.getElementById('st-search-input').value = title; // Pre-fill with title
@@ -20,7 +20,7 @@ function openStorytellerModal(absId, title) {
 
 function closeStorytellerModal() {
     document.getElementById('st-modal').classList.add('hidden');
-    currentAbsId = null;
+    currentBookId = null;
 }
 
 async function searchStoryteller() {
@@ -118,7 +118,7 @@ async function searchStoryteller() {
 }
 
 async function linkStoryteller(uuid) {
-    if (!currentAbsId) return;
+    if (!currentBookId) return;
 
     const resultsDiv = document.getElementById('st-results');
     resultsDiv.textContent = '';
@@ -128,7 +128,7 @@ async function linkStoryteller(uuid) {
     resultsDiv.appendChild(loadingDiv);
 
     try {
-        const response = await fetch(`/api/storyteller/link/${currentAbsId}`, {
+        const response = await fetch(`/api/storyteller/link/${currentBookId}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'

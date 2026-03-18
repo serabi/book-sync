@@ -49,7 +49,12 @@
         <a href="/" class="brand-link">
             <img src="/static/icon.png" alt="PageKeeper" class="app-icon" width="36" height="36">
             <div class="brand-copy">
-                <h1>PageKeeper</h1>
+                <div class="brand-title-row">
+                    <h1>PageKeeper</h1>
+                    {% if is_dev_container %}
+                    <span class="env-badge env-badge-dev" title="Development container">DEV</span>
+                    {% endif %}
+                </div>
             </div>
         </a>
     </div>

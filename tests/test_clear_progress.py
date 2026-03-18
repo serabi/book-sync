@@ -46,12 +46,12 @@ class TestClearProgressMethod(unittest.TestCase):
         # Create test book
         self.test_book = Book(
             abs_id='test-book-123',
-            abs_title='Test Book',
+            title='Test Book',
             ebook_filename='test-book.epub',
             status='active',
             kosync_doc_id='test-hash-123'
         )
-        self.db_service.save_book(self.test_book)
+        self.test_book = self.db_service.save_book(self.test_book)
 
         # Create test KoSync document
         self.test_doc = KosyncDocument(
@@ -65,6 +65,7 @@ class TestClearProgressMethod(unittest.TestCase):
         test_states = [
             State(
                 abs_id='test-book-123',
+                book_id=self.test_book.id,
                 client_name='kosync',
                 last_updated=1642291200,  # Some timestamp
                 percentage=0.45,  # 45%
@@ -72,6 +73,7 @@ class TestClearProgressMethod(unittest.TestCase):
             ),
             State(
                 abs_id='test-book-123',
+                book_id=self.test_book.id,
                 client_name='storyteller',
                 last_updated=1642291200,
                 percentage=0.42,  # 42%
@@ -79,6 +81,7 @@ class TestClearProgressMethod(unittest.TestCase):
             ),
             State(
                 abs_id='test-book-123',
+                book_id=self.test_book.id,
                 client_name='abs',
                 last_updated=1642291200,
                 percentage=0.44,  # 44%
@@ -123,7 +126,7 @@ class TestClearProgressMethod(unittest.TestCase):
     def test_clear_progress_success(self):
         """Test successful clearing of progress for a book."""
         # Verify initial state - should have 3 state records
-        initial_states = self.db_service.get_states_for_book('test-book-123')
+        initial_states = self.db_service.get_states_for_book(self.test_book.id)
         self.assertEqual(len(initial_states), 3, "Should start with 3 state records")
 
         # Verify KoSync document exists
@@ -162,7 +165,7 @@ class TestClearProgressMethod(unittest.TestCase):
             self.assertEqual(result['client_reset_results'][client_name]['message'], 'Reset to 0%')
 
         # Verify database states were reset to 0% (saved back to prevent re-sync from external)
-        remaining_states = self.db_service.get_states_for_book('test-book-123')
+        remaining_states = self.db_service.get_states_for_book(self.test_book.id)
         self.assertEqual(len(remaining_states), 3, "Should have 0% state for each successful client reset")
         for state in remaining_states:
             self.assertEqual(state.percentage, 0.0, f"State for {state.client_name} should be 0%")
@@ -171,7 +174,7 @@ class TestClearProgressMethod(unittest.TestCase):
         self.assertIsNone(self.db_service.get_kosync_document('test-hash-123'), "KoSync document should be deleted")
 
         # Verify book status was updated to 'pending'
-        updated_book = self.db_service.get_book('test-book-123')
+        updated_book = self.db_service.get_book_by_abs_id('test-book-123')
         self.assertEqual(updated_book.status, 'pending', "Book status should be 'pending' for re-sync")
 
         # Verify sync clients were called correctly
@@ -210,7 +213,7 @@ class TestClearProgressMethod(unittest.TestCase):
         # Verify database was cleared then 0% states saved for ALL clients
         # (Phase 1 saves 0% states upfront, before external resets)
         self.assertEqual(result['database_states_cleared'], 3)
-        remaining_states = self.db_service.get_states_for_book('test-book-123')
+        remaining_states = self.db_service.get_states_for_book(self.test_book.id)
         self.assertEqual(len(remaining_states), 3, "Should have 0% state for all clients (saved in Phase 1)")
         for state in remaining_states:
             self.assertEqual(state.percentage, 0.0)

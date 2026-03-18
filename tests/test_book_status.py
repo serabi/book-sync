@@ -115,16 +115,18 @@ class TestBookStatusEndpoints(unittest.TestCase):
         import src.db.migration_utils
         src.db.migration_utils.initialize_database = self.original_init_db
 
-    def _make_book(self, abs_id='book-1', status='active', activity_flag=False):
-        book = Book(abs_id=abs_id, abs_title='Test Book', status=status)
+    def _make_book(self, abs_id='book-1', status='active', activity_flag=False, book_id=1):
+        book = Book(abs_id=abs_id, title='Test Book', status=status)
+        book.id = book_id
         book.activity_flag = activity_flag
+        self.db.get_book_by_id.return_value = book
         return book
 
     # --- Pause ---
 
     def test_pause_active_book(self):
         book = self._make_book(status='active')
-        self.db.get_book.return_value = book
+        self.db.get_book_by_ref.return_value = book
 
         resp = self.client.post('/api/pause/book-1')
         data = resp.get_json()
@@ -137,7 +139,7 @@ class TestBookStatusEndpoints(unittest.TestCase):
     def test_pause_syncs_hardcover(self):
         """Pausing should push 'paused' status to Hardcover via sync client."""
         book = self._make_book(status='active')
-        self.db.get_book.return_value = book
+        self.db.get_book_by_ref.return_value = book
 
         self.mock_container._hardcover_service = Mock(is_configured=Mock(return_value=True))
 
@@ -149,7 +151,7 @@ class TestBookStatusEndpoints(unittest.TestCase):
     def test_pause_rejects_non_active(self):
         for status in ['paused', 'dnf', 'pending', 'processing']:
             book = self._make_book(status=status)
-            self.db.get_book.return_value = book
+            self.db.get_book_by_ref.return_value = book
 
             resp = self.client.post('/api/pause/book-1')
             data = resp.get_json()
@@ -158,7 +160,7 @@ class TestBookStatusEndpoints(unittest.TestCase):
             self.assertFalse(data['success'])
 
     def test_pause_not_found(self):
-        self.db.get_book.return_value = None
+        self.db.get_book_by_ref.return_value = None
         resp = self.client.post('/api/pause/nonexistent')
         self.assertEqual(resp.status_code, 404)
 
@@ -166,7 +168,7 @@ class TestBookStatusEndpoints(unittest.TestCase):
 
     def test_resume_paused_book(self):
         book = self._make_book(status='paused', activity_flag=True)
-        self.db.get_book.return_value = book
+        self.db.get_book_by_ref.return_value = book
 
         resp = self.client.post('/api/resume/book-1')
         data = resp.get_json()
@@ -178,7 +180,7 @@ class TestBookStatusEndpoints(unittest.TestCase):
 
     def test_resume_dnf_book(self):
         book = self._make_book(status='dnf')
-        self.db.get_book.return_value = book
+        self.db.get_book_by_ref.return_value = book
         self.db.get_hardcover_details.return_value = None
 
         resp = self.client.post('/api/resume/book-1')
@@ -191,7 +193,7 @@ class TestBookStatusEndpoints(unittest.TestCase):
     def test_resume_dnf_syncs_hardcover(self):
         """Resuming from DNF should push 'active' status to Hardcover."""
         book = self._make_book(status='dnf')
-        self.db.get_book.return_value = book
+        self.db.get_book_by_ref.return_value = book
         self.db.get_hardcover_details.return_value = None
 
         self.mock_container._hardcover_service = Mock(is_configured=Mock(return_value=True))
@@ -204,7 +206,7 @@ class TestBookStatusEndpoints(unittest.TestCase):
     def test_resume_paused_syncs_hardcover(self):
         """Resuming from paused should push 'active' status to Hardcover."""
         book = self._make_book(status='paused')
-        self.db.get_book.return_value = book
+        self.db.get_book_by_ref.return_value = book
 
         self.mock_container._hardcover_service = Mock(is_configured=Mock(return_value=True))
 
@@ -215,14 +217,14 @@ class TestBookStatusEndpoints(unittest.TestCase):
 
     def test_resume_rejects_active(self):
         book = self._make_book(status='active')
-        self.db.get_book.return_value = book
+        self.db.get_book_by_ref.return_value = book
 
         resp = self.client.post('/api/resume/book-1')
         self.assertEqual(resp.status_code, 400)
 
     def test_resume_rejects_pending(self):
         book = self._make_book(status='pending')
-        self.db.get_book.return_value = book
+        self.db.get_book_by_ref.return_value = book
 
         resp = self.client.post('/api/resume/book-1')
         self.assertEqual(resp.status_code, 400)
@@ -231,7 +233,7 @@ class TestBookStatusEndpoints(unittest.TestCase):
 
     def test_dnf_active_book(self):
         book = self._make_book(status='active')
-        self.db.get_book.return_value = book
+        self.db.get_book_by_ref.return_value = book
         self.db.get_hardcover_details.return_value = None
 
         resp = self.client.post('/api/dnf/book-1')
@@ -243,7 +245,7 @@ class TestBookStatusEndpoints(unittest.TestCase):
 
     def test_dnf_paused_book(self):
         book = self._make_book(status='paused')
-        self.db.get_book.return_value = book
+        self.db.get_book_by_ref.return_value = book
         self.db.get_hardcover_details.return_value = None
 
         resp = self.client.post('/api/dnf/book-1')
@@ -256,7 +258,7 @@ class TestBookStatusEndpoints(unittest.TestCase):
     def test_dnf_syncs_hardcover(self):
         """DNF should push 'dnf' status to Hardcover via sync client."""
         book = self._make_book(status='active')
-        self.db.get_book.return_value = book
+        self.db.get_book_by_ref.return_value = book
         self.db.get_hardcover_details.return_value = None
 
         self.mock_container._hardcover_service = Mock(is_configured=Mock(return_value=True))
@@ -268,7 +270,7 @@ class TestBookStatusEndpoints(unittest.TestCase):
 
     def test_dnf_rejects_pending(self):
         book = self._make_book(status='pending')
-        self.db.get_book.return_value = book
+        self.db.get_book_by_ref.return_value = book
 
         resp = self.client.post('/api/dnf/book-1')
         self.assertEqual(resp.status_code, 400)
@@ -292,7 +294,7 @@ class TestActivityDetectionSocket(unittest.TestCase):
     def _make_book(self, abs_id, status='active', activity_flag=False):
         book = MagicMock()
         book.abs_id = abs_id
-        book.abs_title = 'Test Book'
+        book.title = 'Test Book'
         book.status = status
         book.activity_flag = activity_flag
         return book
@@ -300,7 +302,7 @@ class TestActivityDetectionSocket(unittest.TestCase):
     def test_paused_book_gets_activity_flag(self):
         """Progress on a paused book should set activity_flag."""
         book = self._make_book('book-1', status='paused', activity_flag=False)
-        self.mock_db.get_book.return_value = book
+        self.mock_db.get_book_by_abs_id.return_value = book
 
         self.listener._handle_progress_event({"id": "p1", "data": {"libraryItemId": "book-1"}})
 
@@ -312,7 +314,7 @@ class TestActivityDetectionSocket(unittest.TestCase):
     def test_dnf_book_gets_activity_flag(self):
         """Progress on a DNF book should set activity_flag."""
         book = self._make_book('book-1', status='dnf', activity_flag=False)
-        self.mock_db.get_book.return_value = book
+        self.mock_db.get_book_by_abs_id.return_value = book
 
         self.listener._handle_progress_event({"id": "p1", "data": {"libraryItemId": "book-1"}})
 
@@ -322,7 +324,7 @@ class TestActivityDetectionSocket(unittest.TestCase):
     def test_already_flagged_book_not_saved_again(self):
         """If activity_flag is already True, don't save again."""
         book = self._make_book('book-1', status='paused', activity_flag=True)
-        self.mock_db.get_book.return_value = book
+        self.mock_db.get_book_by_abs_id.return_value = book
 
         self.listener._handle_progress_event({"id": "p1", "data": {"libraryItemId": "book-1"}})
 
@@ -333,7 +335,7 @@ class TestActivityDetectionSocket(unittest.TestCase):
     def test_active_book_still_triggers_sync(self):
         """Active books should be recorded in pending, no activity flag behavior."""
         book = self._make_book('book-1', status='active')
-        self.mock_db.get_book.return_value = book
+        self.mock_db.get_book_by_abs_id.return_value = book
 
         self.listener._handle_progress_event({"id": "p1", "data": {"libraryItemId": "book-1"}})
 
@@ -384,7 +386,7 @@ class TestActivityDetectionKoSync(unittest.TestCase):
 
     def test_paused_book_flagged_on_kosync_put(self):
         """KOSync PUT for paused book should set activity_flag."""
-        book = Book(abs_id='book-1', abs_title='Test Book', status='paused')
+        book = Book(abs_id='book-1', title='Test Book', status='paused')
         book.activity_flag = False
 
         kosync_doc = MagicMock()
@@ -392,7 +394,7 @@ class TestActivityDetectionKoSync(unittest.TestCase):
         kosync_doc.percentage = 0.5
 
         self.db.get_kosync_document.return_value = kosync_doc
-        self.db.get_book.return_value = book
+        self.db.get_book_by_abs_id.return_value = book
         self.db.save_book.return_value = book
 
         from src.utils.kosync_headers import hash_kosync_key
@@ -428,36 +430,36 @@ class TestStatusMachineJournal(unittest.TestCase):
 
     def test_unread_to_active_shows_started(self):
         """First read from not_started should journal 'started', even with pre-populated started_at."""
-        book = Book(abs_id='b1', abs_title='Test', status='not_started')
+        book = Book(abs_id='b1', title='Test', status='not_started')
         book.started_at = '2024-01-01'  # Pre-populated by HC date pull at match time
 
         self.machine.transition(book, 'active', 'local')
 
-        self.mock_db.add_reading_journal.assert_called_once_with('b1', event='started')
+        self.mock_db.add_reading_journal.assert_called_once_with(None, event='started', abs_id='b1')
 
     def test_paused_to_active_shows_resumed(self):
         """Resume from paused should journal 'resumed'."""
-        book = Book(abs_id='b1', abs_title='Test', status='paused')
+        book = Book(abs_id='b1', title='Test', status='paused')
 
         self.machine.transition(book, 'active', 'local')
 
-        self.mock_db.add_reading_journal.assert_called_once_with('b1', event='resumed')
+        self.mock_db.add_reading_journal.assert_called_once_with(None, event='resumed', abs_id='b1')
 
     def test_dnf_to_active_shows_resumed(self):
         """Resume from DNF should journal 'resumed'."""
-        book = Book(abs_id='b1', abs_title='Test', status='dnf')
+        book = Book(abs_id='b1', title='Test', status='dnf')
 
         self.machine.transition(book, 'active', 'local')
 
-        self.mock_db.add_reading_journal.assert_called_once_with('b1', event='resumed')
+        self.mock_db.add_reading_journal.assert_called_once_with(None, event='resumed', abs_id='b1')
 
     def test_completed_to_active_shows_resumed(self):
         """Re-read from completed should journal 'resumed'."""
-        book = Book(abs_id='b1', abs_title='Test', status='completed')
+        book = Book(abs_id='b1', title='Test', status='completed')
 
         self.machine.transition(book, 'active', 'local')
 
-        self.mock_db.add_reading_journal.assert_called_once_with('b1', event='resumed')
+        self.mock_db.add_reading_journal.assert_called_once_with(None, event='resumed', abs_id='b1')
 
 
 class TestStatusMachineTbrCleanup(unittest.TestCase):
@@ -466,67 +468,67 @@ class TestStatusMachineTbrCleanup(unittest.TestCase):
     def setUp(self):
         self.mock_db = MagicMock()
         self.mock_db.save_book.return_value = None
-        self.mock_db.delete_tbr_by_abs_id.return_value = 1  # default: found & deleted
+        self.mock_db.delete_tbr_by_book_id.return_value = 1  # default: found & deleted
 
         from src.services.status_machine import StatusMachine
         self.machine = StatusMachine(self.mock_db)
 
     def test_active_triggers_tbr_cleanup(self):
         """Transitioning to active should clean up TBR."""
-        book = Book(abs_id='b1', abs_title='Test', status='not_started')
+        book = Book(abs_id='b1', title='Test', status='not_started')
         self.machine.transition(book, 'active', 'local')
-        self.mock_db.delete_tbr_by_abs_id.assert_called_once_with('b1')
+        self.mock_db.delete_tbr_by_book_id.assert_called_once_with(None)
 
     def test_paused_triggers_tbr_cleanup(self):
         """Transitioning to paused should clean up TBR."""
-        book = Book(abs_id='b1', abs_title='Test', status='active')
+        book = Book(abs_id='b1', title='Test', status='active')
         self.machine.transition(book, 'paused', 'local')
-        self.mock_db.delete_tbr_by_abs_id.assert_called_once_with('b1')
+        self.mock_db.delete_tbr_by_book_id.assert_called_once_with(None)
 
     def test_dnf_triggers_tbr_cleanup(self):
         """Transitioning to dnf should clean up TBR."""
-        book = Book(abs_id='b1', abs_title='Test', status='active')
+        book = Book(abs_id='b1', title='Test', status='active')
         self.machine.transition(book, 'dnf', 'local')
-        self.mock_db.delete_tbr_by_abs_id.assert_called_once_with('b1')
+        self.mock_db.delete_tbr_by_book_id.assert_called_once_with(None)
 
     def test_completed_triggers_tbr_cleanup(self):
         """Transitioning to completed should still clean up TBR."""
-        book = Book(abs_id='b1', abs_title='Test', status='active')
+        book = Book(abs_id='b1', title='Test', status='active')
         self.machine.transition(book, 'completed', 'local')
-        self.mock_db.delete_tbr_by_abs_id.assert_called_once_with('b1')
+        self.mock_db.delete_tbr_by_book_id.assert_called_once_with(None)
 
-    def test_hc_id_fallback_when_abs_id_not_linked(self):
-        """When no TBR found by abs_id, fall back to HC book ID lookup."""
-        self.mock_db.delete_tbr_by_abs_id.return_value = 0  # nothing found by abs_id
+    def test_hc_id_fallback_when_book_id_not_linked(self):
+        """When no TBR found by book_id, fall back to HC book ID lookup."""
+        self.mock_db.delete_tbr_by_book_id.return_value = 0  # nothing found by book_id
         hc_details = SimpleNamespace(hardcover_book_id='42')
         self.mock_db.get_hardcover_details.return_value = hc_details
         tbr_item = SimpleNamespace(id=99)
         self.mock_db.find_tbr_by_hardcover_id.return_value = tbr_item
 
-        book = Book(abs_id='b1', abs_title='Test', status='not_started')
+        book = Book(abs_id='b1', title='Test', status='not_started')
         self.machine.transition(book, 'active', 'local')
 
-        self.mock_db.get_hardcover_details.assert_called_once_with('b1')
+        self.mock_db.get_hardcover_details.assert_called_once_with(None)
         self.mock_db.find_tbr_by_hardcover_id.assert_called_once_with(42)
         self.mock_db.delete_tbr_item.assert_called_once_with(99)
 
     def test_hc_id_fallback_no_hc_details(self):
         """When no HC details exist, fallback stops gracefully."""
-        self.mock_db.delete_tbr_by_abs_id.return_value = 0
+        self.mock_db.delete_tbr_by_book_id.return_value = 0
         self.mock_db.get_hardcover_details.return_value = None
 
-        book = Book(abs_id='b1', abs_title='Test', status='not_started')
+        book = Book(abs_id='b1', title='Test', status='not_started')
         self.machine.transition(book, 'active', 'local')
 
-        self.mock_db.get_hardcover_details.assert_called_once_with('b1')
+        self.mock_db.get_hardcover_details.assert_called_once_with(None)
         self.mock_db.find_tbr_by_hardcover_id.assert_not_called()
 
     def test_not_started_does_not_cleanup_tbr(self):
         """Transitioning to not_started should NOT clean up TBR."""
-        self.mock_db.delete_tbr_by_abs_id.reset_mock()
-        book = Book(abs_id='b1', abs_title='Test', status='active')
+        self.mock_db.delete_tbr_by_book_id.reset_mock()
+        book = Book(abs_id='b1', title='Test', status='active')
         self.machine.transition(book, 'not_started', 'local')
-        self.mock_db.delete_tbr_by_abs_id.assert_not_called()
+        self.mock_db.delete_tbr_by_book_id.assert_not_called()
 
 
 if __name__ == '__main__':

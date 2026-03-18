@@ -65,7 +65,7 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
 
         book = self.Book(
             abs_id=test_abs_id,
-            abs_title='Test Book Creation',
+            title='Test Book Creation',
             ebook_filename='test-create.epub',
             kosync_doc_id='test-create-doc',
             status='active',
@@ -75,11 +75,11 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
         saved_book = self.db_service.save_book(book)
 
         self.assertEqual(saved_book.abs_id, test_abs_id)
-        self.assertEqual(saved_book.abs_title, 'Test Book Creation')
+        self.assertEqual(saved_book.title, 'Test Book Creation')
         self.assertEqual(saved_book.status, 'active')
 
         # Verify book can be retrieved
-        retrieved_book = self.db_service.get_book(test_abs_id)
+        retrieved_book = self.db_service.get_book_by_abs_id(test_abs_id)
         self.assertIsNotNone(retrieved_book)
         self.assertEqual(retrieved_book.abs_id, test_abs_id)
 
@@ -90,14 +90,14 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
         # Create book
         book = self.Book(
             abs_id=test_abs_id,
-            abs_title='Test Book Deletion',
+            title='Test Book Deletion',
             ebook_filename='test-delete.epub',
             kosync_doc_id='test-delete-doc',
             status='active',
             duration=7200.0  # 2 hour test duration
         )
 
-        self.db_service.save_book(book)
+        book = self.db_service.save_book(book)
 
         # Create multiple states for the book
         states_data = [
@@ -111,6 +111,7 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
         for client_name, percentage, extra_data in states_data:
             state = self.State(
                 abs_id=test_abs_id,
+                book_id=book.id,
                 client_name=client_name,
                 last_updated=time.time(),
                 percentage=percentage,
@@ -122,6 +123,7 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
         # Create hardcover details for the book
         hardcover = self.HardcoverDetails(
             abs_id=test_abs_id,
+            book_id=book.id,
             hardcover_book_id='hc-delete-test-123',
             hardcover_edition_id='hc-edition-delete-456',
             hardcover_pages=280,
@@ -135,6 +137,7 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
         # Create a job for the book
         job = self.Job(
             abs_id=test_abs_id,
+            book_id=book.id,
             last_attempt=time.time(),
             retry_count=3,
             last_error='Delete test error'
@@ -143,36 +146,36 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
         self.db_service.save_job(job)
 
         # Verify all data exists before deletion
-        retrieved_book = self.db_service.get_book(test_abs_id)
+        retrieved_book = self.db_service.get_book_by_abs_id(test_abs_id)
         self.assertIsNotNone(retrieved_book)
 
-        retrieved_states = self.db_service.get_states_for_book(test_abs_id)
+        retrieved_states = self.db_service.get_states_for_book(book.id)
         self.assertEqual(len(retrieved_states), 4)
 
-        retrieved_hardcover = self.db_service.get_hardcover_details(test_abs_id)
+        retrieved_hardcover = self.db_service.get_hardcover_details(book.id)
         self.assertIsNotNone(retrieved_hardcover)
 
-        retrieved_job = self.db_service.get_latest_job(test_abs_id)
+        retrieved_job = self.db_service.get_latest_job(book.id)
         self.assertIsNotNone(retrieved_job)
 
         # Delete the book - this should cascade delete all related data
-        success = self.db_service.delete_book(test_abs_id)
+        success = self.db_service.delete_book(book.id)
         self.assertTrue(success)
 
         # Verify book is gone
-        deleted_book = self.db_service.get_book(test_abs_id)
+        deleted_book = self.db_service.get_book_by_abs_id(test_abs_id)
         self.assertIsNone(deleted_book)
 
         # Verify states are gone (cascade delete)
-        deleted_states = self.db_service.get_states_for_book(test_abs_id)
+        deleted_states = self.db_service.get_states_for_book(book.id)
         self.assertEqual(len(deleted_states), 0)
 
         # Verify hardcover details are gone (cascade delete)
-        deleted_hardcover = self.db_service.get_hardcover_details(test_abs_id)
+        deleted_hardcover = self.db_service.get_hardcover_details(book.id)
         self.assertIsNone(deleted_hardcover)
 
         # Verify job is gone (cascade delete)
-        deleted_job = self.db_service.get_latest_job(test_abs_id)
+        deleted_job = self.db_service.get_latest_job(book.id)
         self.assertIsNone(deleted_job)
 
     def test_create_states(self):
@@ -182,12 +185,12 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
         # Create book first
         book = self.Book(
             abs_id=test_abs_id,
-            abs_title='Test Book States',
+            title='Test Book States',
             ebook_filename='test-states.epub',
             kosync_doc_id='test-states-doc',
             status='active'
         )
-        self.db_service.save_book(book)
+        book = self.db_service.save_book(book)
 
         # Create states for different clients
         states_data = [
@@ -200,6 +203,7 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
         for client_name, percentage, extra_data in states_data:
             state = self.State(
                 abs_id=test_abs_id,
+                book_id=book.id,
                 client_name=client_name,
                 last_updated=time.time(),
                 percentage=percentage,
@@ -210,7 +214,7 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
             self.assertEqual(saved_state.percentage, percentage)
 
         # Retrieve and verify all states
-        states = self.db_service.get_states_for_book(test_abs_id)
+        states = self.db_service.get_states_for_book(book.id)
         self.assertEqual(len(states), len(states_data))
 
         # Verify each client has correct data
@@ -233,7 +237,7 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
         # Create books with different statuses
         active_book = self.Book(
             abs_id='active-book',
-            abs_title='Active Book',
+            title='Active Book',
             ebook_filename='active.epub',
             kosync_doc_id='active-doc',
             status='active'
@@ -241,7 +245,7 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
 
         paused_book = self.Book(
             abs_id='paused-book',
-            abs_title='Paused Book',
+            title='Paused Book',
             ebook_filename='paused.epub',
             kosync_doc_id='paused-doc',
             status='paused'
@@ -272,16 +276,17 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
         test_abs_id = 'test-stats-book'
         book = self.Book(
             abs_id=test_abs_id,
-            abs_title='Statistics Test Book',
+            title='Statistics Test Book',
             ebook_filename='stats.epub',
             kosync_doc_id='stats-doc',
             status='active'
         )
-        self.db_service.save_book(book)
+        book = self.db_service.save_book(book)
 
         # Add states
         state = self.State(
             abs_id=test_abs_id,
+            book_id=book.id,
             client_name='kosync',
             last_updated=time.time(),
             percentage=0.5
@@ -321,7 +326,7 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
                 self.assertTrue(migrator.should_migrate())
 
                 # Add a book to database
-                book = self.Book(abs_id='existing-book', abs_title='Existing Book')
+                book = self.Book(abs_id='existing-book', title='Existing Book')
                 migration_db_service.save_book(book)
 
                 # Should not migrate when database has data
@@ -340,7 +345,7 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
                 "mappings": [
                     {
                         "abs_id": "migration-book-1",
-                        "abs_title": "Migration Test Book 1",
+                        "title": "Migration Test Book 1",
                         "ebook_filename": "migration1.epub",
                         "kosync_doc_id": "migration-kosync-1",
                         "transcript_file": "transcript1.json",
@@ -377,20 +382,20 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
                 migrator.migrate()
 
                 # Verify book was migrated
-                migrated_book = migration_db_service.get_book("migration-book-1")
+                migrated_book = migration_db_service.get_book_by_abs_id("migration-book-1")
                 self.assertIsNotNone(migrated_book)
-                self.assertEqual(migrated_book.abs_title, "Migration Test Book 1")
+                self.assertEqual(migrated_book.title, "Migration Test Book 1")
                 self.assertEqual(migrated_book.status, "active")
 
                 # Verify hardcover details were migrated
-                hardcover = migration_db_service.get_hardcover_details("migration-book-1")
+                hardcover = migration_db_service.get_hardcover_details(migrated_book.id)
                 self.assertIsNotNone(hardcover)
                 self.assertEqual(hardcover.hardcover_book_id, "hc-123")
                 self.assertEqual(hardcover.hardcover_pages, 350)
                 self.assertEqual(hardcover.isbn, "978-1234567890")
 
                 # Verify job data was migrated
-                job = migration_db_service.get_latest_job("migration-book-1")
+                job = migration_db_service.get_latest_job(migrated_book.id)
                 self.assertIsNotNone(job)
                 self.assertEqual(job.retry_count, 2)
                 self.assertIn("Migration test error", job.last_error)
@@ -408,7 +413,7 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
                 "mappings": [
                     {
                         "abs_id": "state-migration-book",
-                        "abs_title": "State Migration Test",
+                        "title": "State Migration Test",
                         "status": "active"
                     }
                 ]
@@ -453,7 +458,8 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
                 migrator.migrate()
 
                 # Verify states were migrated
-                states = migration_db_service.get_states_for_book("state-migration-book")
+                migrated_book = migration_db_service.get_book_by_abs_id("state-migration-book")
+                states = migration_db_service.get_states_for_book(migrated_book.id)
                 self.assertEqual(len(states), 5)  # kosync, abs, absebook, storyteller, booklore
 
                 state_by_client = {s.client_name: s for s in states}
@@ -496,7 +502,7 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
                 "mappings": [
                     {
                         "abs_id": "idempotency-test",
-                        "abs_title": "Idempotency Test Book",
+                        "title": "Idempotency Test Book",
                         "status": "active"
                     }
                 ]
@@ -555,7 +561,7 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
 
         # 1. Setup Active Books
         active_id = 'active-book-id'
-        book = self.Book(abs_id=active_id, abs_title='Active Book', status='active')
+        book = self.Book(abs_id=active_id, title='Active Book', status='active')
         self.db_service.save_book(book)
 
         # 2. Setup Suggestions
@@ -631,12 +637,12 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
                 "mappings": [
                     {
                         "abs_id": "no-states-book",
-                        "abs_title": "Book Without States",
+                        "title": "Book Without States",
                         "status": "active"
                     },
                     {
                         "abs_id": "partial-states-book",
-                        "abs_title": "Book With Partial States",
+                        "title": "Book With Partial States",
                         "status": "active"
                     }
                 ]
@@ -673,17 +679,17 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
                 migrator.migrate()
 
                 # Verify both books were migrated
-                book1 = migration_db_service.get_book("no-states-book")
+                book1 = migration_db_service.get_book_by_abs_id("no-states-book")
                 self.assertIsNotNone(book1)
 
-                book2 = migration_db_service.get_book("partial-states-book")
+                book2 = migration_db_service.get_book_by_abs_id("partial-states-book")
                 self.assertIsNotNone(book2)
 
                 # Verify states
-                states1 = migration_db_service.get_states_for_book("no-states-book")
+                states1 = migration_db_service.get_states_for_book(book1.id)
                 self.assertEqual(len(states1), 0)  # No states
 
-                states2 = migration_db_service.get_states_for_book("partial-states-book")
+                states2 = migration_db_service.get_states_for_book(book2.id)
                 self.assertEqual(len(states2), 2)  # Only kosync and abs
 
                 state_clients = [s.client_name for s in states2]
@@ -697,8 +703,8 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
 
 class TestLegacyDatabaseMigration(unittest.TestCase):
     """
-    Tests that simulate a pre-Alembic (legacy) database to verify the stamp-on-upgrade
-    fix prevents startup crashes when upgrading from older installations.
+    Tests that simulate a pre-Alembic (legacy) database to verify the
+    baseline-stamp upgrade path works for users who skip multiple releases.
 
     The crash scenario:
       1. User has a database created before Alembic was introduced.
@@ -709,8 +715,8 @@ class TestLegacyDatabaseMigration(unittest.TestCase):
 
     The fix:
       Before running upgrade, detect this state and stamp the DB at the initial
-      revision (76886bc89d6e) so Alembic skips that migration and only applies
-      newer ones on top.
+      revision (76886bc89d6e), then run the remaining migrations on top. This
+      preserves the original tables while still executing later schema changes.
     """
 
     def _make_legacy_db(self, db_path: str):
@@ -729,7 +735,8 @@ class TestLegacyDatabaseMigration(unittest.TestCase):
         conn = sqlite3.connect(db_path)
         conn.executescript("""
             CREATE TABLE books (
-                abs_id TEXT PRIMARY KEY,
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                abs_id TEXT NOT NULL UNIQUE,
                 abs_title TEXT,
                 ebook_filename TEXT,
                 kosync_doc_id TEXT,
@@ -809,11 +816,12 @@ class TestLegacyDatabaseMigration(unittest.TestCase):
                     "This means the legacy stamp fix is not working."
                 )
 
-    def test_legacy_db_is_stamped_at_initial_revision(self):
+    def test_legacy_db_runs_remaining_migrations_after_baseline_stamp(self):
         """
         After DatabaseService starts up against a legacy database, the alembic_version
-        table must exist and be stamped at 'head' (having passed through 76886bc89d6e).
-        The initial revision must NOT be re-run as a migration.
+        table must exist and the database must reflect newer migrations that ran
+        after the baseline stamp. This is the contract that makes skipped-version
+        upgrades safe.
         """
         import sqlite3
 
@@ -832,13 +840,30 @@ class TestLegacyDatabaseMigration(unittest.TestCase):
             self.assertIn('alembic_version', tables, "alembic_version table was not created after stamp")
 
             version = conn.execute("SELECT version_num FROM alembic_version").fetchone()
-            conn.close()
-
             self.assertIsNotNone(version, "alembic_version table is empty after startup")
-            # The version must be non-empty — it will be 'head' (the latest migration),
-            # because after stamping at 76886bc89d6e, upgrade("head") runs the remaining
-            # newer migrations on top
             self.assertTrue(len(version[0]) > 0, f"Unexpected empty version_num: {version[0]!r}")
+
+            books_cols = {
+                row[1]: row for row in conn.execute("PRAGMA table_info(books)").fetchall()
+            }
+            self.assertIn("id", books_cols, "books.id was not added by later migrations")
+            self.assertIn("sync_mode", books_cols, "books.sync_mode was not added by later migrations")
+            self.assertIn("storyteller_uuid", books_cols, "books.storyteller_uuid was not added by later migrations")
+
+            reading_journal_tables = {
+                r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
+            }
+            self.assertIn(
+                "reading_journals",
+                reading_journal_tables,
+                "Later migrations did not create reading_journals on a legacy database",
+            )
+            self.assertIn(
+                "kosync_documents",
+                reading_journal_tables,
+                "Later migrations did not create kosync_documents on a legacy database",
+            )
+            conn.close()
 
     def test_legacy_db_preserves_existing_data(self):
         """
@@ -856,12 +881,144 @@ class TestLegacyDatabaseMigration(unittest.TestCase):
             db_service = DatabaseService(db_path)
 
             # The pre-existing book row must still be readable via the service
-            book = db_service.get_book('legacy-book-1')
+            book = db_service.get_book_by_abs_id('legacy-book-1')
             db_service.db_manager.close()
 
             self.assertIsNotNone(book, "Pre-existing legacy book was lost after migration")
-            self.assertEqual(book.abs_title, 'My Legacy Book')
+            self.assertEqual(book.title, 'My Legacy Book')
             self.assertEqual(book.status, 'active')
+
+    def test_intermediate_revision_upgrades_to_head(self):
+        """
+        Scenario: a user who upgraded once (got to initial Alembic revision)
+        but then skipped several releases. Their DB is stamped at 76886bc89d6e
+        with the original 4-table schema. Calling upgrade("head") must produce
+        the full modern schema including books.id PK and states.book_id FK.
+        """
+        import sqlite3
+
+        from alembic.config import Config
+
+        from alembic import command
+        from src.db.database_service import LEGACY_BASELINE_REVISION
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = str(Path(temp_dir) / "intermediate.db")
+
+            # Create the exact schema from the initial migration (76886bc89d6e)
+            # NOTE: uses abs_title (the original column name at that revision)
+            conn = sqlite3.connect(db_path)
+            conn.executescript("""
+                CREATE TABLE books (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    abs_id TEXT NOT NULL UNIQUE,
+                    abs_title TEXT,
+                    ebook_filename TEXT,
+                    kosync_doc_id TEXT,
+                    transcript_file TEXT,
+                    status TEXT DEFAULT 'active',
+                    duration REAL
+                );
+
+                CREATE TABLE hardcover_details (
+                    abs_id TEXT PRIMARY KEY,
+                    hardcover_book_id TEXT,
+                    hardcover_edition_id TEXT,
+                    hardcover_pages INTEGER,
+                    isbn TEXT,
+                    asin TEXT,
+                    matched_by TEXT,
+                    FOREIGN KEY (abs_id) REFERENCES books(abs_id) ON DELETE CASCADE
+                );
+
+                CREATE TABLE states (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    abs_id TEXT NOT NULL,
+                    client_name TEXT NOT NULL,
+                    last_updated REAL,
+                    percentage REAL,
+                    timestamp REAL,
+                    xpath TEXT,
+                    cfi TEXT,
+                    FOREIGN KEY (abs_id) REFERENCES books(abs_id) ON DELETE CASCADE
+                );
+
+                CREATE TABLE jobs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    abs_id TEXT NOT NULL,
+                    last_attempt REAL,
+                    retry_count INTEGER DEFAULT 0,
+                    last_error TEXT,
+                    FOREIGN KEY (abs_id) REFERENCES books(abs_id) ON DELETE CASCADE
+                );
+            """)
+            # Insert test data to verify it survives
+            conn.execute("""
+                INSERT INTO books (abs_id, abs_title, status)
+                VALUES ('intermediate-book', 'Intermediate Test', 'active')
+            """)
+            conn.execute("""
+                INSERT INTO states (abs_id, client_name, percentage)
+                VALUES ('intermediate-book', 'kosync', 0.5)
+            """)
+            conn.commit()
+            conn.close()
+
+            # Stamp at the initial revision (simulating a user who already ran
+            # the initial migration but hasn't upgraded since)
+            alembic_dir = Path(__file__).parent.parent / "alembic"
+            alembic_ini = alembic_dir.parent / "alembic.ini"
+            alembic_cfg = Config(str(alembic_ini))
+            alembic_cfg.set_main_option("script_location", str(alembic_dir))
+            alembic_cfg.set_main_option("sqlalchemy.url", f"sqlite:///{db_path}")
+            command.stamp(alembic_cfg, LEGACY_BASELINE_REVISION)
+
+            # Now let DatabaseService do its normal startup (which calls upgrade("head"))
+            from src.db.database_service import DatabaseService
+
+            db_service = DatabaseService(db_path)
+            db_service.db_manager.close()
+
+            # Verify the modern schema was applied
+            conn = sqlite3.connect(db_path)
+
+            # books.id should still exist (was already there)
+            books_cols = {
+                row[1] for row in conn.execute("PRAGMA table_info(books)").fetchall()
+            }
+            self.assertIn("id", books_cols)
+            self.assertIn("sync_mode", books_cols, "Later migration columns not applied")
+
+            # states.book_id must exist (added by Phase 2)
+            states_cols = {
+                row[1] for row in conn.execute("PRAGMA table_info(states)").fetchall()
+            }
+            self.assertIn("book_id", states_cols, "states.book_id not added by Phase 2")
+
+            # reading_journals table must exist (created by later migration)
+            tables = {
+                r[0] for r in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                ).fetchall()
+            }
+            self.assertIn("reading_journals", tables)
+            self.assertIn("kosync_documents", tables)
+
+            # Verify data survived
+            book = conn.execute(
+                "SELECT title FROM books WHERE abs_id = 'intermediate-book'"
+            ).fetchone()
+            self.assertIsNotNone(book, "Test book was lost during migration")
+            self.assertEqual(book[0], "Intermediate Test")
+
+            # Verify states.book_id was populated correctly
+            state = conn.execute(
+                "SELECT book_id FROM states WHERE abs_id = 'intermediate-book'"
+            ).fetchone()
+            self.assertIsNotNone(state, "Test state was lost during migration")
+            self.assertIsNotNone(state[0], "states.book_id was not populated")
+
+            conn.close()
 
     def test_fresh_db_still_initializes_correctly(self):
         """

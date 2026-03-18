@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>{{ item.title }} - PageKeeper</title>
+    <title>{{ title_prefix }}{{ item.title }} - PageKeeper</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="icon" type="image/png" href="/static/icon.png">
     <link rel="apple-touch-icon" href="/static/icon.png">
@@ -105,7 +105,7 @@
                         </button>
                         {% if linked_book %}
                         <button class="r-hero-action-btn r-hero-action-btn--start" type="button" id="start-reading-btn"
-                                data-item-id="{{ item.id }}" data-abs-id="{{ linked_book.abs_id }}">
+                                data-item-id="{{ item.id }}" data-book-id="{{ linked_book.id }}">
                             Start Reading
                         </button>
                         {% else %}
@@ -173,9 +173,9 @@
             <h3 class="r-section-title">Library Link</h3>
             {% if linked_book %}
             <div class="tbr-library-linked">
-                <a href="/reading/book/{{ linked_book.abs_id }}" class="tbr-linked-book-card">
+                <a href="/reading/book/{{ linked_book.id }}" class="tbr-linked-book-card">
                     <div class="tbr-linked-book-info">
-                        <span class="tbr-linked-book-title">{{ linked_book.abs_title|e }}</span>
+                        <span class="tbr-linked-book-title">{{ linked_book.title|e }}</span>
                         <span class="tbr-linked-book-status status-badge status-{{ linked_book.status }}">{{ linked_book.status|replace('_', ' ')|title }}</span>
                     </div>
                     <span class="tbr-linked-book-arrow">&#8594;</span>

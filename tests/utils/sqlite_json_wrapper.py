@@ -162,7 +162,7 @@ class SQLiteJsonDBWrapper:
         for book in books:
             mapping = {
                 'abs_id': book.abs_id,
-                'abs_title': book.abs_title,
+                'title': book.title,
                 'ebook_filename': book.ebook_filename,
                 'kosync_doc_id': book.kosync_doc_id,
                 'transcript_file': book.transcript_file,
@@ -188,7 +188,7 @@ class SQLiteJsonDBWrapper:
         for mapping in mappings_list:
             book = Book(
                 abs_id=mapping['abs_id'],
-                abs_title=mapping.get('abs_title'),
+                title=mapping.get('title'),
                 ebook_filename=mapping.get('ebook_filename'),
                 kosync_doc_id=mapping.get('kosync_doc_id'),
                 transcript_file=mapping.get('transcript_file'),
