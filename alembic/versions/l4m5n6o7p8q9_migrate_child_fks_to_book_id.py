@@ -294,6 +294,11 @@ def _upgrade_nullable_tables(conn) -> None:
             f"(SELECT id FROM books WHERE books.abs_id = [{table}].[{old_col}]) "
             f"WHERE [{old_col}] IS NOT NULL AND [{new_col}] IS NULL"
         ))
+        orphan_count = conn.execute(sa.text(
+            f"SELECT COUNT(*) FROM [{table}] WHERE [{old_col}] IS NOT NULL AND [{new_col}] IS NULL"
+        )).scalar()
+        if orphan_count:
+            logger.warning("%d row(s) in '%s' could not be linked to a book", orphan_count, table)
         # Create index if it doesn't exist (safe for re-runs)
         try:
             op.create_index(f'ix_{table}_{new_col}', table, [new_col])

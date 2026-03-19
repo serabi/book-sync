@@ -219,31 +219,34 @@ class DatabaseService:
                 existing_cols = {c["name"] for c in inspector.get_columns(table_name)}
                 for col in model.columns:
                     if col.name not in existing_cols:
-                        col_type = col.type.compile(self.db_manager.engine.dialect)
-                        default_clause = ""
-                        if col.default is not None:
-                            default_val = col.default.arg
-                            if callable(default_val):
-                                try:
-                                    default_val = default_val()
-                                except TypeError:
+                        try:
+                            col_type = col.type.compile(self.db_manager.engine.dialect)
+                            default_clause = ""
+                            if col.default is not None:
+                                default_val = col.default.arg
+                                if callable(default_val):
                                     try:
-                                        default_val = default_val(None)
-                                    except Exception:
-                                        default_val = None
-                            if isinstance(default_val, bool):
-                                default_clause = f" DEFAULT {'TRUE' if default_val else 'FALSE'}"
-                            elif isinstance(default_val, str):
-                                escaped = default_val.replace("'", "''")
-                                default_clause = f" DEFAULT '{escaped}'"
-                            elif isinstance(default_val, (int, float)):
-                                default_clause = f" DEFAULT {default_val}"
+                                        default_val = default_val()
+                                    except TypeError:
+                                        try:
+                                            default_val = default_val(None)
+                                        except Exception:
+                                            default_val = None
+                                if isinstance(default_val, bool):
+                                    default_clause = f" DEFAULT {'TRUE' if default_val else 'FALSE'}"
+                                elif isinstance(default_val, str):
+                                    escaped = default_val.replace("'", "''")
+                                    default_clause = f" DEFAULT '{escaped}'"
+                                elif isinstance(default_val, (int, float)):
+                                    default_clause = f" DEFAULT {default_val}"
 
-                        alter = f"ALTER TABLE {table_name} ADD COLUMN {col.name} {col_type}{default_clause}"
-                        with self.db_manager.engine.connect() as conn:
-                            conn.execute(text(alter))
-                            conn.commit()
-                        logger.info(f"Added missing column: {table_name}.{col.name}")
+                            alter = f"ALTER TABLE {table_name} ADD COLUMN {col.name} {col_type}{default_clause}"
+                            with self.db_manager.engine.connect() as conn:
+                                conn.execute(text(alter))
+                                conn.commit()
+                            logger.info(f"Added missing column: {table_name}.{col.name}")
+                        except Exception as e:
+                            logger.warning("Could not add column %s.%s: %s", table_name, col.name, e)
         except Exception as e:
             logger.warning(f"Column check failed (non-fatal): {e}")
 

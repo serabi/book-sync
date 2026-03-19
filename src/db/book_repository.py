@@ -172,6 +172,9 @@ class BookRepository(BaseRepository):
         return self._get_all(State)
 
     def save_state(self, state):
+        if not state.book_id and not state.abs_id:
+            logger.error("save_state called without book_id or abs_id — skipping")
+            return None
         # Prefer book_id for upsert lookup; fall back to abs_id for backward compat
         if state.book_id:
             lookup = [State.book_id == state.book_id, State.client_name == state.client_name]
