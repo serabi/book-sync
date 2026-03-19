@@ -215,7 +215,7 @@ class ABSSocketListener:
             return
 
         # Check if this is a tracked book in our database
-        book = self._db.get_book(library_item_id)
+        book = self._db.get_book_by_abs_id(library_item_id)
         if not book:
             logger.debug(f"ABS Socket.IO: Progress event for '{library_item_id[:12]}...' — not a tracked book, queuing suggestion discovery")
             self._suggestion_pool.submit(self._sync_manager.queue_suggestion, library_item_id)
@@ -223,7 +223,7 @@ class ABSSocketListener:
         if book.status in ('paused', 'dnf', 'not_started') and not book.activity_flag:
             book.activity_flag = True
             self._db.save_book(book)
-            logger.info(f"ABS Socket.IO: Activity detected on {book.status} book '{book.abs_title}'")
+            logger.info(f"ABS Socket.IO: Activity detected on {book.status} book '{book.title}'")
             return
         if book.status != "active":
             logger.debug(f"ABS Socket.IO: Progress event for '{library_item_id[:12]}...' — not an active book, ignoring")
@@ -233,7 +233,7 @@ class ABSSocketListener:
             self._pending[library_item_id] = time.time()
             self._fired.discard(library_item_id)
 
-        logger.debug(f"ABS Socket.IO: Progress event recorded for '{book.abs_title}'")
+        logger.debug(f"ABS Socket.IO: Progress event recorded for '{book.title}'")
 
     # ------------------------------------------------------------------
     # Debounce loop
@@ -270,15 +270,18 @@ class ABSSocketListener:
                 del self._pending[abs_id]
 
         for abs_id in to_fire:
-            book = self._db.get_book(abs_id)
-            title = book.abs_title if book else abs_id[:12]
+            book = self._db.get_book_by_abs_id(abs_id)
+            title = book.title if book else abs_id[:12]
             if is_own_write(abs_id):
                 logger.debug(f"ABS Socket.IO: Ignoring self-triggered event for '{title}'")
+                continue
+            if not book:
+                logger.warning(f"ABS Socket.IO: No book found for '{abs_id}' — skipping sync")
                 continue
             logger.info(f"Socket.IO: ABS progress changed for '{title}' — triggering sync")
             threading.Thread(
                 target=self._sync_manager.sync_cycle,
-                kwargs={"target_abs_id": abs_id},
+                kwargs={"target_book_id": book.id},
                 daemon=True,
             ).start()
 

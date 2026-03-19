@@ -4,7 +4,7 @@
  */
 
 var coverPickerState = {
-    absId: null,
+    bookId: null,
     currentTitle: '',
     currentQuery: '',
     currentRequestId: 0
@@ -22,8 +22,8 @@ function toCssUrl(url) {
     return 'url(' + JSON.stringify(String(url)) + ')';
 }
 
-function openCoverPicker(absId, currentTitle) {
-    coverPickerState.absId = absId;
+function openCoverPicker(bookId, currentTitle) {
+    coverPickerState.bookId = bookId;
     coverPickerState.currentTitle = currentTitle || '';
 
     var modal = document.getElementById('cover-picker-modal');
@@ -43,7 +43,7 @@ function openCoverPicker(absId, currentTitle) {
 
 function closeCoverPicker() {
     document.getElementById('cover-picker-modal').style.display = 'none';
-    coverPickerState.absId = null;
+    coverPickerState.bookId = null;
     coverPickerState.currentQuery = '';
     coverPickerState.currentRequestId += 1;
     document.getElementById('cp-results').replaceChildren();
@@ -82,14 +82,14 @@ async function searchCovers(query) {
 
     coverPickerState.currentQuery = query;
     var requestId = ++coverPickerState.currentRequestId;
-    var requestAbsId = coverPickerState.absId;
+    var requestBookId = coverPickerState.bookId;
 
     try {
         var resp = await fetch('/api/hardcover/cover-search?query=' + encodeURIComponent(query));
         var data = await readJsonResponse(resp);
 
         if (requestId !== coverPickerState.currentRequestId
-            || requestAbsId !== coverPickerState.absId
+            || requestBookId !== coverPickerState.bookId
             || query !== coverPickerState.currentQuery) {
             return;
         }
@@ -157,7 +157,7 @@ async function searchCovers(query) {
             resultsEl.appendChild(card);
         });
     } catch (err) {
-        if (requestId !== coverPickerState.currentRequestId || requestAbsId !== coverPickerState.absId) {
+        if (requestId !== coverPickerState.currentRequestId || requestBookId !== coverPickerState.bookId) {
             return;
         }
         statusEl.textContent = 'Search failed. Please try again.';
@@ -176,10 +176,10 @@ async function selectHardcoverCover(book) {
         return;
     }
 
-    var requestAbsId = coverPickerState.absId;
+    var requestBookId = coverPickerState.bookId;
 
     try {
-        var resp = await fetch('/api/book/' + encodeURIComponent(coverPickerState.absId) + '/cover', {
+        var resp = await fetch('/api/book/' + encodeURIComponent(coverPickerState.bookId) + '/cover', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -191,7 +191,7 @@ async function selectHardcoverCover(book) {
         });
 
         var data = await readJsonResponse(resp);
-        if (requestAbsId !== coverPickerState.absId) {
+        if (requestBookId !== coverPickerState.bookId) {
             return;
         }
         if (!resp.ok) {
@@ -214,17 +214,17 @@ async function submitCustomCoverUrl() {
     var url = document.getElementById('cp-custom-url').value.trim();
     if (!url) return;
 
-    var requestAbsId = coverPickerState.absId;
+    var requestBookId = coverPickerState.bookId;
 
     try {
-        var resp = await fetch('/api/book/' + encodeURIComponent(coverPickerState.absId) + '/cover', {
+        var resp = await fetch('/api/book/' + encodeURIComponent(coverPickerState.bookId) + '/cover', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ source: 'custom', url: url })
         });
 
         var data = await readJsonResponse(resp);
-        if (requestAbsId !== coverPickerState.absId) {
+        if (requestBookId !== coverPickerState.bookId) {
             return;
         }
         if (!resp.ok) {
@@ -244,15 +244,15 @@ async function submitCustomCoverUrl() {
 }
 
 async function removeCover() {
-    var requestAbsId = coverPickerState.absId;
+    var requestBookId = coverPickerState.bookId;
 
     try {
-        var resp = await fetch('/api/book/' + encodeURIComponent(coverPickerState.absId) + '/cover', {
+        var resp = await fetch('/api/book/' + encodeURIComponent(coverPickerState.bookId) + '/cover', {
             method: 'DELETE'
         });
 
         var data = await readJsonResponse(resp);
-        if (requestAbsId !== coverPickerState.absId) {
+        if (requestBookId !== coverPickerState.bookId) {
             return;
         }
         if (!resp.ok) {

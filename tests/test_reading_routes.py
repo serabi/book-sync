@@ -28,6 +28,7 @@ class MockContainer:
     def __init__(self):
         self.mock_database_service = Mock()
         self.mock_database_service.get_all_settings.return_value = {}
+        self.mock_database_service.get_book_by_ref.return_value = None
         self.mock_hardcover_sync_client = Mock()
         self.mock_hardcover_sync_client.is_configured.return_value = False
         self.mock_hardcover_client = Mock()
@@ -159,9 +160,9 @@ class TestReadingRoutes(unittest.TestCase):
 
     def test_stats_endpoint_returns_rich_payload(self):
         self.db.get_all_books.return_value = [
-            Book(abs_id='done', abs_title='Done', status='completed'),
-            Book(abs_id='active', abs_title='Active', status='active'),
-            Book(abs_id='dnf', abs_title='DNF', status='dnf'),
+            Book(abs_id='done', title='Done', status='completed'),
+            Book(abs_id='active', title='Active', status='active'),
+            Book(abs_id='dnf', title='DNF', status='dnf'),
         ]
         self.db.get_all_books.return_value[0].finished_at = '2026-03-01'
         self.db.get_all_books.return_value[0].rating = 4.5
@@ -184,8 +185,10 @@ class TestReadingRoutes(unittest.TestCase):
         self.assertAlmostEqual(data['average_rating'], 4.5)
 
     def test_rating_endpoint_returns_local_success_when_hardcover_sync_fails(self):
-        book = Book(abs_id='book-1', abs_title='Test', status='completed')
+        book = Book(abs_id='book-1', title='Test', status='completed')
+        book.id = 101
         book.rating = 3.5
+        self.db.get_book_by_ref.return_value = book
         self.db.update_book_reading_fields.return_value = book
         self.mock_container.mock_hardcover_service.is_configured.return_value = True
         self.mock_container.mock_hardcover_service.push_local_rating.return_value = {
@@ -203,8 +206,10 @@ class TestReadingRoutes(unittest.TestCase):
         self.assertEqual(data['hardcover_error'], 'boom')
 
     def test_rating_endpoint_accepts_half_stars(self):
-        book = Book(abs_id='book-1', abs_title='Test', status='completed')
+        book = Book(abs_id='book-1', title='Test', status='completed')
+        book.id = 101
         book.rating = 4.5
+        self.db.get_book_by_ref.return_value = book
         self.db.update_book_reading_fields.return_value = book
 
         resp = self.client.post('/api/reading/book/book-1/rating', json={'rating': 4.5})
@@ -212,18 +217,36 @@ class TestReadingRoutes(unittest.TestCase):
 
         self.assertEqual(resp.status_code, 200)
         self.assertTrue(data['success'])
-        self.db.update_book_reading_fields.assert_called_once_with('book-1', rating=4.5)
+        self.db.update_book_reading_fields.assert_called_once_with(101, rating=4.5)
 
     def test_rating_endpoint_rejects_non_half_increment(self):
+        book = Book(abs_id='book-1', title='Test', status='completed')
+        book.id = 101
+        self.db.get_book_by_ref.return_value = book
         resp = self.client.post('/api/reading/book/book-1/rating', json={'rating': 4.3})
         self.assertEqual(resp.status_code, 400)
 
+    def test_rating_endpoint_accepts_numeric_book_ref(self):
+        book = Book(abs_id='book-1', title='Test', status='completed')
+        book.id = 42
+        book.rating = 5.0
+        self.db.get_book_by_ref.return_value = book
+        self.db.update_book_reading_fields.return_value = book
+
+        resp = self.client.post('/api/reading/book/42/rating', json={'rating': 5.0})
+        data = resp.get_json()
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(data['success'])
+        self.db.get_book_by_ref.assert_called_with('42')
+        self.db.update_book_reading_fields.assert_called_with(42, rating=5.0)
+
     def test_reading_page_renders_log_and_stats_tabs(self):
-        book = Book(abs_id='book-1', abs_title='Test Book', status='active')
+        book = Book(abs_id='book-1', title='Test Book', status='active')
         state = State(abs_id='book-1', client_name='manual', percentage=0.5)
         self.db.get_all_books.return_value = [book]
         self.db.get_all_states.return_value = [state]
-        self.db.get_states_by_book.return_value = {'book-1': [state]}
+        self.db.get_states_by_book.return_value = {None: [state]}
         self.db.get_booklore_by_filename.return_value = {}
         self.db.get_all_booklore_books.return_value = []
         self.db.get_reading_goal.return_value = None

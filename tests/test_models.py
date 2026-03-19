@@ -18,18 +18,18 @@ def session():
     return Session()
 
 def test_book_alignment_model(session):
-    book = Book(abs_id="test_book", abs_title="Test Book")
+    book = Book(abs_id="test_book", title="Test Book")
     session.add(book)
     session.commit()
 
-    alignment = BookAlignment(abs_id="test_book", alignment_map_json='[{"char":0, "ts":0}]')
+    alignment = BookAlignment(abs_id="test_book", book_id=book.id, alignment_map_json='[{"char":0, "ts":0}]')
     session.add(alignment)
     session.commit()
 
     retrieved = session.query(BookAlignment).filter_by(abs_id="test_book").first()
     assert retrieved is not None
     assert "char" in retrieved.alignment_map_json
-    assert retrieved.book.abs_title == "Test Book"
+    assert retrieved.book.title == "Test Book"
 
 def test_booklore_book_model(session):
     cached = BookloreBook(

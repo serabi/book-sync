@@ -107,16 +107,16 @@ class TestKosyncDocument(unittest.TestCase):
         self.db_service.save_kosync_document(doc)
 
         # Create book
-        book = Book(abs_id="book-1", abs_title="Test Book")
-        self.db_service.save_book(book)
+        book = Book(abs_id="book-1", title="Test Book")
+        book = self.db_service.save_book(book)
 
         # Link
-        result = self.db_service.link_kosync_document('d' * 32, 'book-1')
+        result = self.db_service.link_kosync_document('d' * 32, book.id)
         self.assertTrue(result)
 
         # Verify
         retrieved = self.db_service.get_kosync_document('d' * 32)
-        self.assertEqual(retrieved.linked_abs_id, 'book-1')
+        self.assertEqual(retrieved.linked_book_id, book.id)
 
     def test_get_unlinked_documents(self):
         """Test retrieving unlinked documents."""
@@ -159,7 +159,7 @@ class _KosyncMockContainer:
 
         self.mock_sync_manager.abs_client = self.mock_abs_client
         self.mock_sync_manager.booklore_client = self.mock_booklore_client
-        self.mock_sync_manager.get_abs_title.return_value = 'Test Book'
+        self.mock_sync_manager.get_title.return_value = 'Test Book'
         self.mock_sync_manager.get_duration.return_value = 3600
 
     def sync_manager(self):
@@ -432,13 +432,13 @@ class TestKosyncEndpoints(unittest.TestCase):
         # Create a book with a known kosync_doc_id
         book = Book(
             abs_id='test-sibling-book',
-            abs_title='Sibling Test Book',
+            title='Sibling Test Book',
             kosync_doc_id='a' * 32,
             ebook_filename='sibling_test.epub',
             status='active',
             sync_mode='ebook_only'
         )
-        web_server.database_service.save_book(book)
+        book = web_server.database_service.save_book(book)
 
         # Create a KosyncDocument for hash_A linked to the book, with progress
         self.client.put(
@@ -453,7 +453,7 @@ class TestKosyncEndpoints(unittest.TestCase):
             }
         )
         # Link it to the book
-        web_server.database_service.link_kosync_document('a' * 32, 'test-sibling-book')
+        web_server.database_service.link_kosync_document('a' * 32, book.id)
 
         # Now GET with an unknown hash_B — should resolve via the book's sibling docs
         # First, we need hash_B to be findable. The sibling resolution requires
@@ -478,13 +478,16 @@ class TestKosyncEndpoints(unittest.TestCase):
         # Create a book whose kosync_doc_id matches the GET hash
         book = Book(
             abs_id='test-step2-book',
-            abs_title='Step2 Test Book',
+            title='Step2 Test Book',
             kosync_doc_id='s' * 32,
             ebook_filename='step2_test.epub',
             status='active',
             sync_mode='ebook_only'
         )
         web_server.database_service.save_book(book)
+
+        # Retrieve saved book to get its DB-assigned id
+        saved_book = web_server.database_service.get_book_by_abs_id('test-step2-book')
 
         # Create a sibling KosyncDocument linked to the same book with progress
         sibling_doc = KosyncDocument(
@@ -494,7 +497,8 @@ class TestKosyncEndpoints(unittest.TestCase):
             device='Sibling',
             device_id='S1',
             timestamp=datetime.utcnow(),
-            linked_abs_id='test-step2-book'
+            linked_abs_id='test-step2-book',
+            linked_book_id=saved_book.id,
         )
         web_server.database_service.save_kosync_document(sibling_doc)
 
@@ -521,13 +525,14 @@ class TestKosyncEndpoints(unittest.TestCase):
         # Create a book
         book = Book(
             abs_id='test-filename-book',
-            abs_title='Filename Test Book',
+            title='Filename Test Book',
             kosync_doc_id='f' * 32,
             ebook_filename='shared_name.epub',
             status='active',
             sync_mode='ebook_only'
         )
         web_server.database_service.save_book(book)
+        saved_book = web_server.database_service.get_book_by_abs_id('test-filename-book')
 
         # Create a KosyncDocument for hash_A linked to the book, with a filename and progress
         doc_a = KosyncDocument(
@@ -538,7 +543,8 @@ class TestKosyncEndpoints(unittest.TestCase):
             device_id='DA',
             timestamp=datetime.utcnow(),
             filename='shared_name.epub',
-            linked_abs_id='test-filename-book'
+            linked_abs_id='test-filename-book',
+            linked_book_id=saved_book.id,
         )
         web_server.database_service.save_kosync_document(doc_a)
 

@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>Settings - PageKeeper</title>
+    <title>{{ title_prefix }}Settings - PageKeeper</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="icon" type="image/png" href="/static/icon.png">
     <link rel="apple-touch-icon" href="/static/icon.png">
@@ -663,6 +663,12 @@
                                     <option value="{{ level }}" {% if get_val('TELEGRAM_LOG_LEVEL', 'ERROR')==level %}selected{% endif %}>{{ level }}</option>
                                     {% endfor %}
                                 </select>
+                            </div>
+                            <div class="help-text full-width settings-help-block">
+                                Telegram sends log notifications only at or above the selected minimum level, which defaults to <code>ERROR</code>.
+                                Create a bot with <code>@BotFather</code>, then open a chat with that bot and send <code>/start</code> before testing here.
+                                To get your chat ID, open <code>https://api.telegram.org/bot&lt;YOUR_BOT_TOKEN&gt;/getUpdates</code> in a browser after messaging the bot, then copy the <code>chat.id</code> value from the response.
+                                The Test button sends a real test message to the configured chat, so it verifies both the bot token and chat ID.
                             </div>
                         </div>
                     </div>

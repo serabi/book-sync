@@ -120,7 +120,7 @@ class HardcoverSyncClient(SyncClient):
             except Exception as e:
                 log_hardcover_action(
                     self.database_service, abs_id=book.abs_id,
-                    book_title=sanitize_log_data(book.abs_title),
+                    book_title=sanitize_log_data(book.title),
                     direction='push', action='status_transition',
                     success=False, error_message=str(e),
                     detail={'from': current_status, 'to': new_status},
@@ -129,17 +129,17 @@ class HardcoverSyncClient(SyncClient):
                 return current_status
             hardcover_details.hardcover_status_id = new_status
             self.database_service.save_hardcover_details(hardcover_details)
-            record_write('Hardcover', book.abs_id, {'status': new_status})
+            record_write('Hardcover', book.id, {'status': new_status})
 
             status_names = {1: 'Want to Read', 2: 'Currently Reading', 3: 'Read', 4: 'Paused', 5: 'DNF'}
             log_hardcover_action(
                 self.database_service, abs_id=book.abs_id,
-                book_title=sanitize_log_data(book.abs_title),
+                book_title=sanitize_log_data(book.title),
                 direction='push', action='status_transition',
                 detail={'from': current_status, 'to': new_status,
                         'label': status_names.get(new_status, str(new_status))},
             )
-            logger.info(f"Hardcover: '{sanitize_log_data(book.abs_title)}' status → {status_names.get(new_status, new_status)}")
+            logger.info(f"Hardcover: '{sanitize_log_data(book.title)}' status → {status_names.get(new_status, new_status)}")
 
         return new_status
 
@@ -152,7 +152,7 @@ class HardcoverSyncClient(SyncClient):
 
         percentage = request.locator_result.percentage
 
-        hardcover_details = self.database_service.get_hardcover_details(book.abs_id)
+        hardcover_details = self.database_service.get_hardcover_details(book.id)
         if not hardcover_details or not hardcover_details.hardcover_book_id:
             return SyncResult(None, False)
 
@@ -177,7 +177,7 @@ class HardcoverSyncClient(SyncClient):
 
             # Lazy fallback for books matched before edition resolution was added
             if self.hardcover_service:
-                logger.info(f"Hardcover: Pages are 0 for {sanitize_log_data(book.abs_title)}, resolving editions...")
+                logger.info(f"Hardcover: Pages are 0 for {sanitize_log_data(book.title)}, resolving editions...")
                 self.hardcover_service.resolve_editions(hardcover_details)
                 total_pages = hardcover_details.hardcover_pages or 0
                 audio_seconds = hardcover_details.hardcover_audio_seconds or 0
@@ -225,7 +225,7 @@ class HardcoverSyncClient(SyncClient):
                 'status': current_status,
             }
 
-            record_write('Hardcover', book.abs_id, updated_state)
+            record_write('Hardcover', book.id, updated_state)
             return SyncResult(actual_pct, True, updated_state)
 
         except Exception as e:
@@ -259,7 +259,7 @@ class HardcoverSyncClient(SyncClient):
                 'status': current_status,
             }
 
-            record_write('Hardcover', book.abs_id, updated_state)
+            record_write('Hardcover', book.id, updated_state)
             return SyncResult(percentage, True, updated_state)
 
         except Exception as e:

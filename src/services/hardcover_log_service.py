@@ -8,13 +8,17 @@ from src.db.models import HardcoverSyncLog
 logger = logging.getLogger(__name__)
 
 
-def log_hardcover_action(database_service, *, abs_id=None, book_title=None,
+def log_hardcover_action(database_service, *, abs_id=None, book_id=None, book_title=None,
                          direction, action, detail=None, success=True, error_message=None):
     """Record a Hardcover sync event. Never raises — logging must not break sync."""
     try:
+        if book_id is None and abs_id:
+            book = database_service.get_book_by_abs_id(abs_id)
+            book_id = book.id if book else None
         detail_json = json.dumps(detail, default=str) if detail else None
         entry = HardcoverSyncLog(
             abs_id=abs_id,
+            book_id=book_id,
             book_title=book_title,
             direction=direction,
             action=action,

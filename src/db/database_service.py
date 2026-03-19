@@ -9,7 +9,9 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from .book_repository import BookRepository
-from .integration_repository import IntegrationRepository
+from .bookfusion_repository import BookFusionRepository
+from .booklore_repository import BookloreRepository
+from .hardcover_repository import HardcoverRepository
 from .kosync_repository import KoSyncRepository
 from .models import (
     Base,
@@ -17,10 +19,14 @@ from .models import (
 )
 from .reading_repository import VALID_JOURNAL_EVENTS, ReadingRepository
 from .settings_repository import SettingsRepository
+from .storyteller_repository import StorytellerRepository
 from .suggestion_repository import SuggestionRepository
 from .tbr_repository import TbrRepository
 
 logger = logging.getLogger(__name__)
+
+LEGACY_BASELINE_REVISION = "76886bc89d6e"
+LEGACY_BASELINE_TABLES = {"books", "states"}
 
 
 class DatabaseService:
@@ -41,13 +47,18 @@ class DatabaseService:
         self.db_manager = DatabaseManager(str(self.db_path))
 
         # Run Alembic migrations to ensure schema is up to date
+        self._migration_failed = False
         self._run_alembic_migrations()
 
         # Ensure all tables exist (covers new models not yet in migrations)
-        Base.metadata.create_all(self.db_manager.engine)
+        if not self._migration_failed:
+            Base.metadata.create_all(self.db_manager.engine)
 
         # Safety net: add any model columns missing from existing tables
-        self._ensure_model_columns()
+        # Skip if migrations failed — adding columns without constraints would
+        # mask the real problem (missing FKs, NOT NULL, indexes).
+        if not self._migration_failed:
+            self._ensure_model_columns()
 
         # Initialize domain repositories
         self._settings = SettingsRepository(self.db_manager)
@@ -55,8 +66,14 @@ class DatabaseService:
         self._kosync = KoSyncRepository(self.db_manager)
         self._reading = ReadingRepository(self.db_manager)
         self._suggestions = SuggestionRepository(self.db_manager)
-        self._integrations = IntegrationRepository(self.db_manager)
+        self._hardcover = HardcoverRepository(self.db_manager)
+        self._storyteller = StorytellerRepository(self.db_manager)
+        self._bookfusion = BookFusionRepository(self.db_manager)
+        self._booklore = BookloreRepository(self.db_manager)
         self._tbr = TbrRepository(self.db_manager)
+
+        # Post-startup schema health check
+        self._verify_schema_health()
 
         # One-time data cleanup
         self._cleanup_bookfusion_md_titles()
@@ -92,9 +109,27 @@ class DatabaseService:
                 tables = inspector.get_table_names()
 
                 if tables and "alembic_version" not in tables:
-                    # Legacy database without Alembic — stamp it at head
-                    logger.info("Legacy database detected — stamping at current Alembic head")
-                    command.stamp(alembic_cfg, "head")
+                    if self._looks_like_pre_alembic_database(set(tables)):
+                        # Pre-Alembic databases already contain the original schema.
+                        # Stamp them at the initial revision, then replay the real
+                        # migration chain on top so skipped-version upgrades still
+                        # execute the later transformations.
+                        logger.info(
+                            "Legacy database detected — stamping at initial Alembic revision %s "
+                            "before upgrading to head",
+                            LEGACY_BASELINE_REVISION,
+                        )
+                        command.stamp(alembic_cfg, LEGACY_BASELINE_REVISION)
+                        command.upgrade(alembic_cfg, "head")
+                    else:
+                        # Unknown populated schema with no revision history. We keep the
+                        # previous safety behavior here because we cannot infer a correct
+                        # baseline revision automatically.
+                        logger.warning(
+                            "Populated database has no alembic_version table but does not "
+                            "match the known pre-Alembic schema; stamping at head"
+                        )
+                        command.stamp(alembic_cfg, "head")
                 else:
                     # Normal migration path
                     with engine.connect() as conn:
@@ -113,7 +148,64 @@ class DatabaseService:
                 engine.dispose()
 
         except Exception as e:
-            logger.warning(f"Alembic migration failed (non-fatal): {e}")
+            self._migration_failed = True
+            logger.error(
+                "Alembic migration failed — database schema may be incomplete. "
+                "Check logs above for details. Error: %s",
+                e,
+            )
+
+    @staticmethod
+    def _looks_like_pre_alembic_database(tables: set[str]) -> bool:
+        """Detect the original legacy schema that existed before Alembic.
+
+        Those databases already have the core tables created manually by older
+        versions of PageKeeper, so replaying the initial Alembic revision would
+        fail with "table already exists". Stamping at the baseline revision lets
+        later migrations run normally, which is what we need for users who skip
+        multiple releases before upgrading.
+
+        Only requires 'books' and 'states' — these two tables existed from day
+        one. Earlier checks also required 'hardcover_details' and 'jobs', but
+        being less strict is safer for extremely early pre-Alembic databases.
+        """
+        return "books" in tables and LEGACY_BASELINE_TABLES.issubset(tables)
+
+    def _verify_schema_health(self):
+        """Post-startup check that critical columns exist after migrations.
+
+        If migrations failed or were skipped, the schema may be missing key
+        columns like books.id or states.book_id. Log a prominent error so
+        the user (and Telegram notifications) can see it.
+        """
+        try:
+            from sqlalchemy import inspect as sa_inspect
+
+            inspector = sa_inspect(self.db_manager.engine)
+            tables = set(inspector.get_table_names())
+
+            checks = [
+                ("books", "id"),
+                ("states", "book_id"),
+            ]
+            missing = []
+            for table, column in checks:
+                if table not in tables:
+                    continue
+                cols = {c["name"] for c in inspector.get_columns(table)}
+                if column not in cols:
+                    missing.append(f"{table}.{column}")
+
+            if missing:
+                logger.error(
+                    "DATABASE SCHEMA INCOMPLETE — missing critical columns: %s. "
+                    "Migrations may have failed during a previous upgrade. "
+                    "Check earlier log entries for Alembic errors. "
+                    "Recovery: restore from backup or delete the database to start fresh.",
+                    ", ".join(missing),
+                )
+        except Exception as e:
+            logger.warning("Schema health check could not run: %s", e)
 
     def _ensure_model_columns(self):
         """Safety net: add any model columns missing from existing tables."""
@@ -128,31 +220,34 @@ class DatabaseService:
                 existing_cols = {c["name"] for c in inspector.get_columns(table_name)}
                 for col in model.columns:
                     if col.name not in existing_cols:
-                        col_type = col.type.compile(self.db_manager.engine.dialect)
-                        default_clause = ""
-                        if col.default is not None:
-                            default_val = col.default.arg
-                            if callable(default_val):
-                                try:
-                                    default_val = default_val()
-                                except TypeError:
+                        try:
+                            col_type = col.type.compile(self.db_manager.engine.dialect)
+                            default_clause = ""
+                            if col.default is not None:
+                                default_val = col.default.arg
+                                if callable(default_val):
                                     try:
-                                        default_val = default_val(None)
-                                    except Exception:
-                                        default_val = None
-                            if isinstance(default_val, bool):
-                                default_clause = f" DEFAULT {'TRUE' if default_val else 'FALSE'}"
-                            elif isinstance(default_val, str):
-                                escaped = default_val.replace("'", "''")
-                                default_clause = f" DEFAULT '{escaped}'"
-                            elif isinstance(default_val, (int, float)):
-                                default_clause = f" DEFAULT {default_val}"
+                                        default_val = default_val()
+                                    except TypeError:
+                                        try:
+                                            default_val = default_val(None)
+                                        except Exception:
+                                            default_val = None
+                                if isinstance(default_val, bool):
+                                    default_clause = f" DEFAULT {'TRUE' if default_val else 'FALSE'}"
+                                elif isinstance(default_val, str):
+                                    escaped = default_val.replace("'", "''")
+                                    default_clause = f" DEFAULT '{escaped}'"
+                                elif isinstance(default_val, (int, float)):
+                                    default_clause = f" DEFAULT {default_val}"
 
-                        alter = f"ALTER TABLE {table_name} ADD COLUMN {col.name} {col_type}{default_clause}"
-                        with self.db_manager.engine.connect() as conn:
-                            conn.execute(text(alter))
-                            conn.commit()
-                        logger.info(f"Added missing column: {table_name}.{col.name}")
+                            alter = f"ALTER TABLE {table_name} ADD COLUMN {col.name} {col_type}{default_clause}"
+                            with self.db_manager.engine.connect() as conn:
+                                conn.execute(text(alter))
+                                conn.commit()
+                            logger.info(f"Added missing column: {table_name}.{col.name}")
+                        except Exception as e:
+                            logger.warning("Could not add column %s.%s: %s", table_name, col.name, e)
         except Exception as e:
             logger.warning(f"Column check failed (non-fatal): {e}")
 
@@ -191,7 +286,8 @@ class DatabaseService:
     # Everything else is resolved via __getattr__.
 
     _REPOS = ('_settings', '_books', '_kosync', '_reading',
-              '_suggestions', '_integrations', '_tbr')
+              '_suggestions', '_hardcover', '_storyteller',
+              '_bookfusion', '_booklore', '_tbr')
 
     def __getattr__(self, name):
         if name.startswith('_'):
@@ -206,19 +302,24 @@ class DatabaseService:
     # ── Bulk data helpers (avoid N+1 in views) ──
 
     def get_states_by_book(self):
-        """Return all sync states grouped by abs_id: dict[str, list[State]]."""
+        """Return all sync states grouped by book_id: dict[int, list[State]]."""
         all_states = self._books.get_all_states()
         result = {}
         for state in all_states:
-            result.setdefault(state.abs_id, []).append(state)
+            result.setdefault(state.book_id, []).append(state)
         return result
 
-    def get_booklore_by_filename(self):
-        """Return all Booklore books grouped by lowercase filename: dict[str, list[BookloreBook]]."""
-        all_books = self._integrations.get_all_booklore_books()
+    def get_booklore_by_filename(self, enabled_server_ids=None):
+        """Return all Booklore books grouped by lowercase filename: dict[str, list[BookloreBook]].
+
+        When *enabled_server_ids* is given, only books from those instances are included.
+        """
+        all_books = self._booklore.get_all_booklore_books()
         result = {}
         for bl_book in all_books:
             if bl_book.filename:
+                if enabled_server_ids is not None and bl_book.server_id not in enabled_server_ids:
+                    continue
                 result.setdefault(bl_book.filename.lower(), []).append(bl_book)
         return result
 
@@ -226,56 +327,20 @@ class DatabaseService:
 
     def save_book(self, book, is_new=False):
         result = self._books.save_book(book)
-        if is_new and book.abs_title:
-            self._auto_link_tbr(book)
-            self._auto_link_bookfusion(book)
+        if is_new and book.title:
+            self._tbr.auto_link_by_title(book)
+            self._bookfusion.auto_link_by_title(book)
         return result
 
-    def _auto_link_tbr(self, book):
-        """Auto-link unlinked TBR items by normalized title match."""
-        try:
-            unlinked = self._tbr.get_unlinked_items()
-            if not unlinked:
-                return
-            norm_title = book.abs_title.lower().strip()
-            for item in unlinked:
-                if item.title and item.title.lower().strip() == norm_title:
-                    self._tbr.link_tbr_to_book(item.id, book.abs_id)
-                    logger.info(f"Auto-linked TBR item '{item.title}' to book '{book.abs_id}'")
-                    break
-        except Exception as e:
-            logger.debug(f"TBR auto-link failed: {e}")
-
-    def _auto_link_bookfusion(self, book):
-        """Auto-link unmatched BookFusion highlights to this specific new book."""
-        try:
-            unmatched = self._integrations.get_unmatched_bookfusion_highlights()
-            if not unmatched:
-                return
-            import difflib
-
-            from src.utils.title_utils import clean_book_title, normalize_title
-            norm_book = normalize_title(book.abs_title)
-            for hl in unmatched:
-                bf_title = clean_book_title(hl.book_title or '')
-                norm_bf = normalize_title(bf_title)
-                if norm_bf == norm_book or difflib.SequenceMatcher(None, norm_bf, norm_book).ratio() > 0.85:
-                    if hl.bookfusion_book_id:
-                        self._integrations.link_bookfusion_book(hl.bookfusion_book_id, book.abs_id)
-                        logger.info(f"Auto-linked BookFusion highlights for '{bf_title}' to '{book.abs_id}'")
-                    break
-        except Exception as e:
-            logger.debug(f"BookFusion auto-link failed: {e}")
-
     def save_hardcover_details(self, details):
-        result = self._integrations.save_hardcover_details(details)
-        # Auto-link: if a TBR item has this hardcover_book_id, set its book_abs_id
-        if details.hardcover_book_id:
+        result = self._hardcover.save_hardcover_details(details)
+        # Auto-link: if a TBR item has this hardcover_book_id, set its book_id
+        if details.hardcover_book_id and details.book_id:
             try:
                 hc_id = int(details.hardcover_book_id)
                 tbr_item = self._tbr.find_tbr_by_hardcover_id(hc_id)
-                if tbr_item and not tbr_item.book_abs_id:
-                    self._tbr.link_tbr_to_book(tbr_item.id, details.abs_id)
+                if tbr_item and not tbr_item.book_id:
+                    self._tbr.link_tbr_to_book(tbr_item.id, details.book_id)
             except (TypeError, ValueError):
                 pass
         return result
@@ -288,7 +353,7 @@ class DatabaseService:
         except Exception as e:
             logger.debug(f"Suggestion status normalization skipped: {e}")
 
-    # ── Methods with name mismatches or cross-repo delegation ──
+    # ── Backward-compatible method aliases ──
 
     def get_bookfusion_sync_cursor(self):
         return self._settings.get_setting("BOOKFUSION_SYNC_CURSOR")
@@ -296,11 +361,11 @@ class DatabaseService:
     def set_bookfusion_sync_cursor(self, cursor):
         return self._settings.set_setting("BOOKFUSION_SYNC_CURSOR", cursor)
 
-    def find_tbr_by_abs_id(self, abs_id):
-        return self._tbr.find_by_abs_id(abs_id)
+    def find_tbr_by_book_id(self, book_id):
+        return self._tbr.find_by_book_id(book_id)
 
-    def delete_tbr_by_abs_id(self, abs_id):
-        return self._tbr.delete_by_abs_id(abs_id)
+    def delete_tbr_by_book_id(self, book_id):
+        return self._tbr.delete_by_book_id(book_id)
 
     def get_unlinked_tbr_items(self):
         return self._tbr.get_unlinked_items()
@@ -322,8 +387,8 @@ class DatabaseService:
     def delete_tbr_item(self, item_id):
         return self._tbr.delete_tbr_item(item_id)
 
-    def link_tbr_to_book(self, item_id, abs_id):
-        return self._tbr.link_tbr_to_book(item_id, abs_id)
+    def link_tbr_to_book(self, item_id, book_id):
+        return self._tbr.link_tbr_to_book(item_id, book_id)
 
     def find_tbr_by_hardcover_id(self, hc_book_id):
         return self._tbr.find_tbr_by_hardcover_id(hc_book_id)
@@ -381,7 +446,7 @@ class DatabaseMigrator:
 
             book = Book(
                 abs_id=abs_id,
-                abs_title=m.get("abs_title"),
+                title=m.get("title") or m.get("abs_title"),
                 ebook_filename=m.get("ebook_filename"),
                 original_ebook_filename=m.get("original_ebook_filename"),
                 kosync_doc_id=m.get("kosync_doc_id"),
@@ -391,13 +456,15 @@ class DatabaseMigrator:
                 sync_mode=m.get("sync_mode", "audiobook"),
                 storyteller_uuid=m.get("storyteller_uuid"),
                 abs_ebook_item_id=m.get("abs_ebook_item_id"),
+                ebook_item_id=m.get("abs_ebook_item_id"),
             )
-            self.db_service.save_book(book)
+            saved_book = self.db_service.save_book(book)
 
             # Migrate job data if present
             if m.get("last_sync_attempt") or m.get("retry_count"):
                 job = Job(
                     abs_id=abs_id,
+                    book_id=saved_book.id,
                     last_attempt=m.get("last_sync_attempt"),
                     retry_count=m.get("retry_count", 0),
                     last_error=m.get("last_error"),
@@ -420,7 +487,7 @@ class DatabaseMigrator:
                     hc[key] = m[key]
 
             if hc:
-                details = HardcoverDetails(abs_id=abs_id, **hc)
+                details = HardcoverDetails(abs_id=abs_id, book_id=saved_book.id, **hc)
                 self.db_service.save_hardcover_details(details)
 
             logger.debug(f"Migrated book: {abs_id}")
@@ -432,10 +499,18 @@ class DatabaseMigrator:
         for abs_id, data in state_dict.items():
             last_updated = data.get("last_updated")
 
+            # Look up book_id from abs_id
+            book = self.db_service.get_book_by_abs_id(abs_id)
+            if not book:
+                logger.warning(f"Skipping state migration for unknown book: {abs_id}")
+                continue
+            book_id = book.id
+
             if "kosync_pct" in data:
                 self.db_service.save_state(
                     State(
                         abs_id=abs_id,
+                        book_id=book_id,
                         client_name="kosync",
                         last_updated=last_updated,
                         percentage=data["kosync_pct"],
@@ -447,6 +522,7 @@ class DatabaseMigrator:
                 self.db_service.save_state(
                     State(
                         abs_id=abs_id,
+                        book_id=book_id,
                         client_name="abs",
                         last_updated=last_updated,
                         percentage=data["abs_pct"],
@@ -458,6 +534,7 @@ class DatabaseMigrator:
                 self.db_service.save_state(
                     State(
                         abs_id=abs_id,
+                        book_id=book_id,
                         client_name="absebook",
                         last_updated=last_updated,
                         percentage=data["absebook_pct"],
@@ -469,6 +546,7 @@ class DatabaseMigrator:
                 self.db_service.save_state(
                     State(
                         abs_id=abs_id,
+                        book_id=book_id,
                         client_name="storyteller",
                         last_updated=last_updated,
                         percentage=data["storyteller_pct"],
@@ -481,6 +559,7 @@ class DatabaseMigrator:
                 self.db_service.save_state(
                     State(
                         abs_id=abs_id,
+                        book_id=book_id,
                         client_name="booklore",
                         last_updated=last_updated,
                         percentage=data["booklore_pct"],

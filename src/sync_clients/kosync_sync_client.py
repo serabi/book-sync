@@ -114,16 +114,16 @@ class KoSyncSyncClient(SyncClient):
             regenerated_xpath = self.ebook_parser.get_sentence_level_ko_xpath(book.ebook_filename, pct)
             safe_xpath = self._sanitize_kosync_xpath(regenerated_xpath, pct)
             if safe_xpath:
-                logger.info(f"Recovered malformed KoSync XPath using sentence-level fallback for '{book.abs_title}'")
+                logger.info(f"Recovered malformed KoSync XPath using sentence-level fallback for '{book.title}'")
 
         if safe_xpath is None:
             if pct is not None:
                 logger.info(f"Pushing percentage-only KoSync update for "
-                            f"'{book.abs_title if book else 'unknown'}' (no valid XPath available)")
+                            f"'{book.title if book else 'unknown'}' (no valid XPath available)")
                 safe_xpath = ""
             else:
                 logger.warning(f"Skipping KoSync update — no percentage or XPath for "
-                               f"'{book.abs_title if book else 'unknown'}'")
+                               f"'{book.title if book else 'unknown'}'")
                 return SyncResult(location=pct, success=False,
                                   updated_state={'pct': pct, 'xpath': None, 'skipped': True})
 

@@ -122,12 +122,12 @@ class StorytellerSyncClient(SyncClient):
             if success:
                 try:
                     from src.services.write_tracker import record_write
-                    record_write('Storyteller', book.abs_id)
+                    record_write('Storyteller', book.id)
                 except ImportError as e:
                     logger.debug(f"Write tracker not available for Storyteller: {e}")
         else:
             # Strict mode: Do not update if not linked via UUID
-            logger.debug(f"Skipping Storyteller update for {book.abs_title}: No linked UUID")
+            logger.debug(f"Skipping Storyteller update for {book.title}: No linked UUID")
             success = False
 
         return SyncResult(pct, success)

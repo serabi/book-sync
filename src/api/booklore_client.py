@@ -28,7 +28,8 @@ class BookloreClient:
         self.session = requests.Session()
 
         # Load cache from DB (and migrate legacy JSON if needed)
-        self._load_cache()
+        if self.is_configured():
+            self._load_cache()
 
     @property
     def base_url(self) -> str:
@@ -264,6 +265,9 @@ class BookloreClient:
         Refresh the book cache using robust pagination.
         Fetches books in batches to ensure complete library sync.
         """
+        if not self.is_configured():
+            return
+
         all_books_list = []
         page = 0
         batch_size = 200  # Reasonable chunk size
@@ -386,7 +390,6 @@ class BookloreClient:
                 self._update_cached_progress(book)
 
         self._cache_timestamp = time.time()
-        # self._save_cache() # DB is updated inside _process_book_detail
         return True
 
     def _process_book_detail(self, detail):

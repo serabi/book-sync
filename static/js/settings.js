@@ -79,7 +79,8 @@ function getServiceTestPayload(service) {
     }
     if (service === 'telegram') {
         return {
-            bot_token: getInputValue('TELEGRAM_BOT_TOKEN')
+            bot_token: getInputValue('TELEGRAM_BOT_TOKEN'),
+            chat_id: getInputValue('TELEGRAM_CHAT_ID')
         };
     }
     if (service === 'bookfusion') {

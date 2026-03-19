@@ -6,7 +6,7 @@ def resolve_book_covers(book, abs_service, database_service, book_type,
     """Resolve cover URLs for a book using the priority waterfall.
 
     Priority chain:
-        custom_cover_url -> KoSync cover -> Booklore cover -> Hardcover cover
+        custom_cover_url -> Booklore cover -> KoSync cover -> Hardcover cover
 
     When no custom cover is set and an ABS cover is available, the ABS cover
     becomes the primary ``cover_url`` and the best non-ABS source becomes
@@ -24,18 +24,20 @@ def resolve_book_covers(book, abs_service, database_service, book_type,
     cover_url = custom_cover_url
     fallback_cover_url = None
 
-    if not cover_url and book.kosync_doc_id:
-        cover_url = f'/covers/{book.kosync_doc_id}.jpg'
-
-    # Booklore cover fallback
+    # Booklore cover (authenticated proxy, always available if metadata exists)
     if not cover_url and booklore_meta:
         bl_id = (booklore_meta.raw_metadata_dict or {}).get('id')
         if bl_id:
-            cover_url = f"/api/cover-proxy/booklore/{bl_id}"
+            from src.blueprints.helpers import booklore_cover_proxy_prefix
+            prefix = booklore_cover_proxy_prefix(booklore_meta.server_id)
+            cover_url = f"{prefix}/{bl_id}"
+
+    if not cover_url and book.kosync_doc_id:
+        cover_url = f'/covers/{book.kosync_doc_id}.jpg'
 
     # Hardcover cover fallback
-    if not cover_url and book.abs_id:
-        hc_details = database_service.get_hardcover_details(book.abs_id)
+    if not cover_url and book.id:
+        hc_details = database_service.get_hardcover_details(book.id)
         if hc_details and hc_details.hardcover_cover_url:
             cover_url = hc_details.hardcover_cover_url
 

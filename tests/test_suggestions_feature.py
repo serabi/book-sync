@@ -165,7 +165,8 @@ class TestSuggestionsFeature(unittest.TestCase):
             self.mock_container.mock_sync_clients.items.return_value = {}.items()
 
             # Perform Match
-            self.mock_container.mock_database_service.get_book.return_value = None
+            self.mock_container.mock_database_service.get_book_by_abs_id.return_value = None
+            self.mock_container.mock_database_service.get_book_by_ref.return_value = None
             self.client.post('/match', data={
                 'audiobook_id': 'abc-123',
                 'ebook_filename': 'test.epub'
@@ -185,6 +186,7 @@ class TestSuggestionsFeature(unittest.TestCase):
             SimpleNamespace(
                 id=1,
                 source_id='visible-1',
+                source='abs',
                 title='Visible Book',
                 author='Visible Author',
                 cover_url=None,
@@ -195,6 +197,7 @@ class TestSuggestionsFeature(unittest.TestCase):
             SimpleNamespace(
                 id=2,
                 source_id='hidden-1',
+                source='abs',
                 title='Hidden Book',
                 author='Hidden Author',
                 cover_url=None,
@@ -221,8 +224,8 @@ class TestSuggestionsFeature(unittest.TestCase):
 
         self.assertEqual(hide_response.status_code, 200)
         self.assertEqual(unhide_response.status_code, 200)
-        self.mock_container.mock_database_service.hide_suggestion.assert_called_once_with('test-source')
-        self.mock_container.mock_database_service.unhide_suggestion.assert_called_once_with('test-source')
+        self.mock_container.mock_database_service.hide_suggestion.assert_called_once_with('test-source', source='abs')
+        self.mock_container.mock_database_service.unhide_suggestion.assert_called_once_with('test-source', source='abs')
 
 if __name__ == '__main__':
     unittest.main()

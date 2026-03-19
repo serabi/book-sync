@@ -24,7 +24,7 @@ class TestBookLoreLeadsSync(BaseSyncCycleTestCase):
         """Return BookLore test mapping configuration."""
         return {
             'abs_id': 'test-abs-id-booklore',
-            'abs_title': 'BookLore Leader Test Book',
+            'title': 'BookLore Leader Test Book',
             'kosync_doc_id': 'test-kosync-doc-booklore',
             'ebook_filename': 'test-book.epub',
             'transcript_file': str(Path(self.temp_dir) / 'test_transcript.json'),

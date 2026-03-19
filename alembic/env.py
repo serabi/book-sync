@@ -88,7 +88,11 @@ def run_migrations_online() -> None:
     with connectable.connect() as connection:
         context.configure(
             connection=connection,
-            target_metadata=target_metadata,
+            # target_metadata omitted intentionally — batch_alter_table will
+            # reflect column definitions from the live DB rather than the
+            # ORM model.  This prevents name-mismatch errors when a later
+            # migration renames a column (e.g. abs_title → title) but an
+            # earlier migration uses batch mode to recreate the table.
             render_as_batch=True,
         )
 

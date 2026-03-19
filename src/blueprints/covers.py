@@ -47,7 +47,7 @@ def serve_cover(filename):
 
 @covers_bp.route('/api/cover-proxy/booklore/<int:book_id>')
 def proxy_booklore_cover(book_id):
-    """Proxy cover access to Booklore (requires Bearer token auth)."""
+    """Proxy cover access to Booklore (auth via query-parameter JWT)."""
     container = get_container()
     return _proxy_booklore_cover_for(container.booklore_client(), book_id)
 
@@ -69,10 +69,10 @@ def _proxy_booklore_cover_for(bl_client, book_id):
         if not token:
             return "Booklore auth failed", 500
 
-        url = f"{bl_client.base_url}/api/v1/books/{book_id}/cover"
-        req = requests.get(url, headers={"Authorization": f"Bearer {token}"}, stream=True, timeout=10)
+        url = f"{bl_client.base_url}/api/v1/media/book/{book_id}/cover"
+        req = requests.get(url, params={"token": token}, stream=True, timeout=10)
         if req.status_code == 200:
-            resp = Response(req.iter_content(chunk_size=1024), content_type=req.headers.get('content-type', 'image/jpeg'))
+            resp = Response(req.iter_content(chunk_size=1024), content_type='image/jpeg')
             resp.headers['Cache-Control'] = 'public, max-age=86400, immutable'
             return resp
         else:

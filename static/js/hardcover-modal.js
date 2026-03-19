@@ -5,7 +5,7 @@
 
 // Modal state
 var hardcoverModalState = {
-    absId: null,
+    bookId: null,
     bookData: null,
     selectedEditionId: null,
     linkedEditionId: null,
@@ -15,7 +15,7 @@ var hardcoverModalState = {
 function linkHardcover(event) {
     event.stopPropagation();
     if (typeof closeActionPanel === 'function') closeActionPanel();
-    hardcoverModalState.absId = event.currentTarget.dataset.absId;
+    hardcoverModalState.bookId = event.currentTarget.dataset.bookId;
     hardcoverModalState.bookTitle = event.currentTarget.dataset.title || '';
     hardcoverModalState.bookData = null;
     hardcoverModalState.selectedEditionId = null;
@@ -42,7 +42,7 @@ function showHcState(state) {
 async function autoResolveBook() {
     showHcState('loading');
     try {
-        const resp = await fetch('/api/hardcover/resolve?abs_id=' + hardcoverModalState.absId);
+        const resp = await fetch('/api/hardcover/resolve?abs_id=' + hardcoverModalState.bookId);
         const data = await resp.json();
         if (data && data.found) {
             displayBookWithEditions(data);
@@ -81,7 +81,7 @@ async function resolveManualInput() {
     if (!input) return;
     showHcState('loading');
     try {
-        const resp = await fetch('/api/hardcover/resolve?abs_id=' + hardcoverModalState.absId + '&input=' + encodeURIComponent(input));
+        const resp = await fetch('/api/hardcover/resolve?abs_id=' + hardcoverModalState.bookId + '&input=' + encodeURIComponent(input));
         const data = await resp.json();
         if (data && data.found) {
             displayBookWithEditions(data);
@@ -163,7 +163,7 @@ async function searchByTitle() {
 async function selectSearchResult(book) {
     showHcState('loading');
     try {
-        var resp = await fetch('/api/hardcover/resolve?abs_id=' + hardcoverModalState.absId + '&input=' + encodeURIComponent(String(book.book_id)));
+        var resp = await fetch('/api/hardcover/resolve?abs_id=' + hardcoverModalState.bookId + '&input=' + encodeURIComponent(String(book.book_id)));
         var data = await resp.json();
         if (data && data.found) {
             displayBookWithEditions(data);
@@ -373,7 +373,7 @@ async function linkSelectedEdition() {
     const edition = data.editions.find(function(e) { return e.id == editionId; });
 
     try {
-        const resp = await fetch('/link-hardcover/' + hardcoverModalState.absId, {
+        const resp = await fetch('/link-hardcover/' + hardcoverModalState.bookId, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

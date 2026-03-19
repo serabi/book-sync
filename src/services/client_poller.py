@@ -30,7 +30,7 @@ class ClientPoller:
         self._db = database_service
         self._sync_manager = sync_manager
         self._sync_clients = sync_clients_dict
-        self._last_known: dict[tuple, float] = {}  # {(client_name, abs_id): last_pct}
+        self._last_known: dict[tuple, float] = {}  # {(client_name, book_id): last_pct}
         self._last_poll: dict[str, float] = {}     # {client_name: last_poll_timestamp}
         self._running = False
 
@@ -115,33 +115,33 @@ class ClientPoller:
                     continue
 
                 checked += 1
-                cache_key = (client_name, book.abs_id)
+                cache_key = (client_name, book.id)
                 last_pct = self._last_known.get(cache_key)
 
                 if last_pct is None:
                     logger.debug(
-                        f"{client_name} poll: '{book.abs_title}' initial position cached ({current_pct:.1%})"
+                        f"{client_name} poll: '{book.title}' initial position cached ({current_pct:.1%})"
                     )
                 elif abs(current_pct - last_pct) > 0.001:
                     # Check write-suppression before acting
-                    if is_own_write(client_name, book.abs_id, state=current_state.current):
+                    if is_own_write(client_name, book.id, state=current_state.current):
                         logger.debug(
-                            f"{client_name} poll: Ignoring self-triggered change for '{book.abs_title}'"
+                            f"{client_name} poll: Ignoring self-triggered change for '{book.title}'"
                         )
                     else:
                         logger.info(
-                            f"{client_name} poll: '{book.abs_title}' moved "
+                            f"{client_name} poll: '{book.title}' moved "
                             f"{last_pct:.1%} → {current_pct:.1%} — triggering sync"
                         )
                         threading.Thread(
                             target=self._sync_manager.sync_cycle,
-                            kwargs={'target_abs_id': book.abs_id},
+                            kwargs={'target_book_id': book.id},
                             daemon=True,
                         ).start()
 
                 self._last_known[cache_key] = current_pct
 
             except Exception as e:
-                logger.debug(f"ClientPoller: poll check failed for {client_name}/{getattr(book, 'abs_title', '?')}: {e}")
+                logger.debug(f"ClientPoller: poll check failed for {client_name}/{getattr(book, 'title', '?')}: {e}")
 
         logger.debug(f"{client_name} poll: checked {checked}/{len(active_books)} active books")

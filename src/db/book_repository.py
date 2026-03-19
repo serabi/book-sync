@@ -3,13 +3,10 @@
 import logging
 
 from sqlalchemy import func
-from sqlalchemy.exc import ProgrammingError
 
 from .base_repository import BaseRepository
 from .models import (
     Book,
-    BookfusionBook,
-    HardcoverDetails,
     Job,
     KosyncDocument,
     ReadingJournal,
@@ -24,8 +21,38 @@ class BookRepository(BaseRepository):
 
     # ── Book CRUD ──
 
-    def get_book(self, abs_id):
+    def get_book_by_abs_id(self, abs_id):
+        if not abs_id:
+            return None
         return self._get_one(Book, Book.abs_id == abs_id)
+
+    def get_book_by_id(self, book_id):
+        return self._get_one(Book, Book.id == book_id)
+
+    def get_book_by_ref(self, ref):
+        """Resolve a book reference as abs_id first, then integer book_id.
+
+        This keeps legacy ABS-ID URLs working while allowing new routes and
+        templates to use the canonical integer primary key.
+        """
+        if ref is None:
+            return None
+
+        if isinstance(ref, int):
+            return self.get_book_by_id(ref)
+
+        ref_str = str(ref).strip()
+        if not ref_str:
+            return None
+
+        book = self.get_book_by_abs_id(ref_str)
+        if book is not None:
+            return book
+
+        if ref_str.isdigit():
+            return self.get_book_by_id(int(ref_str))
+
+        return None
 
     def get_book_by_kosync_id(self, kosync_id):
         return self._get_one(Book, Book.kosync_doc_id == kosync_id)
@@ -42,7 +69,7 @@ class BookRepository(BaseRepository):
             return []
         with self.get_session() as session:
             results = (session.query(Book)
-                       .filter(Book.abs_title.ilike(f'%{query}%'))
+                       .filter(Book.title.ilike(f'%{query}%'))
                        .limit(limit)
                        .all())
             for r in results:
@@ -61,140 +88,146 @@ class BookRepository(BaseRepository):
         return self._save_new(book)
 
     def save_book(self, book):
-        return self._upsert(
-            Book,
-            [Book.abs_id == book.abs_id],
-            book,
-            ['abs_title', 'ebook_filename', 'original_ebook_filename', 'kosync_doc_id',
-             'transcript_file', 'status', 'duration', 'sync_mode', 'storyteller_uuid',
-                             'abs_ebook_item_id', 'activity_flag', 'custom_cover_url',
-               'started_at', 'finished_at', 'rating', 'read_count'],
-        )
+        update_attrs = ['title', 'ebook_filename', 'original_ebook_filename', 'kosync_doc_id',
+                        'transcript_file', 'status', 'duration', 'sync_mode', 'storyteller_uuid',
+                        'abs_ebook_item_id', 'ebook_item_id', 'activity_flag', 'custom_cover_url',
+                        'started_at', 'finished_at', 'rating', 'read_count']
+        if book.id:
+            return self._upsert(Book, [Book.id == book.id], book, update_attrs)
+        elif book.abs_id:
+            return self._upsert(Book, [Book.abs_id == book.abs_id], book, update_attrs)
+        else:
+            return self._save_new(book)
 
-    def delete_book(self, abs_id):
+    def delete_book(self, book_id):
         with self.get_session() as session:
             session.query(KosyncDocument).filter(
-                KosyncDocument.linked_abs_id == abs_id
-            ).update({KosyncDocument.linked_abs_id: None})
-            session.query(StorytellerSubmission).filter(
-                StorytellerSubmission.abs_id == abs_id
-            ).delete()
-            book = session.query(Book).filter(Book.abs_id == abs_id).first()
+                KosyncDocument.linked_book_id == book_id
+            ).update({KosyncDocument.linked_abs_id: None, KosyncDocument.linked_book_id: None})
+            book = session.query(Book).filter(Book.id == book_id).first()
             if book:
                 session.delete(book)
                 return True
             return False
 
     def migrate_book_data(self, old_abs_id, new_abs_id):
-        """Migrate all associated data from one book ID to another."""
+        """Migrate book identity: update abs_id and resolve state conflicts.
+
+        With book_id as FK, child rows follow the book automatically —
+        only abs_id and state dedup need updating.
+        """
         with self.get_session() as session:
             try:
-                # Delete states for new_abs_id that would conflict with incoming ones
+                book = session.query(Book).filter(Book.abs_id == old_abs_id).first()
+                if not book:
+                    logger.warning(f"migrate_book_data: book '{old_abs_id}' not found")
+                    return
+
+                # Delete states for the new abs_id that would conflict
                 incoming_clients = {
                     r[0] for r in session.query(State.client_name).filter(
-                        State.abs_id == old_abs_id
+                        State.book_id == book.id
                     ).all()
                 }
-                if incoming_clients:
-                    session.query(State).filter(
-                        State.abs_id == new_abs_id,
-                        State.client_name.in_(incoming_clients),
-                    ).delete(synchronize_session=False)
+                target_book = session.query(Book).filter(Book.abs_id == new_abs_id).first()
+                if target_book:
+                    if incoming_clients:
+                        session.query(State).filter(
+                            State.book_id == target_book.id,
+                            State.client_name.in_(incoming_clients),
+                        ).delete(synchronize_session=False)
+                    # Delete the target book so we can reuse its abs_id
+                    session.delete(target_book)
+                    session.flush()
 
-                session.query(State).filter(State.abs_id == old_abs_id).update(
+                # Update the book's abs_id — child rows follow via book_id FK
+                book.abs_id = new_abs_id
+
+                # Update denormalized abs_id on child rows
+                session.query(State).filter(State.book_id == book.id).update(
                     {State.abs_id: new_abs_id}, synchronize_session=False)
-                session.query(Job).filter(Job.abs_id == old_abs_id).update(
+                session.query(Job).filter(Job.book_id == book.id).update(
                     {Job.abs_id: new_abs_id}, synchronize_session=False)
+                session.query(ReadingJournal).filter(ReadingJournal.book_id == book.id).update(
+                    {ReadingJournal.abs_id: new_abs_id}, synchronize_session=False)
+                session.query(StorytellerSubmission).filter(StorytellerSubmission.book_id == book.id).update(
+                    {StorytellerSubmission.abs_id: new_abs_id}, synchronize_session=False)
+
                 session.query(KosyncDocument).filter(
                     KosyncDocument.linked_abs_id == old_abs_id
                 ).update({KosyncDocument.linked_abs_id: new_abs_id}, synchronize_session=False)
-                session.query(ReadingJournal).filter(
-                    ReadingJournal.abs_id == old_abs_id
-                ).update({ReadingJournal.abs_id: new_abs_id}, synchronize_session=False)
 
-                from .models import BookAlignment
-                try:
-                    session.query(BookAlignment).filter(
-                        BookAlignment.abs_id == old_abs_id
-                    ).update({BookAlignment.abs_id: new_abs_id}, synchronize_session=False)
-                except ProgrammingError as e:
-                    logger.warning(f"BookAlignment table missing during migration cleanup for '{old_abs_id}': {e}")
-                try:
-                    session.query(HardcoverDetails).filter(
-                        HardcoverDetails.abs_id == old_abs_id
-                    ).update({HardcoverDetails.abs_id: new_abs_id}, synchronize_session=False)
-                except ProgrammingError as e:
-                    logger.warning(f"HardcoverDetails table missing during migration cleanup for '{old_abs_id}': {e}")
-                try:
-                    session.query(BookfusionBook).filter(
-                        BookfusionBook.matched_abs_id == old_abs_id
-                    ).update({BookfusionBook.matched_abs_id: new_abs_id}, synchronize_session=False)
-                except ProgrammingError as e:
-                    logger.warning(f"BookFusion table missing during migration cleanup for '{old_abs_id}': {e}")
-
-                logger.info(f"Migrated data from '{old_abs_id}' to '{new_abs_id}'")
+                logger.info(f"Migrated book identity from '{old_abs_id}' to '{new_abs_id}'")
             except Exception as e:
                 logger.error(f"Failed to migrate book data: {e}")
                 raise
 
     # ── State CRUD ──
 
-    def get_state(self, abs_id, client_name):
-        return self._get_one(State, State.abs_id == abs_id, State.client_name == client_name)
+    def get_state(self, book_id, client_name):
+        return self._get_one(State, State.book_id == book_id, State.client_name == client_name)
 
-    def get_states_for_book(self, abs_id):
-        return self._get_all(State, State.abs_id == abs_id)
+    def get_states_for_book(self, book_id):
+        return self._get_all(State, State.book_id == book_id)
 
     def get_all_states(self):
         return self._get_all(State)
 
     def save_state(self, state):
+        if not state.book_id and not state.abs_id:
+            logger.error("save_state called without book_id or abs_id — skipping")
+            return None
+        # Prefer book_id for upsert lookup; fall back to abs_id for backward compat
+        if state.book_id:
+            lookup = [State.book_id == state.book_id, State.client_name == state.client_name]
+        else:
+            lookup = [State.abs_id == state.abs_id, State.client_name == state.client_name]
         return self._upsert(
             State,
-            [State.abs_id == state.abs_id, State.client_name == state.client_name],
+            lookup,
             state,
-            ['last_updated', 'percentage', 'timestamp', 'xpath', 'cfi'],
+            ['last_updated', 'percentage', 'timestamp', 'xpath', 'cfi', 'abs_id', 'book_id'],
         )
 
-    def delete_states_for_book(self, abs_id):
+    def delete_states_for_book(self, book_id):
         with self.get_session() as session:
-            count = session.query(State).filter(State.abs_id == abs_id).count()
-            session.query(State).filter(State.abs_id == abs_id).delete()
+            count = session.query(State).filter(State.book_id == book_id).count()
+            session.query(State).filter(State.book_id == book_id).delete()
             return count
 
     # ── Job CRUD ──
 
-    def get_latest_job(self, abs_id):
+    def get_latest_job(self, book_id):
         with self.get_session() as session:
             job = session.query(Job).filter(
-                Job.abs_id == abs_id
+                Job.book_id == book_id
             ).order_by(Job.last_attempt.desc()).first()
             if job:
                 session.expunge(job)
             return job
 
-    def get_latest_jobs_bulk(self, abs_ids):
-        """Fetch the latest job for each abs_id in one query.
+    def get_latest_jobs_bulk(self, book_ids):
+        """Fetch the latest job for each book_id in one query.
 
-        Returns a dict of {abs_id: Job}.
+        Returns a dict of {book_id: Job}.
         """
-        if not abs_ids:
+        if not book_ids:
             return {}
         with self.get_session() as session:
             latest = (
                 session.query(
-                    Job.abs_id,
+                    Job.book_id,
                     func.max(Job.last_attempt).label("max_ts"),
                 )
-                .filter(Job.abs_id.in_(abs_ids))
-                .group_by(Job.abs_id)
+                .filter(Job.book_id.in_(book_ids))
+                .group_by(Job.book_id)
                 .subquery()
             )
             rows = (
                 session.query(Job)
                 .join(
                     latest,
-                    (Job.abs_id == latest.c.abs_id)
+                    (Job.book_id == latest.c.book_id)
                     & (Job.last_attempt == latest.c.max_ts),
                 )
                 .all()
@@ -202,11 +235,11 @@ class BookRepository(BaseRepository):
             result = {}
             for job in rows:
                 session.expunge(job)
-                result[job.abs_id] = job
+                result[job.book_id] = job
             return result
 
-    def get_jobs_for_book(self, abs_id):
-        return self._get_all(Job, Job.abs_id == abs_id, order_by=Job.last_attempt.desc())
+    def get_jobs_for_book(self, book_id):
+        return self._get_all(Job, Job.book_id == book_id, order_by=Job.last_attempt.desc())
 
     def get_all_jobs(self):
         return self._get_all(Job)
@@ -214,10 +247,10 @@ class BookRepository(BaseRepository):
     def save_job(self, job):
         return self._save_new(job)
 
-    def update_latest_job(self, abs_id, **kwargs):
+    def update_latest_job(self, book_id, **kwargs):
         with self.get_session() as session:
             job = session.query(Job).filter(
-                Job.abs_id == abs_id
+                Job.book_id == book_id
             ).order_by(Job.last_attempt.desc()).first()
             if job:
                 for key, value in kwargs.items():
@@ -231,10 +264,10 @@ class BookRepository(BaseRepository):
                 return job
             return None
 
-    def delete_jobs_for_book(self, abs_id):
+    def delete_jobs_for_book(self, book_id):
         with self.get_session() as session:
-            count = session.query(Job).filter(Job.abs_id == abs_id).count()
-            session.query(Job).filter(Job.abs_id == abs_id).delete()
+            count = session.query(Job).filter(Job.book_id == book_id).count()
+            session.query(Job).filter(Job.book_id == book_id).delete()
             return count
 
     # ── Advanced Queries ──
@@ -242,11 +275,11 @@ class BookRepository(BaseRepository):
     def get_books_with_recent_activity(self, limit=10):
         with self.get_session() as session:
             latest = session.query(
-                State.abs_id,
+                State.book_id,
                 func.max(State.last_updated).label('max_updated')
-            ).group_by(State.abs_id).subquery()
+            ).group_by(State.book_id).subquery()
             books = session.query(Book).join(
-                latest, Book.abs_id == latest.c.abs_id
+                latest, Book.id == latest.c.book_id
             ).order_by(latest.c.max_updated.desc()).limit(limit).all()
             for book in books:
                 session.expunge(book)

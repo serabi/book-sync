@@ -15,6 +15,18 @@ from src.utils.string_utils import clean_book_title
 logger = logging.getLogger(__name__)
 
 
+# Match scoring thresholds
+_TITLE_EXACT_MATCH_FLOOR = 0.99
+_TITLE_PARTIAL_MATCH_FLOOR = 0.92
+_AUTHOR_EXACT_MATCH_FLOOR = 0.98
+_AUTHOR_PARTIAL_MATCH_FLOOR = 0.88
+_TITLE_WEIGHT = 0.8
+_AUTHOR_WEIGHT = 0.2
+_SERIES_NUMBER_PENALTY = 0.18
+_CONFIDENCE_HIGH_THRESHOLD = 0.93
+_CONFIDENCE_MEDIUM_THRESHOLD = 0.82
+
+
 class SuggestionService:
     """Handles suggestion discovery and creation for unmapped books."""
 
@@ -92,36 +104,36 @@ class SuggestionService:
         evidence = []
 
         if norm_source_title == norm_candidate_title:
-            title_score = max(title_score, 0.99)
+            title_score = max(title_score, _TITLE_EXACT_MATCH_FLOOR)
             evidence.append("title_match")
         elif norm_source_title in norm_candidate_title or norm_candidate_title in norm_source_title:
-            title_score = max(title_score, 0.92)
+            title_score = max(title_score, _TITLE_PARTIAL_MATCH_FLOOR)
             evidence.append("title_partial")
 
         author_score = 0.0
         if norm_source_author and norm_candidate_author:
             author_score = SequenceMatcher(None, norm_source_author, norm_candidate_author).ratio()
             if norm_source_author == norm_candidate_author:
-                author_score = max(author_score, 0.98)
+                author_score = max(author_score, _AUTHOR_EXACT_MATCH_FLOOR)
                 evidence.append("author_match")
             elif norm_source_author in norm_candidate_author or norm_candidate_author in norm_source_author:
-                author_score = max(author_score, 0.88)
+                author_score = max(author_score, _AUTHOR_PARTIAL_MATCH_FLOOR)
                 evidence.append("author_partial")
 
-        score = (title_score * 0.8) + (author_score * 0.2 if norm_source_author and norm_candidate_author else 0.0)
+        score = (title_score * _TITLE_WEIGHT) + (author_score * _AUTHOR_WEIGHT if norm_source_author and norm_candidate_author else 0.0)
 
         source_numbers = self._extract_title_numbers(norm_source_title)
         candidate_numbers = self._extract_title_numbers(norm_candidate_title)
         if source_numbers != candidate_numbers and (source_numbers or candidate_numbers):
-            score -= 0.18
+            score -= _SERIES_NUMBER_PENALTY
             evidence.append("series_penalty")
 
         return max(score, 0.0), evidence
 
     def _score_to_confidence(self, score: float) -> str:
-        if score >= 0.93:
+        if score >= _CONFIDENCE_HIGH_THRESHOLD:
             return "high"
-        if score >= 0.82:
+        if score >= _CONFIDENCE_MEDIUM_THRESHOLD:
             return "medium"
         return "low"
 
@@ -132,15 +144,15 @@ class SuggestionService:
             bf_books = []
 
         try:
-            linked_abs_ids = list(self.database_service.get_bookfusion_linked_abs_ids() or [])
+            linked_book_ids = list(self.database_service.get_bookfusion_linked_book_ids() or [])
         except TypeError:
-            linked_abs_ids = []
+            linked_book_ids = []
 
         visible_books = [b for b in bf_books if not getattr(b, 'hidden', False)]
         by_title_author = {}
         by_title = {}
         for book in visible_books:
-            if book.matched_abs_id:
+            if book.matched_book_id:
                 continue
             norm_title = self._normalize_title(book.title or book.filename or "")
             norm_author = self._normalize_author(book.authors or "")
@@ -151,7 +163,7 @@ class SuggestionService:
             by_title.setdefault(norm_title, []).append(book)
         return {
             "books": visible_books,
-            "linked_abs_ids": linked_abs_ids,
+            "linked_book_ids": linked_book_ids,
             "by_title_author": by_title_author,
             "by_title": by_title,
             "has_catalog": bool(visible_books),

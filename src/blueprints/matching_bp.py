@@ -1,6 +1,5 @@
 """Matching blueprint — suggestions, single match, batch match."""
 
-import hashlib
 import json
 import logging
 import os
@@ -36,40 +35,41 @@ def _create_storyteller_reservation(database_service, abs_id):
     and starts Whisper transcription before the async submission thread has
     finished copying files and creating its own record.
     """
-    book = database_service.get_book(abs_id)
+    book = database_service.get_book_by_ref(abs_id)
     storyteller_uuid = book.storyteller_uuid if book else None
-    submission = StorytellerSubmission(abs_id=abs_id, status="queued", storyteller_uuid=storyteller_uuid)
+    submission = StorytellerSubmission(abs_id=abs_id, book_id=book.id if book else None, status="queued", storyteller_uuid=storyteller_uuid)
     database_service.save_storyteller_submission(submission)
     return submission
 
 
-def _submit_to_storyteller_async(container, abs_id, abs_title, ebook_filename, books_dir, epub_cache_dir):
+def _submit_to_storyteller_async(container, abs_id, book_title, ebook_filename, books_dir, epub_cache_dir):
     """Submit a book to Storyteller in a background thread so the response isn't blocked."""
 
     def _do_submit():
         try:
             st_sub_svc = container.storyteller_submission_service()
             if not st_sub_svc.is_available():
-                logger.warning(f"Storyteller submission skipped for '{abs_title}': service not available")
+                logger.warning(f"Storyteller submission skipped for '{book_title}': service not available")
                 return
             from src.utils.epub_resolver import get_local_epub
 
             epub_path = get_local_epub(ebook_filename, books_dir, epub_cache_dir, container.booklore_client())
             audio_files = container.abs_client().get_audio_files(abs_id)
             if epub_path and audio_files:
-                result = st_sub_svc.submit_book(abs_id, abs_title, Path(epub_path), audio_files)
+                result = st_sub_svc.submit_book(abs_id, book_title, Path(epub_path), audio_files)
                 if not result.success:
-                    logger.warning(f"Storyteller submission failed for '{abs_title}': {result.error}")
+                    logger.warning(f"Storyteller submission failed for '{book_title}': {result.error}")
             else:
                 logger.warning(
-                    f"Storyteller submission skipped for '{abs_title}': "
+                    f"Storyteller submission skipped for '{book_title}': "
                     f"epub={'found' if epub_path else 'missing'}, audio={len(audio_files or [])} files"
                 )
         except Exception as e:
-            logger.warning(f"Storyteller submission error for '{abs_title}': {e}")
+            logger.warning(f"Storyteller submission error for '{book_title}': {e}")
             try:
                 db_svc = container.database_service()
-                submission = db_svc.get_active_storyteller_submission(abs_id)
+                book = db_svc.get_book_by_abs_id(abs_id)
+                submission = db_svc.get_active_storyteller_submission_by_book_id(book.id) if book else None
                 if submission:
                     db_svc.update_storyteller_submission_status(submission.id, "failed")
             except Exception:
@@ -83,6 +83,7 @@ def _copy_book_merge_metadata(existing_book, overrides=None):
         "storyteller_uuid": getattr(existing_book, "storyteller_uuid", None),
         "original_ebook_filename": getattr(existing_book, "original_ebook_filename", None),
         "abs_ebook_item_id": getattr(existing_book, "abs_ebook_item_id", None),
+        "ebook_item_id": getattr(existing_book, "ebook_item_id", None) or getattr(existing_book, "abs_ebook_item_id", None),
         "custom_cover_url": getattr(existing_book, "custom_cover_url", None),
         "started_at": getattr(existing_book, "started_at", None),
         "finished_at": getattr(existing_book, "finished_at", None),
@@ -111,6 +112,7 @@ def _serialize_suggestion(s):
     return {
         "id": s.id,
         "source_id": s.source_id,
+        "source": s.source or "abs",
         "title": s.title,
         "author": s.author,
         "cover_url": s.cover_url,
@@ -209,7 +211,7 @@ def match():
                 return "Audiobook not found", 404
             book = Book(
                 abs_id=abs_id,
-                abs_title=manager.get_abs_title(selected_ab),
+                title=manager.get_abs_title(selected_ab),
                 ebook_filename=None,
                 kosync_doc_id=None,
                 status="not_started",
@@ -247,18 +249,16 @@ def match():
                 kosync_doc_id = get_kosync_id_for_ebook(ebook_filename, booklore_id, bl_client=matched_bl_client)
                 if not kosync_doc_id:
                     return "Could not compute KOSync ID for ebook", 404
-                book_id = f"ebook-{kosync_doc_id[:16]}"
                 title = ebook_display_name or (bl_book.get("title") if bl_book else None) or Path(ebook_filename).stem
             else:
                 # Storyteller-only (no ebook file)
-                book_id = f"ebook-{hashlib.md5(storyteller_uuid.encode()).hexdigest()[:16]}"
                 title = storyteller_title or ebook_display_name or "Storyteller Book"
                 ebook_filename = None
                 kosync_doc_id = None
 
             book = Book(
-                abs_id=book_id,
-                abs_title=title,
+                abs_id=None,
+                title=title,
                 ebook_filename=ebook_filename,
                 kosync_doc_id=kosync_doc_id,
                 status="not_started",
@@ -276,7 +276,7 @@ def match():
             ebook_filename = sanitize_filename(request.form.get("ebook_filename"))
             if not attach_abs_id or not ebook_filename:
                 return "Missing book ID or ebook filename", 400
-            book = database_service.get_book(attach_abs_id)
+            book = database_service.get_book_by_ref(attach_abs_id)
             if not book:
                 return "Book not found", 404
             booklore_id = None
@@ -307,7 +307,7 @@ def match():
             abs_id = request.form.get("audiobook_id")
             if not link_book_id or not abs_id:
                 return "Missing book ID or audiobook ID", 400
-            book = database_service.get_book(link_book_id)
+            book = database_service.get_book_by_ref(link_book_id)
             if not book:
                 return "Book not found", 404
             audiobooks = abs_service.get_audiobooks()
@@ -316,7 +316,7 @@ def match():
                 return "Audiobook not found", 404
             new_book = Book(
                 abs_id=abs_id,
-                abs_title=manager.get_abs_title(selected_ab),
+                title=manager.get_abs_title(selected_ab),
                 ebook_filename=book.ebook_filename,
                 kosync_doc_id=book.kosync_doc_id,
                 status=book.status or "not_started",
@@ -333,7 +333,7 @@ def match():
             database_service.save_book(new_book)
             try:
                 database_service.migrate_book_data(link_book_id, abs_id)
-                database_service.delete_book(link_book_id)
+                database_service.delete_book(book.id)
                 abs_service.add_to_collection(abs_id, current_app.config["ABS_COLLECTION_NAME"])
                 logger.info(f"Successfully merged {link_book_id} into {abs_id}")
             except Exception as e:
@@ -377,7 +377,7 @@ def match():
             return "Could not compute KOSync ID for ebook", 404
 
         # Hash Preservation
-        current_book_entry = database_service.get_book(abs_id)
+        current_book_entry = database_service.get_book_by_ref(abs_id)
         if current_book_entry and current_book_entry.kosync_doc_id:
             logger.info(
                 f"Preserving existing hash '{current_book_entry.kosync_doc_id}' for '{abs_id}' instead of new hash '{kosync_doc_id}'"
@@ -391,29 +391,31 @@ def match():
         if existing_book and existing_book.abs_id != abs_id:
             logger.info(f"Found existing book entry '{existing_book.abs_id}' for this ebook -- Merging into '{abs_id}'")
             migration_source_id = existing_book.abs_id
-            abs_ebook_item_id = existing_book.abs_ebook_item_id or existing_book.abs_id
+            ebook_item_id = existing_book.ebook_item_id or existing_book.abs_ebook_item_id or existing_book.abs_id
 
             if not original_ebook_filename:
                 original_ebook_filename = existing_book.original_ebook_filename or existing_book.ebook_filename
             merge_metadata = _copy_book_merge_metadata(
                 existing_book,
                 {
-                    "abs_ebook_item_id": abs_ebook_item_id,
+                    "abs_ebook_item_id": ebook_item_id,
+                    "ebook_item_id": ebook_item_id,
                     "original_ebook_filename": original_ebook_filename,
                     "storyteller_uuid": storyteller_uuid or existing_book.storyteller_uuid,
                 },
             )
         else:
-            abs_ebook_item_id = None
+            ebook_item_id = None
             merge_metadata = {
                 "storyteller_uuid": storyteller_uuid,
                 "original_ebook_filename": original_ebook_filename,
-                "abs_ebook_item_id": abs_ebook_item_id,
+                "abs_ebook_item_id": ebook_item_id,
+                "ebook_item_id": ebook_item_id,
             }
 
         book = Book(
             abs_id=abs_id,
-            abs_title=manager.get_abs_title(selected_ab),
+            title=manager.get_abs_title(selected_ab),
             ebook_filename=ebook_filename,
             kosync_doc_id=kosync_doc_id,
             transcript_file=None,
@@ -436,7 +438,7 @@ def match():
         if migration_source_id:
             try:
                 database_service.migrate_book_data(migration_source_id, abs_id)
-                database_service.delete_book(migration_source_id)
+                database_service.delete_book(existing_book.id)
                 abs_service.add_to_collection(abs_id, current_app.config["ABS_COLLECTION_NAME"])
                 logger.info(f"Successfully merged {migration_source_id} into {abs_id}")
             except Exception as e:
@@ -495,14 +497,14 @@ def match():
     link_title = ""
 
     if attach_to:
-        attach_book = database_service.get_book(attach_to)
+        attach_book = database_service.get_book_by_ref(attach_to)
         if attach_book:
-            attach_title = attach_book.abs_title or attach_to
+            attach_title = attach_book.title or attach_to
 
     if link_to:
-        link_book = database_service.get_book(link_to)
+        link_book = database_service.get_book_by_ref(link_to)
         if link_book:
-            link_title = link_book.abs_title or link_to
+            link_title = link_book.title or link_to
 
     abs_service = get_abs_service()
     audiobooks, ebooks, storyteller_books = [], [], []
@@ -594,7 +596,7 @@ def batch_match():
                     session["queue"].append(
                         {
                             "abs_id": abs_id,
-                            "abs_title": manager.get_abs_title(selected_ab),
+                            "title": manager.get_abs_title(selected_ab),
                             "ebook_filename": ebook_filename,
                             "ebook_display_name": ebook_display_name,
                             "storyteller_uuid": storyteller_uuid,
@@ -624,7 +626,7 @@ def batch_match():
                     if item.get("audio_only"):
                         book = Book(
                             abs_id=item["abs_id"],
-                            abs_title=item["abs_title"],
+                            title=item["title"],
                             ebook_filename=None,
                             kosync_doc_id=None,
                             status="not_started",
@@ -661,7 +663,7 @@ def batch_match():
                         continue
 
                     # Hash Preservation
-                    current_book_entry = database_service.get_book(item["abs_id"])
+                    current_book_entry = database_service.get_book_by_ref(item["abs_id"])
                     if current_book_entry and current_book_entry.kosync_doc_id:
                         logger.info(
                             f"Preserving existing hash '{current_book_entry.kosync_doc_id}' for '{item['abs_id']}' instead of new hash '{kosync_doc_id}'"
@@ -671,14 +673,14 @@ def batch_match():
                     # Duplicate Merge
                     existing_book = database_service.get_book_by_kosync_id(kosync_doc_id)
                     migration_source_id = None
-                    abs_ebook_item_id = None
+                    ebook_item_id = None
 
                     if existing_book and existing_book.abs_id != item["abs_id"]:
                         logger.info(
                             f"Found existing book entry '{existing_book.abs_id}' for this ebook -- Merging into '{item['abs_id']}'"
                         )
                         migration_source_id = existing_book.abs_id
-                        abs_ebook_item_id = existing_book.abs_ebook_item_id or existing_book.abs_id
+                        ebook_item_id = existing_book.ebook_item_id or existing_book.abs_ebook_item_id or existing_book.abs_id
                         if not original_ebook_filename:
                             original_ebook_filename = (
                                 existing_book.original_ebook_filename or existing_book.ebook_filename
@@ -686,7 +688,8 @@ def batch_match():
                         merge_metadata = _copy_book_merge_metadata(
                             existing_book,
                             {
-                                "abs_ebook_item_id": abs_ebook_item_id,
+                                "abs_ebook_item_id": ebook_item_id,
+                                "ebook_item_id": ebook_item_id,
                                 "original_ebook_filename": original_ebook_filename,
                                 "storyteller_uuid": storyteller_uuid or existing_book.storyteller_uuid,
                             },
@@ -695,14 +698,15 @@ def batch_match():
                         merge_metadata = {
                             "storyteller_uuid": storyteller_uuid or None,
                             "original_ebook_filename": original_ebook_filename,
-                            "abs_ebook_item_id": abs_ebook_item_id,
+                            "abs_ebook_item_id": ebook_item_id,
+                            "ebook_item_id": ebook_item_id,
                         }
 
                     batch_storyteller_submit = item.get("storyteller_submit")
 
                     book = Book(
                         abs_id=item["abs_id"],
-                        abs_title=item["abs_title"],
+                        title=item["title"],
                         ebook_filename=ebook_filename,
                         kosync_doc_id=kosync_doc_id,
                         transcript_file=None,
@@ -720,7 +724,7 @@ def batch_match():
                     # Duplicate Merge: Migrate
                     if migration_source_id:
                         database_service.migrate_book_data(migration_source_id, item["abs_id"])
-                        database_service.delete_book(migration_source_id)
+                        database_service.delete_book(existing_book.id)
                         abs_service.add_to_collection(item["abs_id"], current_app.config["ABS_COLLECTION_NAME"])
                         logger.info(f"Successfully merged {migration_source_id} into {item['abs_id']}")
 
@@ -747,7 +751,7 @@ def batch_match():
                         _submit_to_storyteller_async(
                             container,
                             item["abs_id"],
-                            item["abs_title"],
+                            item["title"],
                             ebook_filename,
                             current_app.config.get("BOOKS_DIR", ""),
                             current_app.config.get("EPUB_CACHE_DIR", ""),

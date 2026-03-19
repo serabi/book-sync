@@ -203,7 +203,8 @@ class StorytellerAPIClient:
                     old = r.json().get('locator', {})
                     if old.get('href'): payload['locator']['href'] = old['href']
                     if old.get('type'): payload['locator']['type'] = old['type']
-            except Exception: pass
+            except Exception as e:
+                logger.debug(f"Failed to fetch existing locator for fallback: {e}")
 
         response = self._make_request("POST", f"/api/v2/books/{book_uuid}/positions", payload)
 

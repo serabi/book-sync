@@ -100,7 +100,8 @@ def api_hardcover_resolve():
 
     book_data = None
     author = None
-    existing_details = database_service.get_hardcover_details(abs_id)
+    book = database_service.get_book_by_ref(abs_id)
+    existing_details = database_service.get_hardcover_details(book.id) if book else None
 
     if manual_input:
         # Manual input provided - resolve directly
@@ -115,7 +116,6 @@ def api_hardcover_resolve():
 
         if not book_data:
             # No existing link (or fetch failed) - fall back to auto-match from ABS metadata
-            book = database_service.get_book(abs_id)
             if not book:
                 return jsonify({"found": False, "message": "Book not found"}), 404
 
@@ -131,7 +131,7 @@ def api_hardcover_resolve():
                 # ABS unavailable — fall back to DB book title
                 isbn = None
                 asin = None
-                title = book.abs_title
+                title = book.title
                 author = None
 
             # Try match cascade: ISBN -> ASIN -> title+author -> title only
@@ -215,13 +215,14 @@ def link_hardcover(abs_id):
 
             # Determine cover URL: use provided cached_image, or preserve existing
             cover_url = cached_image
-            if not cover_url:
-                existing = database_service.get_hardcover_details(abs_id)
+            book = database_service.get_book_by_ref(abs_id)
+            if not cover_url and book:
+                existing = database_service.get_hardcover_details(book.id)
                 if existing and existing.hardcover_cover_url:
                     cover_url = existing.hardcover_cover_url
-
             hardcover_details = HardcoverDetails(
                 abs_id=abs_id,
+                book_id=book.id if book else None,
                 hardcover_book_id=str(book_id),
                 hardcover_slug=slug,
                 hardcover_edition_id=str(edition_id) if edition_id else None,
@@ -241,12 +242,12 @@ def link_hardcover(abs_id):
             hc_service = container.hardcover_service()
             hc_service.resolve_editions(hardcover_details)
 
-            book = database_service.get_book(abs_id)
+            book = database_service.get_book_by_ref(abs_id)
             if book:
                 hc_service._get_or_create_user_book(book, hardcover_details, edition_id)
-                hc_service._pull_dates_at_match(abs_id)
+                hc_service._pull_dates_at_match(book)
                 # Re-fetch: _pull_dates_at_match may have updated dates in DB
-                book = database_service.get_book(abs_id)
+                book = database_service.get_book_by_ref(abs_id)
                 hc_service.push_initial_progress(book, container.hardcover_sync_client())
         except Exception as e:
             logger.warning(f"Post-link Hardcover setup failed (link saved): {e}")
@@ -265,8 +266,10 @@ def link_hardcover(abs_id):
         return redirect(url_for("dashboard.index"))
 
     try:
+        book = database_service.get_book_by_ref(abs_id)
         hardcover_details = HardcoverDetails(
             abs_id=abs_id,
+            book_id=book.id if book else None,
             hardcover_book_id=book_data["book_id"],
             hardcover_slug=book_data.get("slug"),
             hardcover_edition_id=book_data.get("edition_id"),
@@ -285,12 +288,12 @@ def link_hardcover(abs_id):
         hc_service = container.hardcover_service()
         hc_service.resolve_editions(hardcover_details)
 
-        book = database_service.get_book(abs_id)
+        book = database_service.get_book_by_ref(abs_id)
         if book:
             hc_service._get_or_create_user_book(book, hardcover_details, book_data.get("edition_id"))
-            hc_service._pull_dates_at_match(abs_id)
+            hc_service._pull_dates_at_match(book)
             # Re-fetch: _pull_dates_at_match may have updated dates in DB
-            book = database_service.get_book(abs_id)
+            book = database_service.get_book_by_ref(abs_id)
             hc_service.push_initial_progress(book, container.hardcover_sync_client())
     except Exception as e:
         logger.warning(f"Post-link Hardcover setup failed (link saved): {e}")
@@ -332,7 +335,7 @@ def set_book_cover(abs_id):
     if not data:
         return jsonify({"error": "No data provided"}), 400
 
-    book = database_service.get_book(abs_id)
+    book = database_service.get_book_by_ref(abs_id)
     if not book:
         return jsonify({"error": "Book not found"}), 404
 
@@ -350,7 +353,7 @@ def set_book_cover(abs_id):
         cover_url = cached_image
 
         # Update or create HardcoverDetails with the cover URL
-        existing = database_service.get_hardcover_details(abs_id)
+        existing = database_service.get_hardcover_details(book.id)
         if existing:
             existing.hardcover_cover_url = cover_url
             if book_id:
@@ -361,6 +364,7 @@ def set_book_cover(abs_id):
         else:
             details = HardcoverDetails(
                 abs_id=abs_id,
+                book_id=book.id,
                 hardcover_book_id=str(book_id) if book_id else None,
                 hardcover_slug=slug,
                 hardcover_cover_url=cover_url,
@@ -384,7 +388,7 @@ def set_book_cover(abs_id):
         cover_url = url
 
         # Clear hardcover_cover_url when picking a custom cover
-        hc_details = database_service.get_hardcover_details(abs_id)
+        hc_details = database_service.get_hardcover_details(book.id)
         if hc_details and hc_details.hardcover_cover_url:
             hc_details.hardcover_cover_url = None
             database_service.save_hardcover_details(hc_details)
@@ -402,7 +406,7 @@ def delete_book_cover(abs_id):
     if error_response:
         return error_response
 
-    book = database_service.get_book(abs_id)
+    book = database_service.get_book_by_ref(abs_id)
     if not book:
         return jsonify({"error": "Book not found"}), 404
 
@@ -410,7 +414,7 @@ def delete_book_cover(abs_id):
         book.custom_cover_url = None
         database_service.save_book(book)
 
-    hc_details = database_service.get_hardcover_details(abs_id)
+    hc_details = database_service.get_hardcover_details(book.id)
     if hc_details and hc_details.hardcover_cover_url:
         hc_details.hardcover_cover_url = None
         database_service.save_hardcover_details(hc_details)

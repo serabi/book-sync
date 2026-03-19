@@ -166,7 +166,7 @@ class TestHardcoverResolveEndpoint(unittest.TestCase):
     def test_resolve_auto_match_by_isbn_success(self):
         """Test successful auto-match using ISBN."""
         from src.db.models import Book
-        test_book = Book(abs_id='test-isbn-book', abs_title='Test Book', status='active')
+        test_book = Book(abs_id='test-isbn-book', title='Test Book', status='active')
         self.mock_container.mock_database_service.get_book.return_value = test_book
 
         # Mock ABS metadata with ISBN
@@ -227,7 +227,7 @@ class TestHardcoverResolveEndpoint(unittest.TestCase):
     def test_resolve_not_found_returns_404(self):
         """Test that unmatched book returns 404."""
         from src.db.models import Book
-        test_book = Book(abs_id='test-book', abs_title='Unknown Book', status='active')
+        test_book = Book(abs_id='test-book', title='Unknown Book', status='active')
         self.mock_container.mock_database_service.get_book.return_value = test_book
 
         self.mock_container.mock_abs_client.get_item_details.return_value = {

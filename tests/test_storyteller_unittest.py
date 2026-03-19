@@ -24,7 +24,7 @@ class TestStorytellerLeadsSync(BaseSyncCycleTestCase):
         """Return Storyteller test mapping configuration."""
         return {
             'abs_id': 'test-abs-id-storyteller',
-            'abs_title': 'Storyteller Leader Test Book',
+            'title': 'Storyteller Leader Test Book',
             'kosync_doc_id': 'test-kosync-doc-storyteller',
             'ebook_filename': 'test-book.epub',
             'storyteller_uuid': 'test-storyteller-uuid', # [NEW]

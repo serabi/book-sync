@@ -28,7 +28,7 @@ class TestABSLeadsSync(BaseSyncCycleTestCase):
         """Return ABS test mapping configuration."""
         return {
             'abs_id': 'test-abs-id-123',
-            'abs_title': 'Test Audiobook',
+            'title': 'Test Audiobook',
             'kosync_doc_id': 'test-kosync-doc',
             'ebook_filename': 'test-book.epub',
             'transcript_file': str(Path(self.temp_dir) / 'test_transcript.json'),
@@ -93,7 +93,7 @@ class TestABSLeadsSync(BaseSyncCycleTestCase):
         book = SimpleNamespace(
             kosync_doc_id='test-kosync-doc',
             ebook_filename='test-book.epub',
-            abs_title='Test Audiobook',
+            title='Test Audiobook',
         )
         request = SimpleNamespace(
             locator_result=LocatorResult(percentage=0.4, xpath="/html/body/div[1]/p[5]")

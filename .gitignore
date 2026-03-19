@@ -33,6 +33,9 @@ Thumbs.db
 *.log
 cwa_debug.log
 
+# KOReader plugins/assets
+koreader/
+
 # Local documentation and screenshots
 docs/
 dev/

@@ -114,24 +114,24 @@ class TestTbrRepository(unittest.TestCase):
     # -- Linking --
 
     def test_link_tbr_to_book(self):
-        """link_tbr_to_book sets book_abs_id on the item."""
+        """link_tbr_to_book sets book_id on the item."""
         from src.db.models import Book
-        self.db.save_book(Book(abs_id='abs-123', abs_title='Owned Copy', status='active'))
+        book = self.db.save_book(Book(abs_id='abs-123', title='Owned Copy', status='active'))
 
         item, _ = self.db.add_tbr_item('Dune')
-        self.assertIsNone(item.book_abs_id)
+        self.assertIsNone(item.book_id)
 
-        linked = self.db.link_tbr_to_book(item.id, 'abs-123')
+        linked = self.db.link_tbr_to_book(item.id, book.id)
         self.assertIsNotNone(linked)
-        self.assertEqual(linked.book_abs_id, 'abs-123')
+        self.assertEqual(linked.book_id, book.id)
 
         # Verify persisted
         refreshed = self.db.get_tbr_item(item.id)
-        self.assertEqual(refreshed.book_abs_id, 'abs-123')
+        self.assertEqual(refreshed.book_id, book.id)
 
     def test_link_tbr_not_found(self):
         """link_tbr_to_book returns None for missing item ID."""
-        result = self.db.link_tbr_to_book(9999, 'abs-123')
+        result = self.db.link_tbr_to_book(9999, 1)
         self.assertIsNone(result)
 
     # -- Lookup --
@@ -172,27 +172,27 @@ class TestTbrRepository(unittest.TestCase):
         from src.db.models import Book, HardcoverDetails
 
         # Create a book in the library
-        self.db.save_book(Book(abs_id='abs-1', abs_title='Dune', status='active'))
+        book = self.db.save_book(Book(abs_id='abs-1', title='Dune', status='active'))
 
         # Create a TBR item with hardcover_book_id=42 (not yet linked)
         item, created = self.db.add_tbr_item('Dune', hardcover_book_id=42)
         self.assertTrue(created)
-        self.assertIsNone(item.book_abs_id)
+        self.assertIsNone(item.book_id)
 
         # Save HardcoverDetails linking abs-1 to hardcover_book_id=42
-        hc = HardcoverDetails(abs_id='abs-1', hardcover_book_id='42')
+        hc = HardcoverDetails(abs_id='abs-1', book_id=book.id, hardcover_book_id='42')
         self.db.save_hardcover_details(hc)
 
         # Verify TBR item is now linked
         refreshed = self.db.get_tbr_item(item.id)
-        self.assertEqual(refreshed.book_abs_id, 'abs-1')
+        self.assertEqual(refreshed.book_id, book.id)
 
     def test_save_hardcover_details_no_tbr_match(self):
         """save_hardcover_details with no matching TBR item is a no-op."""
         from src.db.models import Book, HardcoverDetails
 
-        self.db.save_book(Book(abs_id='abs-1', abs_title='Dune', status='active'))
-        hc = HardcoverDetails(abs_id='abs-1', hardcover_book_id='99')
+        book = self.db.save_book(Book(abs_id='abs-1', title='Dune', status='active'))
+        hc = HardcoverDetails(abs_id='abs-1', book_id=book.id, hardcover_book_id='99')
         # Should not raise — no TBR item with hardcover_book_id=99
         self.db.save_hardcover_details(hc)
 
@@ -200,18 +200,18 @@ class TestTbrRepository(unittest.TestCase):
         """save_hardcover_details does not overwrite an already-linked TBR item."""
         from src.db.models import Book, HardcoverDetails
 
-        self.db.save_book(Book(abs_id='abs-1', abs_title='Dune', status='active'))
-        self.db.save_book(Book(abs_id='abs-2', abs_title='Dune Messiah', status='active'))
+        book1 = self.db.save_book(Book(abs_id='abs-1', title='Dune', status='active'))
+        book2 = self.db.save_book(Book(abs_id='abs-2', title='Dune Messiah', status='active'))
 
         item, _ = self.db.add_tbr_item('Dune', hardcover_book_id=42)
-        self.db.link_tbr_to_book(item.id, 'abs-2')  # pre-linked to abs-2
+        self.db.link_tbr_to_book(item.id, book2.id)  # pre-linked to book2
 
-        hc = HardcoverDetails(abs_id='abs-1', hardcover_book_id='42')
+        hc = HardcoverDetails(abs_id='abs-1', book_id=book1.id, hardcover_book_id='42')
         self.db.save_hardcover_details(hc)
 
-        # Should still be linked to abs-2, not overwritten to abs-1
+        # Should still be linked to book2, not overwritten to book1
         refreshed = self.db.get_tbr_item(item.id)
-        self.assertEqual(refreshed.book_abs_id, 'abs-2')
+        self.assertEqual(refreshed.book_id, book2.id)
 
     # -- Source filtering --
 

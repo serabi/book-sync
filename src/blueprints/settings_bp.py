@@ -414,17 +414,40 @@ def _test_hardcover() -> tuple[bool, str]:
 
 def _test_telegram() -> tuple[bool, str]:
     token = _request_value('bot_token', 'TELEGRAM_BOT_TOKEN', secret=True)
+    chat_id = _request_value('chat_id', 'TELEGRAM_CHAT_ID')
     if not token:
         return False, 'Bot token not configured'
-    resp = http_requests.get(
+    if not chat_id:
+        return False, 'Chat ID not configured'
+
+    me_resp = http_requests.get(
         f"https://api.telegram.org/bot{token}/getMe",
         timeout=10,
     )
-    if resp.status_code == 200:
-        data = resp.json()
-        bot_name = data.get('result', {}).get('first_name', 'Bot')
-        return True, f'Connected ({bot_name})'
-    return False, _http_error(resp.status_code)
+    if me_resp.status_code != 200:
+        return False, _http_error(me_resp.status_code)
+
+    data = me_resp.json()
+    bot_name = data.get('result', {}).get('first_name', 'Bot')
+
+    send_resp = http_requests.post(
+        f"https://api.telegram.org/bot{token}/sendMessage",
+        data={
+            'chat_id': chat_id,
+            'text': 'PageKeeper test message: Telegram notifications are configured correctly.',
+        },
+        timeout=10,
+    )
+    if send_resp.status_code == 200:
+        return True, f'Test message sent via {bot_name}'
+
+    try:
+        description = send_resp.json().get('description', '')
+    except Exception:
+        description = ''
+    if description:
+        return False, _redact_secrets(description)
+    return False, _http_error(send_resp.status_code)
 
 
 def _test_bookfusion() -> tuple[bool, str]:

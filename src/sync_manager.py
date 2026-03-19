@@ -10,7 +10,7 @@ import schedule
 
 from src.api.storyteller_api import StorytellerAPIClient
 from src.db.models import State
-from src.services.alignment_service import AlignmentService
+from src.services.alignment_service import AlignmentService, normalize_for_cross_format_comparison
 from src.services.background_job_service import BackgroundJobService
 from src.services.library_service import LibraryService
 from src.services.migration_service import MigrationService
@@ -118,7 +118,7 @@ class SyncManager:
             )
 
         self._sync_lock = threading.Lock()
-        self._pending_clears: set[str] = set()  # abs_ids awaiting clear during sync
+        self._pending_clears: set[int] = set()  # book ids awaiting clear during sync
         self._pending_clears_lock = threading.Lock()
         self._last_library_sync = 0
 
@@ -270,30 +270,7 @@ class SyncManager:
         return media.get('duration', 0)
 
     def _normalize_for_cross_format_comparison(self, book, config):
-        """
-        Normalize positions for cross-format comparison (audiobook vs ebook).
-
-        When syncing between audiobook (ABS) and ebook clients (KoSync, etc.),
-        raw percentages are not comparable because:
-        - Audiobook % = time position / total duration
-        - Ebook % = text position / total text
-
-        These don't correlate linearly. This method converts ebook positions
-        to equivalent audiobook timestamps using text-matching, enabling
-        accurate comparison of "who is further in the story".
-
-        Returns:
-            dict: {client_name: normalized_timestamp} for comparison,
-                  or None if normalization not possible/needed
-        """
-        # Check if we have both ABS and ebook clients in the mix
-        has_abs = 'ABS' in config
-        ebook_clients = [k for k in config.keys() if k != 'ABS']
-
-        if not ebook_clients:
-            # ABS-only, nothing to compare across formats
-            return None
-
+        """Delegate to alignment_service module-level function."""
         # Ensure epub is available locally (download from Booklore if needed)
         if book.ebook_filename and hasattr(self, 'books_dir'):
             try:
@@ -301,103 +278,9 @@ class SyncManager:
             except Exception as e:
                 logger.debug(f"'{book.abs_id}' EPUB prefetch failed: {sanitize_exception(e)}")
 
-        if not has_abs:
-            # Ebook-only path: normalize via character offsets in the shared EPUB
-            if not book.ebook_filename or len(ebook_clients) < 2:
-                return None
-            try:
-                book_path = self.ebook_parser.resolve_book_path(book.ebook_filename)
-                full_text, _ = self.ebook_parser.extract_text_and_map(book_path)
-                total_text_len = len(full_text)
-            except Exception as e:
-                logger.debug(f"'{book.abs_id}' Could not load ebook for normalization: {e}")
-                return None
-            if not total_text_len:
-                return None
-            normalized = {}
-            for client_name in ebook_clients:
-                client = self.sync_clients.get(client_name)
-                if not client:
-                    continue
-                client_state = config[client_name]
-                client_pct = client_state.current.get('pct', 0)
-                try:
-                    client_pct = max(0.0, min(1.0, float(client_pct)))
-                except (TypeError, ValueError):
-                    client_pct = 0.0
-                try:
-                    text_snippet = client.get_text_from_current_state(book, client_state)
-                    if text_snippet:
-                        loc = self.ebook_parser.find_text_location(
-                            book.ebook_filename, text_snippet,
-                            hint_percentage=client_pct
-                        )
-                        if loc and loc.match_index is not None:
-                            normalized[client_name] = loc.match_index
-                            logger.debug(f"'{book.abs_id}' Normalized '{client_name}' {client_pct:.2%} -> char {loc.match_index}")
-                            continue
-                except Exception as e:
-                    logger.debug(f"'{book.abs_id}' Text-based normalization failed for '{client_name}': {e}")
-                # Fallback: percentage-derived offset
-                normalized[client_name] = int(client_pct * total_text_len)
-                logger.debug(f"'{book.abs_id}' Normalized '{client_name}' {client_pct:.2%} -> char {int(client_pct * total_text_len)} (pct fallback)")
-            return normalized if len(normalized) > 1 else None
-
-        if not book.transcript_file:
-            logger.debug(f"'{book.abs_id}' No transcript available for cross-format normalization")
-            return None
-
-        normalized = {}
-
-        # ABS already has timestamp
-        abs_state = config['ABS']
-        abs_ts = abs_state.current.get('ts', 0)
-        normalized['ABS'] = abs_ts
-
-        # For each ebook client, get their text and find equivalent timestamp
-        for client_name in ebook_clients:
-            client = self.sync_clients.get(client_name)
-            if not client:
-                continue
-
-            client_state = config[client_name]
-            client_pct = client_state.current.get('pct', 0)
-
-            try:
-                # Get character offset from the ebook position for precise alignment
-                book_path = self.ebook_parser.resolve_book_path(book.ebook_filename)
-                full_text, _ = self.ebook_parser.extract_text_and_map(book_path)
-                total_text_len = len(full_text)
-
-                char_offset = int(client_pct * total_text_len)
-                txt = full_text[max(0, char_offset - 400):min(total_text_len, char_offset + 400)]
-
-                if not txt:
-                    logger.debug(f"'{book.abs_id}' Could not get text from '{client_name}' for normalization")
-                    continue
-
-                # Find equivalent timestamp in audiobook using the precise aligner if available
-                if self.alignment_service:
-                    ts_for_text = self.alignment_service.get_time_for_text(
-                        book.abs_id,
-                        char_offset_hint=char_offset
-                    )
-                else:
-                    # Fallback or strict error?
-                    ts_for_text = None
-
-                if ts_for_text is not None:
-                    normalized[client_name] = ts_for_text
-                    logger.debug(f"'{book.abs_id}' Normalized '{client_name}' {client_pct:.2%} -> {ts_for_text:.1f}s")
-                else:
-                    logger.debug(f"'{book.abs_id}' Could not find timestamp for '{client_name}' text")
-            except Exception as e:
-                logger.warning(f"'{book.abs_id}' Cross-format normalization failed for '{client_name}': {sanitize_exception(e)}")
-
-        # Only return if we successfully normalized at least one ebook client
-        if len(normalized) > 1:
-            return normalized
-        return None
+        return normalize_for_cross_format_comparison(
+            book, config, self.sync_clients, self.ebook_parser, self.alignment_service
+        )
 
 
     def _fetch_states_parallel(self, book, prev_states_by_client, title_snip, bulk_states_per_client=None, clients_to_use=None):
@@ -559,21 +442,21 @@ class SyncManager:
 
         return leader, leader_pct
 
-    def sync_cycle(self, target_abs_id=None):
+    def sync_cycle(self, target_book_id=None):
         """
         Run a sync cycle.
 
         Args:
-            target_abs_id: If provided, only sync this specific book (Instant Sync trigger).
-                           Otherwise, sync all active books using bulk-poll optimization.
+            target_book_id: If provided, only sync this specific book by DB id (Instant Sync trigger).
+                            Otherwise, sync all active books using bulk-poll optimization.
         """
         # Prevent race condition: If daemon is running, skip. If Instant Sync, wait.
         acquired = False
-        if target_abs_id:
+        if target_book_id:
              # Instant Sync: Block and wait for lock (up to 10s)
              acquired = self._sync_lock.acquire(timeout=10)
              if not acquired:
-                 logger.warning(f"Sync lock timeout for '{target_abs_id}' - skipping")
+                 logger.warning(f"Sync lock timeout for book_id={target_book_id} - skipping")
                  return
         else:
              # Daemon: Non-blocking attempt
@@ -583,14 +466,14 @@ class SyncManager:
                  return
 
         try:
-            self._sync_cycle_internal(target_abs_id)
+            self._sync_cycle_internal(target_book_id)
         except Exception as e:
             logger.error(f"Sync cycle internal error: {type(e).__name__}")
             logger.debug(traceback.format_exc())
         finally:
             self._sync_lock.release()
 
-    def _sync_cycle_internal(self, target_abs_id=None):
+    def _sync_cycle_internal(self, target_book_id=None):
         # Clear caches at start of cycle
         storyteller_client = self.sync_clients.get('Storyteller')
         if storyteller_client and hasattr(storyteller_client, 'storyteller_client'):
@@ -602,7 +485,7 @@ class SyncManager:
             self.library_service.sync_library_books()
             self._last_library_sync = time.time()
 
-        active_books, bulk_states_per_client = self._prepare_sync_books(target_abs_id)
+        active_books, bulk_states_per_client = self._prepare_sync_books(target_book_id)
         if not active_books:
             self._process_deferred_clears()
             return
@@ -613,7 +496,7 @@ class SyncManager:
 
             # Skip books with pending clear — clear_progress will handle them
             with self._pending_clears_lock:
-                skip = abs_id in self._pending_clears
+                skip = book.id in self._pending_clears
             if skip:
                 logger.debug(f"'{abs_id}' Skipping sync — pending clear progress")
                 continue
@@ -627,19 +510,19 @@ class SyncManager:
         logger.debug("End of sync cycle for active books")
         self._process_deferred_clears()
 
-    def _prepare_sync_books(self, target_abs_id):
+    def _prepare_sync_books(self, target_book_id):
         """Fetch active books, pre-fetch bulk states, and trigger suggestions."""
         active_books = []
-        if target_abs_id:
-            logger.info(f"Instant Sync triggered for '{target_abs_id}'")
-            book = self.database_service.get_book(target_abs_id)
+        if target_book_id:
+            logger.info(f"Instant Sync triggered for book_id={target_book_id}")
+            book = self.database_service.get_book_by_id(target_book_id)
             if book and book.status == 'active':
                 active_books = [book]
         else:
             active_books = self.database_service.get_books_by_status('active')
 
         bulk_states_per_client = {}
-        if not target_abs_id:
+        if not target_book_id:
             logger.debug(f"Sync cycle starting - {len(active_books)} active book(s)")
             for client_name, client in self.sync_clients.items():
                 try:
@@ -659,12 +542,12 @@ class SyncManager:
     def _sync_single_book(self, book, bulk_states_per_client):
         """Process a single book in the sync cycle."""
         abs_id = book.abs_id
-        title_snip = sanitize_log_data(book.abs_title or 'Unknown')
+        title_snip = sanitize_log_data(book.title or 'Unknown')
         logger.info(f"'{abs_id}' Syncing '{title_snip}'")
 
         # Migration upgrade
         if self.alignment_service:
-            alignment = self.alignment_service._get_alignment(abs_id)
+            alignment = self.alignment_service._get_alignment(book.id)
             if alignment:
                 if getattr(book, 'transcript_file', None) != 'DB_MANAGED':
                     logger.info(f"   Upgrading '{title_snip}' to DB_MANAGED unified architecture")
@@ -672,7 +555,7 @@ class SyncManager:
                     self.database_service.save_book(book)
 
         # Get previous state for this book from database
-        previous_states = self.database_service.get_states_for_book(abs_id)
+        previous_states = self.database_service.get_states_for_book(book.id)
         prev_states_by_client = {}
         for state in previous_states:
             prev_states_by_client[state.client_name] = state
@@ -816,6 +699,7 @@ class SyncManager:
             leader_current = leader_state.current
             state = State(
                 abs_id=abs_id,
+                book_id=book.id,
                 client_name=leader.lower(),
                 percentage=leader_current.get('pct'),
                 timestamp=leader_current.get('ts'),
@@ -878,6 +762,7 @@ class SyncManager:
 
         leader_state_model = State(
             abs_id=book.abs_id,
+            book_id=book.id,
             client_name=leader.lower(),
             last_updated=current_time,
             percentage=leader_state_data.get('pct'),
@@ -893,11 +778,12 @@ class SyncManager:
                 logger.info(f"'{abs_id}' '{title_snip}' Updated state data for '{client_name}': {state_data}")
                 try:
                     from src.services.write_tracker import record_write
-                    record_write(client_name, abs_id, state_data)
+                    record_write(client_name, book.id, state_data)
                 except ImportError:
                     pass
                 client_state_model = State(
                     abs_id=book.abs_id,
+                    book_id=book.id,
                     client_name=client_name.lower(),
                     last_updated=current_time,
                     percentage=state_data.get('pct'),

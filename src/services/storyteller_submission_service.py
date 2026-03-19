@@ -127,7 +127,9 @@ class StorytellerSubmissionService:
             # Update existing reservation or create new submission record
             from src.db.models import StorytellerSubmission
 
-            existing = self.database_service.get_active_storyteller_submission(abs_id)
+            book = self.database_service.get_book_by_abs_id(abs_id)
+            book_id = book.id if book else None
+            existing = self.database_service.get_active_storyteller_submission_by_book_id(book_id) if book_id else None
             if existing:
                 submission = existing
                 self.database_service.update_storyteller_submission_status(
@@ -136,6 +138,7 @@ class StorytellerSubmissionService:
             else:
                 submission = StorytellerSubmission(
                     abs_id=abs_id,
+                    book_id=book_id,
                     status="queued",
                     submission_dir=dir_name,
                 )
@@ -162,7 +165,8 @@ class StorytellerSubmissionService:
 
         Returns: 'queued', 'processing', 'ready', 'failed', or 'not_found'.
         """
-        submission = self.database_service.get_storyteller_submission(abs_id)
+        book = self.database_service.get_book_by_abs_id(abs_id)
+        submission = self.database_service.get_storyteller_submission_by_book_id(book.id) if book else None
         if not submission:
             return "not_found"
 
@@ -185,7 +189,7 @@ class StorytellerSubmissionService:
 
         # Fix 1: Propagate book's UUID to submission if missing
         if not submission.storyteller_uuid:
-            book = self.database_service.get_book(abs_id)
+            book = self.database_service.get_book_by_abs_id(abs_id)
             if book and book.storyteller_uuid:
                 submission.storyteller_uuid = book.storyteller_uuid
                 self._update_submission_status(submission, submission.status)
@@ -196,9 +200,9 @@ class StorytellerSubmissionService:
 
         # Look up book title once for use in filesystem fallbacks
         book_title = None
-        book = self.database_service.get_book(abs_id)
-        if book and book.abs_title:
-            book_title = book.abs_title
+        book = self.database_service.get_book_by_abs_id(abs_id)
+        if book and book.title:
+            book_title = book.title
 
         # Check if Storyteller has produced transcription output
         assets_dir = os.environ.get("STORYTELLER_ASSETS_DIR", "").strip()
@@ -256,13 +260,13 @@ class StorytellerSubmissionService:
         # Check 3: Try to discover the storyteller_uuid via API title search
         if not submission.storyteller_uuid and self.storyteller_client and self.storyteller_client.is_configured():
             checks_attempted.append("api_search")
-            book = self.database_service.get_book(abs_id)
-            if book and book.abs_title:
+            book = self.database_service.get_book_by_abs_id(abs_id)
+            if book and book.title:
                 try:
-                    results = self.storyteller_client.search_books(book.abs_title)
+                    results = self.storyteller_client.search_books(book.title)
                     # Only accept a single exact title match to avoid misidentification
                     exact = [r for r in results
-                             if r.get("title", "").strip().lower() == book.abs_title.strip().lower()]
+                             if r.get("title", "").strip().lower() == book.title.strip().lower()]
                     if len(exact) == 1:
                         storyteller_uuid = exact[0].get("uuid")
                         submission.storyteller_uuid = storyteller_uuid
@@ -278,7 +282,7 @@ class StorytellerSubmissionService:
                     else:
                         logger.debug(
                             f"Storyteller API search: {len(results)} results, {len(exact)} exact matches "
-                            f"for '{book.abs_title}' (need exactly 1)"
+                            f"for '{book.title}' (need exactly 1)"
                         )
                 except Exception as e:
                     logger.warning(f"Storyteller book search failed for abs_id={abs_id}: {e}")
@@ -304,7 +308,10 @@ class StorytellerSubmissionService:
 
     def get_submission(self, abs_id: str):
         """Get the most recent submission for a book, if any."""
-        return self.database_service.get_storyteller_submission(abs_id)
+        book = self.database_service.get_book_by_abs_id(abs_id)
+        if book:
+            return self.database_service.get_storyteller_submission_by_book_id(book.id)
+        return None
 
     def _trigger_processing_after_import(self, title: str, submission) -> str | None:
         """Wait for Storyteller to detect imported files, then trigger processing.

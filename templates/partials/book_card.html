@@ -22,22 +22,18 @@ else 0 %}
 {% set bt = mapping.book_type|default('linked') %}
 
 <div class="book-card {% if max_diff > 5 %}out-of-sync{% endif %}" data-progress="{{ mapping.unified_progress }}"
-    data-last-sync="{{ mapping.last_sync }}" data-status="{{ mapping.status }}" data-title="{{ mapping.abs_title|e }}"
-    data-sync-mode="{{ mapping.sync_mode }}" data-abs-id="{{ mapping.abs_id }}"
+    data-last-sync="{{ mapping.last_sync }}" data-status="{{ mapping.status }}" data-title="{{ mapping.title|e }}"
+    data-sync-mode="{{ mapping.sync_mode }}" data-book-id="{{ mapping.id }}"
     data-book-type="{{ bt }}"
     data-finished="{{ mapping.finished_at or '' }}">
 
     {# Cover image section — clickable link to book detail page #}
     <div class="book-cover-section">
-        <a href="/reading/book/{{ mapping.abs_id }}?from=dashboard" class="book-cover-link">
+        <a href="/reading/book/{{ mapping.id }}?from=dashboard" class="book-cover-link">
             <div class="book-cover-inner">
                 {% if mapping.cover_url %}
                 <img src="{{ mapping.cover_url }}" alt="Cover" class="book-cover" loading="lazy"
                     onerror="{% if mapping.kosync_doc_id %}this.onerror=null; this.src='/covers/{{ mapping.kosync_doc_id }}.jpg';{% else %}this.style.display='none'; this.nextElementSibling.classList.remove('hidden');{% endif %}">
-                <div class="book-cover-placeholder hidden"></div>
-                {% elif mapping.kosync_doc_id %}
-                <img src="/covers/{{ mapping.kosync_doc_id }}.jpg" alt="Cover" class="book-cover" loading="lazy"
-                    onerror="this.style.display='none'; this.nextElementSibling.classList.remove('hidden');">
                 <div class="book-cover-placeholder hidden"></div>
                 {% else %}
                 <div class="book-cover-placeholder"></div>
@@ -50,7 +46,7 @@ else 0 %}
     <div class="book-info">
         <div class="book-header">
             <div class="book-title">
-                {{ mapping.abs_title }}{% if mapping.abs_subtitle %}: {{ mapping.abs_subtitle }}{% endif %}
+                {{ mapping.title }}{% if mapping.abs_subtitle %}: {{ mapping.abs_subtitle }}{% endif %}
             </div>
         </div>
 
@@ -87,7 +83,7 @@ else 0 %}
         {% if mapping.status in ['paused', 'dnf'] and mapping.activity_flag %}
         <div class="activity-notification">
             <span>Activity detected</span>
-            <button onclick='resumeBook({{ mapping.abs_id|tojson }}, this)'>Resume</button>
+            <button onclick='resumeBook({{ mapping.id }}, this)'>Resume</button>
         </div>
         {% endif %}
         {% endif %}
@@ -113,14 +109,14 @@ else 0 %}
         {# Attach action buttons for incomplete book types #}
         {% if bt == 'audio-only' %}
         <div class="attach-action">
-            <a href="/match?search={{ mapping.abs_title|urlencode }}&attach_to={{ mapping.abs_id }}"
+            <a href="/match?search={{ mapping.title|urlencode }}&attach_to={{ mapping.id }}"
                class="attach-action-btn" title="Attach an ebook to this audiobook">
                 + Add Ebook
             </a>
         </div>
         {% elif bt == 'ebook-only' %}
         <div class="attach-action">
-            <a href="/match?search={{ mapping.abs_title|urlencode }}&link_to={{ mapping.abs_id }}"
+            <a href="/match?search={{ mapping.title|urlencode }}&link_to={{ mapping.id }}"
                class="attach-action-btn" title="Link an audiobook to this ebook">
                 + Add Audiobook
             </a>
@@ -188,7 +184,7 @@ else 0 %}
                             {% if bt != 'audio-only' and integrations.kosync %}
                             <div class="service-item cursor-pointer"
                                 title="Update KoReader Hash (Current: {{ mapping.kosync_doc_id }})"
-                                data-abs-id="{{ mapping.abs_id }}" data-title="{{ mapping.abs_title|escape }}"
+                                data-book-id="{{ mapping.id }}" data-title="{{ mapping.title|escape }}"
                                 data-hash="{{ mapping.kosync_doc_id|escape }}" onclick="updateKoSyncHash(event)">
                                 <img src="/static/koreader-logo.svg" alt="KO" class="service-icon">
                                 <span class="service-name">KoSync</span>
@@ -209,7 +205,7 @@ else 0 %}
                                 <span class="service-name">Storyteller</span>
                                 {% if mapping.storyteller_legacy_link %}
                                 <span class="service-value cursor-pointer" style="color: #FF9800;"
-                                    onclick='openStorytellerModal({{ mapping.abs_id|tojson }}, {{ mapping.abs_title|tojson }})'
+                                    onclick='openStorytellerModal({{ mapping.id }}, {{ mapping.title|tojson }})'
                                     title="Legacy Link: Click to fix">
                                     Fix Link
                                 </span>
@@ -220,7 +216,7 @@ else 0 %}
                                 <span class="service-value" title="Linked via UUID">0.0%</span>
                                 {% else %}
                                 <span class="service-value cursor-pointer color-inherit"
-                                    onclick='openStorytellerModal({{ mapping.abs_id|tojson }}, {{ mapping.abs_title|tojson }})'
+                                    onclick='openStorytellerModal({{ mapping.id }}, {{ mapping.title|tojson }})'
                                     title="Click to search and link a Storyteller book">
                                     <span class="link-icon">+</span>
                                 </span>
@@ -248,7 +244,7 @@ else 0 %}
                                 <img src="/static/booklore.png" alt="BL" class="service-icon grayscale-muted">
                                 <span class="service-name">{{ booklore_label }}</span>
                                 <span class="service-value cursor-pointer color-inherit"
-                                    onclick='openBookloreModal({{ mapping.abs_id|tojson }}, {{ mapping.abs_title|tojson }})'
+                                    onclick='openBookloreModal({{ mapping.id }}, {{ mapping.title|tojson }})'
                                     title="Link to {{ booklore_label }}">
                                     <span class="link-icon">+</span>
                                 </span>
@@ -273,7 +269,7 @@ else 0 %}
                                 </a>
                                 <span class="service-name">Hardcover</span>
                                 <span class="service-value cursor-pointer color-inherit" title="Click to edit Hardcover link"
-                                    data-abs-id="{{ mapping.abs_id }}" data-title="{{ mapping.hardcover_title|default('')|escape }}"
+                                    data-book-id="{{ mapping.id }}" data-title="{{ mapping.hardcover_title|default('')|escape }}"
                                     onclick="linkHardcover(event)">
                                     {% if mapping.hardcover_book_id %}
                                     {% if mapping.states.hardcover is defined %}
@@ -293,7 +289,7 @@ else 0 %}
                             <div class="service-item">
                                 <img src="/static/bookfusion-logo.svg" alt="BF" class="service-icon {% if not mapping.bookfusion_linked %}grayscale-muted{% endif %}">
                                 <span class="service-name">BookFusion</span>
-                                <a href="/bookfusion?tab=library&q={{ mapping.abs_title|urlencode }}" class="service-value cursor-pointer color-inherit" title="{% if mapping.bookfusion_linked %}Manage BookFusion link{% else %}Link in BookFusion{% endif %}">
+                                <a href="/bookfusion?tab=library&q={{ mapping.title|urlencode }}" class="service-value cursor-pointer color-inherit" title="{% if mapping.bookfusion_linked %}Manage BookFusion link{% else %}Link in BookFusion{% endif %}">
                                     {% if mapping.bookfusion_linked %}Linked{% else %}<span class="link-icon">+</span>{% endif %}
                                 </a>
                             </div>
@@ -304,25 +300,25 @@ else 0 %}
                         <div class="card-menu-divider"></div>
                         {# Direct actions (always in main view) #}
                         {% if mapping.status == 'active' %}
-                        <button class="card-menu-item" onclick='syncNow({{ mapping.abs_id|tojson }}, this)'>Sync Now</button>
+                        <button class="card-menu-item" onclick='syncNow({{ mapping.id }}, this)'>Sync Now</button>
                         {% elif mapping.status == 'completed' %}
-                        <button class="card-menu-item" onclick='syncNow({{ mapping.abs_id|tojson }}, this)'>Sync status to all services</button>
+                        <button class="card-menu-item" onclick='syncNow({{ mapping.id }}, this)'>Sync status to all services</button>
                         {% elif mapping.status == 'failed_retry_later' %}
-                        <button class="card-menu-item" onclick='retryTranscription({{ mapping.abs_id|tojson }}, this)'>Retry Transcription</button>
+                        <button class="card-menu-item" onclick='retryTranscription({{ mapping.id }}, this)'>Retry Transcription</button>
                         {% elif mapping.status == 'failed_permanent' %}
-                        <button class="card-menu-item" onclick='retryTranscription({{ mapping.abs_id|tojson }}, this)'>Retry Transcription</button>
+                        <button class="card-menu-item" onclick='retryTranscription({{ mapping.id }}, this)'>Retry Transcription</button>
                         {% elif mapping.status not in ['pending', 'processing'] %}
-                        <button class="card-menu-item" onclick='syncNow({{ mapping.abs_id|tojson }}, this)'>Sync Now</button>
+                        <button class="card-menu-item" onclick='syncNow({{ mapping.id }}, this)'>Sync Now</button>
                         {% endif %}
 
                         {% if mapping.status in ['pending', 'processing', 'failed_retry_later', 'failed_permanent'] %}
                         <button type="button" class="card-menu-item card-menu-danger"
-                            onclick='showConfirmModal("Delete Book", "Permanently delete this book mapping and all cached data?", {{ ("/delete/" ~ mapping.abs_id)|tojson }}, "danger")'>Delete</button>
+                            onclick='showConfirmModal("Delete Book", "Permanently delete this book mapping and all cached data?", {{ ("/delete/" ~ mapping.id)|tojson }}, "danger")'>Delete</button>
                         {% endif %}
 
                         {# Submenu trigger for status actions (hide for processing/pending/failed states) #}
                         {% if mapping.status == 'not_started' or (mapping.status == 'active' and mapping.unified_progress == 0) %}
-                        <button class="card-menu-item" onclick='addToWantToRead({{ mapping.abs_id|tojson }}, this)'>Add to Want to Read</button>
+                        <button class="card-menu-item" onclick='addToWantToRead({{ mapping.id }}, this)'>Add to Want to Read</button>
                         {% endif %}
 
                         {% if mapping.status not in ['pending', 'processing', 'failed_retry_later', 'failed_permanent'] %}
@@ -342,33 +338,33 @@ else 0 %}
                         <div class="card-menu-divider"></div>
 
                         {% if mapping.status == 'active' %}
-                        <button class="card-menu-item" onclick='pauseBook({{ mapping.abs_id|tojson }}, this)'>Pause</button>
-                        <button class="card-menu-item" onclick='dnfBook({{ mapping.abs_id|tojson }}, {{ mapping.abs_title|tojson }})'>Mark DNF</button>
-                        <button class="card-menu-item" onclick='markComplete({{ mapping.abs_id|tojson }}, {{ mapping.abs_title|tojson }})'>Mark Complete</button>
+                        <button class="card-menu-item" onclick='pauseBook({{ mapping.id }}, this)'>Pause</button>
+                        <button class="card-menu-item" onclick='dnfBook({{ mapping.id }}, {{ mapping.title|tojson }})'>Mark DNF</button>
+                        <button class="card-menu-item" onclick='markComplete({{ mapping.id }}, {{ mapping.title|tojson }})'>Mark Complete</button>
                         <button type="button" class="card-menu-item card-menu-warning"
-                            onclick='showConfirmModal("Clear Progress", "Clear all reading progress for this book across all synced platforms?", {{ ("/clear-progress/" ~ mapping.abs_id)|tojson }}, "warning")'>Clear Progress</button>
+                            onclick='showConfirmModal("Clear Progress", "Clear all reading progress for this book across all synced platforms?", {{ ("/clear-progress/" ~ mapping.id)|tojson }}, "warning")'>Clear Progress</button>
                         {% elif mapping.status == 'paused' %}
-                        <button class="card-menu-item" onclick='resumeBook({{ mapping.abs_id|tojson }}, this)'>Resume</button>
-                        <button class="card-menu-item" onclick='dnfBook({{ mapping.abs_id|tojson }}, {{ mapping.abs_title|tojson }})'>Mark DNF</button>
+                        <button class="card-menu-item" onclick='resumeBook({{ mapping.id }}, this)'>Resume</button>
+                        <button class="card-menu-item" onclick='dnfBook({{ mapping.id }}, {{ mapping.title|tojson }})'>Mark DNF</button>
                         {% elif mapping.status == 'dnf' %}
-                        <button class="card-menu-item" onclick='resumeBook({{ mapping.abs_id|tojson }}, this)'>Resume Reading</button>
+                        <button class="card-menu-item" onclick='resumeBook({{ mapping.id }}, this)'>Resume Reading</button>
                         {% elif mapping.status == 'not_started' %}
-                        <button class="card-menu-item" onclick='resumeBook({{ mapping.abs_id|tojson }}, this)'>Start Reading</button>
-                        <button class="card-menu-item" onclick='pauseBook({{ mapping.abs_id|tojson }}, this)'>Pause</button>
-                        <button class="card-menu-item" onclick='dnfBook({{ mapping.abs_id|tojson }}, {{ mapping.abs_title|tojson }})'>Mark DNF</button>
-                        <button class="card-menu-item" onclick='markComplete({{ mapping.abs_id|tojson }}, {{ mapping.abs_title|tojson }})'>Mark Complete</button>
+                        <button class="card-menu-item" onclick='resumeBook({{ mapping.id }}, this)'>Start Reading</button>
+                        <button class="card-menu-item" onclick='pauseBook({{ mapping.id }}, this)'>Pause</button>
+                        <button class="card-menu-item" onclick='dnfBook({{ mapping.id }}, {{ mapping.title|tojson }})'>Mark DNF</button>
+                        <button class="card-menu-item" onclick='markComplete({{ mapping.id }}, {{ mapping.title|tojson }})'>Mark Complete</button>
                         {% elif mapping.status == 'completed' %}
                         <button type="button" class="card-menu-item card-menu-warning"
-                            onclick='showConfirmModal("Clear Progress", "Clear all reading progress for this book across all synced platforms?", {{ ("/clear-progress/" ~ mapping.abs_id)|tojson }}, "warning")'>Clear Progress</button>
+                            onclick='showConfirmModal("Clear Progress", "Clear all reading progress for this book across all synced platforms?", {{ ("/clear-progress/" ~ mapping.id)|tojson }}, "warning")'>Clear Progress</button>
                         {% else %}
-                        <button class="card-menu-item" onclick='markComplete({{ mapping.abs_id|tojson }}, {{ mapping.abs_title|tojson }})'>Mark Complete</button>
+                        <button class="card-menu-item" onclick='markComplete({{ mapping.id }}, {{ mapping.title|tojson }})'>Mark Complete</button>
                         <button type="button" class="card-menu-item card-menu-warning"
-                            onclick='showConfirmModal("Clear Progress", "Clear all reading progress for this book across all synced platforms?", {{ ("/clear-progress/" ~ mapping.abs_id)|tojson }}, "warning")'>Clear Progress</button>
+                            onclick='showConfirmModal("Clear Progress", "Clear all reading progress for this book across all synced platforms?", {{ ("/clear-progress/" ~ mapping.id)|tojson }}, "warning")'>Clear Progress</button>
                         {% endif %}
 
                         <div class="card-menu-divider"></div>
                         <button type="button" class="card-menu-item card-menu-danger"
-                            onclick='showConfirmModal("Delete Book", "Permanently delete this book mapping and all cached data?", {{ ("/delete/" ~ mapping.abs_id)|tojson }}, "danger")'>Delete</button>
+                            onclick='showConfirmModal("Delete Book", "Permanently delete this book mapping and all cached data?", {{ ("/delete/" ~ mapping.id)|tojson }}, "danger")'>Delete</button>
                     </div>
                 </div>
             </div>

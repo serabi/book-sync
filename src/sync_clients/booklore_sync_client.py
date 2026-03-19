@@ -82,7 +82,7 @@ class BookloreSyncClient(SyncClient):
         if success:
             try:
                 from src.services.write_tracker import record_write
-                record_write(self.client_name, book.abs_id)
+                record_write(self.client_name, book.id)
             except ImportError:
                 pass
         updated_state = {

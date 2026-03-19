@@ -12,7 +12,11 @@ cleanup() {
 # Set up signal handlers for graceful shutdown
 trap cleanup SIGTERM SIGINT
 
-echo "Starting PageKeeper (Integrated Mode)..."
+PAGEKEEPER_ENV_LABEL="${PAGEKEEPER_ENV:-production}"
+HOST_WEB_URL="${HOST_WEB_URL:-http://localhost:4477}"
+HOST_KOSYNC_PORT="${HOST_KOSYNC_PORT:-${KOSYNC_PORT:-4477}}"
+
+echo "Starting PageKeeper (${PAGEKEEPER_ENV_LABEL^^} Integrated Mode)..."
 echo ""
 
 echo "Running Database Migrations..."
@@ -29,8 +33,11 @@ while true; do
 
     echo ""
     echo "Service started successfully!"
+    echo "   • Environment: ${PAGEKEEPER_ENV_LABEL^^}"
     echo "   • Unified Service PID: $WEB_PID"
-    echo "   • Web UI available at: http://localhost:4477"
+    echo "   • Container Web UI: http://localhost:4477"
+    echo "   • Host Web UI: $HOST_WEB_URL"
+    echo "   • KoSync port: $HOST_KOSYNC_PORT"
     echo "   • Sync daemon running in background thread"
     echo ""
 

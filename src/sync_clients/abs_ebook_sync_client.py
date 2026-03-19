@@ -32,7 +32,7 @@ class ABSEbookSyncClient(SyncClient):
 
     def get_service_state(self, book: Book, prev_state: State | None, title_snip: str = "", bulk_context: dict = None) -> ServiceState | None:
         # [FIX] Prefer specific ebook item ID if it exists (Tri-Link), otherwise fallback to primary ID (Standard)
-        target_id = book.abs_ebook_item_id if book.abs_ebook_item_id else book.abs_id
+        target_id = book.ebook_item_id or book.abs_ebook_item_id or book.abs_id
         response = self.abs_client.get_progress(target_id)
         if response is None:
             return None
@@ -79,7 +79,7 @@ class ABSEbookSyncClient(SyncClient):
             return SyncResult(0, False)
 
         pct = locator.percentage
-        target_id = book.abs_ebook_item_id if book.abs_ebook_item_id else book.abs_id
+        target_id = book.ebook_item_id or book.abs_ebook_item_id or book.abs_id
         cfi = locator.cfi
         success = self.abs_client.update_ebook_progress(target_id, pct, cfi)
         try:

@@ -69,7 +69,9 @@ class MigrationService:
 
                         # Create new DB entry
                         # Convert list of dicts to JSON string
-                        new_entry = BookAlignment(abs_id=abs_id, alignment_map_json=json.dumps(data))
+                        book = self.database_service.get_book_by_abs_id(abs_id)
+                        book_id = book.id if book else None
+                        new_entry = BookAlignment(abs_id=abs_id, book_id=book_id, alignment_map_json=json.dumps(data))
                         session.add(new_entry)
                         count += 1
                     except Exception as e:

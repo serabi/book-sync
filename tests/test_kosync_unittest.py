@@ -24,7 +24,7 @@ class TestKoSyncLeadsSync(BaseSyncCycleTestCase):
         """Return KoSync test mapping configuration."""
         return {
             'abs_id': 'test-abs-id-kosync',
-            'abs_title': 'KoSync Leader Test Book',
+            'title': 'KoSync Leader Test Book',
             'kosync_doc_id': 'test-kosync-doc-leader',
             'ebook_filename': 'test-book.epub',
             'transcript_file': str(Path(self.temp_dir) / 'test_transcript.json'),

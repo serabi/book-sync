@@ -103,12 +103,12 @@
       });
     } else {
       startBtn.addEventListener('click', function () {
-        doStartReading(startBtn.dataset.absId);
+        doStartReading(startBtn.dataset.bookId);
       });
     }
   }
 
-  function doStartReading(absId) {
+  function doStartReading(bookId) {
     if (!startBtn) return;
     startBtn.disabled = true;
     startBtn.textContent = 'Starting...';
@@ -116,7 +116,7 @@
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (data.success) {
-          window.location.href = '/reading/book/' + (data.abs_id || absId);
+          window.location.href = '/reading/book/' + (data.book_id || bookId);
         } else {
           showToast(data.error || 'Could not start reading');
           startBtn.disabled = false;

@@ -104,7 +104,7 @@ class TestCleanupMappingResourcesPathTraversal(unittest.TestCase):
 
             book = SimpleNamespace(
                 abs_id="test-book",
-                abs_title="Test Book",
+                title="Test Book",
                 ebook_filename="../secret.txt",
                 transcript_file=None,
                 kosync_doc_id=None,
@@ -143,7 +143,7 @@ class TestCleanupMappingResourcesPathTraversal(unittest.TestCase):
 
             book = SimpleNamespace(
                 abs_id="test-book",
-                abs_title="Test Book",
+                title="Test Book",
                 ebook_filename=None,
                 transcript_file=str(secret_file),
                 kosync_doc_id=None,
@@ -179,7 +179,7 @@ class TestCleanupMappingResourcesPathTraversal(unittest.TestCase):
 
             book = SimpleNamespace(
                 abs_id="test-book",
-                abs_title="Test Book",
+                title="Test Book",
                 ebook_filename=None,
                 transcript_file=str(legit_transcript),
                 kosync_doc_id=None,

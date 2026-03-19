@@ -32,7 +32,7 @@ The repo includes a `docker-compose.dev.yml` that builds from source and mounts 
 docker compose -f docker-compose.dev.yml up --build -d
 ```
 
-The dev dashboard is available at `http://localhost:4478` (port 4478, not 4477 — this avoids conflicts if you're also running a production instance). All settings — integrations, API keys, sync configuration — are managed through the web dashboard. No environment variables are required beyond `TZ`.
+The dev dashboard is available at `http://localhost:4478` (port 4478, not 4477 — this avoids conflicts if you're also running a production instance). The dev compose file also sets `PAGEKEEPER_ENV=dev`, which turns on the in-app `DEV` badge, `[DEV]` browser-tab prefix, and dev-specific startup messaging. This flag is only for visual/runtime identification and should stay out of production compose files. All settings — integrations, API keys, sync configuration — are managed through the web dashboard.
 
 ## Running Tests
 

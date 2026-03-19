@@ -95,9 +95,9 @@ def _enrich_tbr_item(item, data, database_service):
     return None
 
 
-def _pull_started_at(abs_id):
+def _pull_started_at(book_id):
     """Pull started_at from Hardcover/ABS before falling back to today."""
-    dates = get_container().reading_date_service().pull_reading_dates(abs_id)
+    dates = get_container().reading_date_service().pull_reading_dates(book_id)
     return dates.get('started_at')
 
 
@@ -117,24 +117,25 @@ def add_tbr_from_library():
     """Create a TBR item pre-linked to an existing library book."""
     database_service = get_database_service()
     data = request.json or {}
-    abs_id = (data.get('abs_id') or '').strip()
-    if not abs_id:
-        return jsonify({"success": False, "error": "abs_id is required"}), 400
+    book_ref = (data.get('abs_id') or data.get('book_ref') or '').strip()
+    if not book_ref:
+        return jsonify({"success": False, "error": "Book reference is required"}), 400
 
-    book = database_service.get_book(abs_id)
+    book = database_service.get_book_by_ref(book_ref)
     if not book:
         return jsonify({"success": False, "error": "Book not found"}), 404
 
-    # Dedup: if TBR item already linked to this abs_id, return it
-    existing = database_service.find_tbr_by_abs_id(abs_id)
+    # Dedup: if TBR item already linked to this book, return it
+    existing = database_service.find_tbr_by_book_id(book.id)
     if existing:
         return jsonify({"success": True, "created": False, "item": _serialize_tbr_item(existing)})
 
     item, created = database_service.add_tbr_item(
-        title=book.abs_title or abs_id,
+        title=book.title or book_ref,
         author=getattr(book, 'author', None),
         source='library',
-        book_abs_id=abs_id,
+        book_abs_id=book.abs_id,
+        book_id=book.id,
     )
 
     return jsonify({"success": True, "created": created, "item": _serialize_tbr_item(item)})
@@ -326,10 +327,10 @@ def start_tbr_item(item_id):
     item = database_service.get_tbr_item(item_id)
     if not item:
         return jsonify({"success": False, "error": "TBR item not found"}), 404
-    if not item.book_abs_id:
+    if not item.book_id and not item.book_abs_id:
         return jsonify({"success": False, "error": "Book not in library — cannot start reading"}), 400
 
-    book = database_service.get_book(item.book_abs_id)
+    book = database_service.get_book_by_id(item.book_id) if item.book_id else database_service.get_book_by_abs_id(item.book_abs_id)
     if not book:
         return jsonify({"success": False, "error": "Linked book not found"}), 404
 
@@ -340,9 +341,9 @@ def start_tbr_item(item_id):
 
     if not book.started_at:
         database_service.update_book_reading_fields(
-            book.abs_id, started_at=_pull_started_at(book.abs_id)
+            book.id, started_at=_pull_started_at(book.id)
         )
-    database_service.add_reading_journal(book.abs_id, event='started')
+    database_service.add_reading_journal(book.id, event='started', abs_id=book.abs_id)
 
     # Push to Hardcover
     try:
@@ -611,7 +612,7 @@ def search_library_books():
     return jsonify([
         {
             'abs_id': b.abs_id,
-            'title': b.abs_title,
+            'title': b.title,
             'author': getattr(b, 'author', None) or '',
             'status': b.status,
         }
@@ -624,15 +625,15 @@ def link_tbr_to_library(item_id):
     """Link a TBR item to a library book."""
     database_service = get_database_service()
     data = request.json or {}
-    abs_id = (data.get('abs_id') or '').strip()
-    if not abs_id:
-        return jsonify({"success": False, "error": "abs_id is required"}), 400
+    book_ref = (data.get('abs_id') or data.get('book_ref') or '').strip()
+    if not book_ref:
+        return jsonify({"success": False, "error": "Book reference is required"}), 400
 
-    book = database_service.get_book(abs_id)
+    book = database_service.get_book_by_ref(book_ref)
     if not book:
         return jsonify({"success": False, "error": "Book not found in library"}), 404
 
-    updated = database_service.link_tbr_to_book(item_id, abs_id)
+    updated = database_service.link_tbr_to_book(item_id, book.id)
     if not updated:
         return jsonify({"success": False, "error": "TBR item not found"}), 404
 

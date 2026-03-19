@@ -18,7 +18,10 @@ services:
 
     environment:
       - TZ=America/New_York
+      - PAGEKEEPER_ENV=dev
       - LOG_LEVEL=DEBUG
+      - HOST_WEB_URL=http://localhost:4478
+      - HOST_KOSYNC_PORT=5759
       - KOSYNC_PORT=5758
 
     volumes:
