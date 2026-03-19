@@ -126,7 +126,7 @@ def get_audiobooks_conditionally():
 
 
 def get_audiobook_author(ab):
-    """Extract author from ABS audiobook metadata."""
+    """Extract author from audiobook metadata."""
     media = ab.get('media', {})
     metadata = media.get('metadata', {})
     return metadata.get('authorName') or (metadata.get('authors') or [{}])[0].get("name", "")

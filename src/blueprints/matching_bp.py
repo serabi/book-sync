@@ -82,15 +82,15 @@ def _submit_to_storyteller_async(container, abs_id, book_title, ebook_filename, 
 
 def _copy_book_merge_metadata(existing_book, overrides=None):
     metadata = {
-        "storyteller_uuid": getattr(existing_book, "storyteller_uuid", None),
-        "original_ebook_filename": getattr(existing_book, "original_ebook_filename", None),
-        "abs_ebook_item_id": getattr(existing_book, "abs_ebook_item_id", None),
-        "ebook_item_id": getattr(existing_book, "ebook_item_id", None) or getattr(existing_book, "abs_ebook_item_id", None),
-        "custom_cover_url": getattr(existing_book, "custom_cover_url", None),
-        "started_at": getattr(existing_book, "started_at", None),
-        "finished_at": getattr(existing_book, "finished_at", None),
-        "rating": getattr(existing_book, "rating", None),
-        "read_count": getattr(existing_book, "read_count", 1),
+        "storyteller_uuid": existing_book.storyteller_uuid,
+        "original_ebook_filename": existing_book.original_ebook_filename,
+        "abs_ebook_item_id": existing_book.abs_ebook_item_id,
+        "ebook_item_id": existing_book.ebook_item_id or existing_book.abs_ebook_item_id,
+        "custom_cover_url": existing_book.custom_cover_url,
+        "started_at": existing_book.started_at,
+        "finished_at": existing_book.finished_at,
+        "rating": existing_book.rating,
+        "read_count": existing_book.read_count or 1,
     }
     if overrides:
         metadata.update({key: value for key, value in overrides.items() if value is not None})
