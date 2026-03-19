@@ -33,7 +33,7 @@ _active_scans = set()
 _active_scans_lock = threading.Lock()
 
 # KoSync PUT debounce state
-_kosync_debounce: dict = {}  # {abs_id: {'last_event': float, 'title': str, 'synced': bool}}
+_kosync_debounce: dict = {}  # {book_id: {'last_event': float, 'title': str, 'synced': bool}}
 _kosync_debounce_lock = threading.Lock()
 _debounce_thread_started = False
 
@@ -89,11 +89,11 @@ def init_kosync_server(database_service, container, manager, ebook_dir=None):
     _ebook_dir = ebook_dir
 
 
-def _record_kosync_event(abs_id: str, title: str) -> None:
+def _record_kosync_event(book_id: int, title: str) -> None:
     """Record a KoSync PUT event for debounced sync triggering."""
     global _debounce_thread_started
     with _kosync_debounce_lock:
-        _kosync_debounce[abs_id] = {
+        _kosync_debounce[book_id] = {
             'last_event': time.time(),
             'title': title,
             'synced': False,
@@ -112,16 +112,16 @@ def _kosync_debounce_loop() -> None:
         to_sync = []
 
         with _kosync_debounce_lock:
-            for abs_id, info in _kosync_debounce.items():
+            for book_id, info in _kosync_debounce.items():
                 if not info['synced'] and (now - info['last_event']) > debounce_seconds:
                     info['synced'] = True
-                    to_sync.append((abs_id, info['title']))
+                    to_sync.append((book_id, info['title']))
 
-        for abs_id, title in to_sync:
+        for book_id, title in to_sync:
             if _manager:
-                book = _database_service.get_book_by_abs_id(abs_id) if _database_service else None
+                book = _database_service.get_book_by_id(book_id) if _database_service else None
                 if not book:
-                    logger.warning(f"KOSync PUT: No book found for '{abs_id}' — skipping sync")
+                    logger.warning(f"KOSync PUT: No book found for id={book_id} — skipping sync")
                     continue
                 logger.info(f"KOSync PUT: Triggering sync for '{title}' (debounced)")
                 threading.Thread(
@@ -411,7 +411,7 @@ def kosync_put_progress():
     else:
         linked_book = _database_service.get_book_by_kosync_id(doc_hash)
         if linked_book:
-            _database_service.link_kosync_document(doc_hash, linked_book.id)
+            _database_service.link_kosync_document(doc_hash, linked_book.id, linked_book.abs_id)
 
     # AUTO-DISCOVERY
     if not linked_book:
@@ -526,7 +526,7 @@ def kosync_put_progress():
                             sync_mode='ebook_only'
                         )
                         _database_service.save_book(book, is_new=True)
-                        _database_service.link_kosync_document(doc_hash_val, book.id)
+                        _database_service.link_kosync_document(doc_hash_val, book.id, book.abs_id)
                         _database_service.resolve_suggestion(doc_hash_val)
                         logger.info(f"Auto-created ebook-only mapping: {book.id} -> {epub_filename}")
 
@@ -560,7 +560,7 @@ def kosync_put_progress():
         instant_sync_enabled = os.environ.get('INSTANT_SYNC_ENABLED', 'true').lower() != 'false'
         if linked_book.status == 'active' and _manager and not is_internal and instant_sync_enabled:
             logger.debug(f"KOSync PUT: Progress event recorded for '{linked_book.title}'")
-            _record_kosync_event(linked_book.abs_id, linked_book.title)
+            _record_kosync_event(linked_book.id, linked_book.title)
 
     response_timestamp = now.isoformat() + "Z"
     if device and device.lower() == "booknexus":
@@ -828,7 +828,7 @@ def _register_hash_for_book(doc_id: str, book):
     existing = _database_service.get_kosync_document(doc_id)
     if existing:
         if not existing.linked_book_id:
-            _database_service.link_kosync_document(doc_id, book.id)
+            _database_service.link_kosync_document(doc_id, book.id, book.abs_id)
             logger.info(f"KOSync: Linked existing document {doc_id[:8]}... to '{book.title}'")
     else:
         doc = KD(document_hash=doc_id, linked_book_id=book.id)
@@ -856,7 +856,7 @@ def _run_get_auto_discovery(doc_id: str):
         # Try to find an existing book that uses this epub
         book = _database_service.get_book_by_ebook_filename(epub_filename)
         if book:
-            _database_service.link_kosync_document(doc_id, book.id)
+            _database_service.link_kosync_document(doc_id, book.id, book.abs_id)
             logger.info(f"KOSync: GET-discovery linked {doc_id[:8]}... to '{book.title}'")
             return
 
@@ -973,7 +973,7 @@ def api_link_kosync_document(doc_hash):
     if not doc:
         return jsonify({'error': 'KOSync document not found'}), 404
 
-    success = _database_service.link_kosync_document(doc_hash, book.id)
+    success = _database_service.link_kosync_document(doc_hash, book.id, book.abs_id)
     if success:
         # [FIX] Always update the book's KOSync ID to match what we just linked.
         # This handles cases where the book had a "wrong" hash (e.g. from Storyteller artifact)

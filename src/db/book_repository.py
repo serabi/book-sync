@@ -22,6 +22,8 @@ class BookRepository(BaseRepository):
     # ── Book CRUD ──
 
     def get_book_by_abs_id(self, abs_id):
+        if not abs_id:
+            return None
         return self._get_one(Book, Book.abs_id == abs_id)
 
     def get_book_by_id(self, book_id):

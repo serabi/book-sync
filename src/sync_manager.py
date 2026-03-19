@@ -778,7 +778,7 @@ class SyncManager:
                 logger.info(f"'{abs_id}' '{title_snip}' Updated state data for '{client_name}': {state_data}")
                 try:
                     from src.services.write_tracker import record_write
-                    record_write(client_name, abs_id, state_data)
+                    record_write(client_name, book.id, state_data)
                 except ImportError:
                     pass
                 client_state_model = State(

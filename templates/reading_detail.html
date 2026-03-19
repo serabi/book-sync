@@ -790,6 +790,7 @@
         initReadingDetail();
 
         var _rdBookId = {{ book.id }};
+        var _rdAbsId = {{ book.abs_id | tojson }} || _rdBookId;
         var _rdTitle = {{ book.title | tojson }};
         var _rdPendingJournalId = null;
 

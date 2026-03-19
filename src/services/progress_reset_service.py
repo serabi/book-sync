@@ -186,7 +186,7 @@ class ProgressResetService:
                     'message': 'Reset to 0%' if result.success else 'Failed to reset'
                 }
                 if result.success:
-                    record_write(client_name, book.abs_id)
+                    record_write(client_name, book.id)
                     logger.info(f"Reset '{client_name}' to 0%")
                 else:
                     logger.warning(f"Failed to reset '{client_name}'")

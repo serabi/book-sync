@@ -217,6 +217,7 @@ class TestKosyncPutInstantSync(unittest.TestCase):
 
         try:
             mock_book = MagicMock()
+            mock_book.id = 42
             mock_book.abs_id = "test-instant-sync"
             mock_book.title = "Instant Sync Book"
             mock_book.status = "active"
@@ -234,11 +235,11 @@ class TestKosyncPutInstantSync(unittest.TestCase):
             with self._make_put_context('x' * 32):
                 ks.kosync_put_progress.__wrapped__()
 
-            # Event should be queued for the debounce loop to fire
+            # Event should be queued for the debounce loop to fire (keyed by book.id)
             with ks._kosync_debounce_lock:
-                self.assertIn("test-instant-sync", ks._kosync_debounce)
-                self.assertFalse(ks._kosync_debounce["test-instant-sync"]["synced"])
-                self.assertEqual(ks._kosync_debounce["test-instant-sync"]["title"], "Instant Sync Book")
+                self.assertIn(42, ks._kosync_debounce)
+                self.assertFalse(ks._kosync_debounce[42]["synced"])
+                self.assertEqual(ks._kosync_debounce[42]["title"], "Instant Sync Book")
 
         finally:
             ks._database_service = original_db

@@ -26,24 +26,25 @@ class KoSyncRepository(BaseRepository):
     def get_unlinked_kosync_documents(self):
         return self._get_all(
             KosyncDocument,
-            KosyncDocument.linked_abs_id == None,
+            KosyncDocument.linked_book_id == None,
             order_by=KosyncDocument.last_updated.desc(),
         )
 
     def get_linked_kosync_documents(self):
         return self._get_all(
             KosyncDocument,
-            KosyncDocument.linked_abs_id != None,
+            KosyncDocument.linked_book_id != None,
             order_by=KosyncDocument.last_updated.desc(),
         )
 
-    def link_kosync_document(self, document_hash, book_id):
+    def link_kosync_document(self, document_hash, book_id, abs_id=None):
         with self.get_session() as session:
             doc = session.query(KosyncDocument).filter(
                 KosyncDocument.document_hash == document_hash
             ).first()
             if doc:
                 doc.linked_book_id = book_id
+                doc.linked_abs_id = abs_id
                 doc.last_updated = datetime.now(UTC)
                 return True
             return False

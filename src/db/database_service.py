@@ -51,7 +51,8 @@ class DatabaseService:
         self._run_alembic_migrations()
 
         # Ensure all tables exist (covers new models not yet in migrations)
-        Base.metadata.create_all(self.db_manager.engine)
+        if not self._migration_failed:
+            Base.metadata.create_all(self.db_manager.engine)
 
         # Safety net: add any model columns missing from existing tables
         # Skip if migrations failed — adding columns without constraints would
