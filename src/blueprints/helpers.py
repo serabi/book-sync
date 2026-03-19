@@ -125,7 +125,7 @@ def get_audiobooks_conditionally():
     return get_abs_service().get_audiobooks()
 
 
-def get_abs_author(ab):
+def get_audiobook_author(ab):
     """Extract author from ABS audiobook metadata."""
     media = ab.get('media', {})
     metadata = media.get('metadata', {})
@@ -139,8 +139,8 @@ def audiobook_matches_search(ab, search_term):
     def normalize(s):
         return re.sub(r'[^\w\s]', '', s.lower())
 
-    title = normalize(manager.get_abs_title(ab))
-    author = normalize(get_abs_author(ab))
+    title = normalize(manager.get_audiobook_title(ab))
+    author = normalize(get_audiobook_author(ab))
     search_norm = normalize(search_term)
 
     # 1. Standard Search

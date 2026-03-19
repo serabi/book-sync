@@ -114,7 +114,7 @@ def _serialize_suggestion(s):
     return {
         "id": s.id,
         "source_id": s.source_id,
-        "source": s.source or "abs",
+        "source": s.source or "unknown",
         "title": s.title,
         "author": s.author,
         "cover_url": s.cover_url,
@@ -213,7 +213,7 @@ def match():
                 return "Audiobook not found", 404
             book = Book(
                 abs_id=abs_id,
-                title=manager.get_abs_title(selected_ab),
+                title=manager.get_audiobook_title(selected_ab),
                 ebook_filename=None,
                 kosync_doc_id=None,
                 status="not_started",
@@ -318,7 +318,7 @@ def match():
                 return "Audiobook not found", 404
             new_book = Book(
                 abs_id=abs_id,
-                title=manager.get_abs_title(selected_ab),
+                title=manager.get_audiobook_title(selected_ab),
                 ebook_filename=book.ebook_filename,
                 kosync_doc_id=book.kosync_doc_id,
                 status=book.status or "not_started",
@@ -417,7 +417,7 @@ def match():
 
         book = Book(
             abs_id=abs_id,
-            title=manager.get_abs_title(selected_ab),
+            title=manager.get_audiobook_title(selected_ab),
             ebook_filename=ebook_filename,
             kosync_doc_id=kosync_doc_id,
             transcript_file=None,
@@ -468,7 +468,7 @@ def match():
             _submit_to_storyteller_async(
                 container,
                 abs_id,
-                manager.get_abs_title(selected_ab),
+                manager.get_audiobook_title(selected_ab),
                 ebook_filename,
                 current_app.config.get("BOOKS_DIR", ""),
                 current_app.config.get("EPUB_CACHE_DIR", ""),
@@ -570,7 +570,7 @@ def match():
         ebooks=ebooks,
         storyteller_books=storyteller_books,
         search=search,
-        get_title=manager.get_abs_title,
+        get_title=manager.get_audiobook_title,
         attach_to=attach_to,
         attach_title=attach_title,
         link_to=link_to,
@@ -609,7 +609,7 @@ def batch_match():
                     session["queue"].append(
                         {
                             "abs_id": abs_id,
-                            "title": manager.get_abs_title(selected_ab),
+                            "title": manager.get_audiobook_title(selected_ab),
                             "ebook_filename": ebook_filename,
                             "ebook_display_name": ebook_display_name,
                             "storyteller_uuid": storyteller_uuid,
@@ -827,7 +827,7 @@ def batch_match():
         queue=queue_view["items"],
         queue_summary=queue_view,
         search=search,
-        get_title=manager.get_abs_title,
+        get_title=manager.get_audiobook_title,
         storyteller_submit_available=storyteller_submit_available,
         storyteller_force_mode=storyteller_force_mode,
     )
