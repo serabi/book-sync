@@ -130,7 +130,7 @@
 
                 {# ── Storyteller disclosure ── #}
                 {% if not link_to and not attach_to %}
-                    {% if storyteller_books or storyteller_submit_available %}
+                    {% if storyteller_configured %}
                     <div class="match-storyteller-disclosure" id="storytellerSection">
                         <button type="button" class="match-storyteller-toggle" id="storytellerToggle">
                             <span class="match-storyteller-toggle-text">Storyteller</span>

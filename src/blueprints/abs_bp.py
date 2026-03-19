@@ -6,7 +6,7 @@ import re
 import requests
 from flask import Blueprint, Response, jsonify
 
-from src.blueprints.helpers import get_abs_service, get_book_or_404, get_container
+from src.blueprints.helpers import get_abs_service, get_container, get_database_service
 
 logger = logging.getLogger(__name__)
 
@@ -30,10 +30,8 @@ def proxy_cover(book_ref):
     if not abs_service.is_available():
         return "ABS not configured", 404
 
-    book = get_book_or_404(book_ref)
-    abs_id = book.abs_id
-    if not abs_id:
-        return "Book has no ABS cover", 404
+    book = get_database_service().get_book_by_ref(book_ref)
+    abs_id = book.abs_id if book else book_ref
 
     if not re.fullmatch(r'[a-zA-Z0-9_\-]+', abs_id):
         return "Invalid ID", 400

@@ -123,6 +123,7 @@
                         </div>
                     </div>
 
+                    {% if storyteller_configured %}
                     <div class="batch-selection-column">
                         <div class="batch-selection-header">
                             <h3><span class="section-number">2</span>Storyteller</h3>
@@ -170,10 +171,11 @@
                             {% endif %}
                         </div>
                     </div>
+                    {% endif %}
 
                     <div class="batch-selection-column">
                         <div class="batch-selection-header">
-                            <h3><span class="section-number">3</span>eBooks</h3>
+                            <h3><span class="section-number">{% if storyteller_configured %}3{% else %}2{% endif %}</span>eBooks</h3>
                             <p class="section-hint">Optional ebook source for progress sync.</p>
                         </div>
                         <div class="batch-selection-panel">
@@ -244,7 +246,7 @@
                         <tr>
                             <th>#</th>
                             <th>Audiobook</th>
-                            <th>Storyteller</th>
+                            {% if storyteller_configured %}<th>Storyteller</th>{% endif %}
                             <th>eBook</th>
                             <th>Status</th>
                             <th>Actions</th>
@@ -268,11 +270,13 @@
                                     </div>
                                 </div>
                             </td>
+                            {% if storyteller_configured %}
                             <td>
                                 <span class="batch-queue-cell {% if item.storyteller_selected %}has-value{% endif %}">
                                     {{ item.storyteller_label }}
                                 </span>
                             </td>
+                            {% endif %}
                             <td>
                                 <span class="batch-queue-cell {% if item.ebook_filename %}has-value{% endif %}">
                                     {{ item.ebook_label }}
