@@ -23,7 +23,7 @@
             <div class="sg-header-copy">
                 <p class="sg-page-kicker">Discovery Queue</p>
                 <h2 class="sg-page-title">Pairing Suggestions</h2>
-                <p class="sg-page-description">Review unmapped audiobook pairings across your indexed ebook sources.</p>
+                <p class="sg-page-description">Review unmapped book pairings across your indexed sources.</p>
             </div>
             <div class="candidate-actions">
                 <button type="button" class="btn btn-primary" id="rescan-btn" onclick="rescanSuggestions()">Rescan Libraries</button>
@@ -161,7 +161,7 @@
         function renderCandidate(match, suggestion, index) {
             const confidenceClass = 'chip--confidence-' + (match.confidence || 'low');
             const actions = [];
-            const sgSource = suggestion.source || 'abs';
+            const sgSource = suggestion.source || 'unknown';
 
             if (!suggestion.hidden) {
                 if (match.source_family === 'bookfusion') {
@@ -204,7 +204,7 @@
                 return renderCandidate(match, suggestion, index);
             }).join('');
 
-            const suggestionSource = suggestion.source || 'abs';
+            const suggestionSource = suggestion.source || 'unknown';
             const actionButtons = suggestion.hidden
                 ? '<button type="button" class="btn btn-sm" onclick=\'unhideSuggestion(' + JSON.stringify(suggestion.source_id) + ', ' + JSON.stringify(suggestionSource) + ', this)\'>Unhide</button>'
                 : '<button type="button" class="btn btn-sm" onclick=\'hideSuggestion(' + JSON.stringify(suggestion.source_id) + ', ' + JSON.stringify(suggestionSource) + ', this)\'>Hide</button>';
@@ -308,10 +308,6 @@
             setView('list', false);
         }
 
-        if (!currentView) {
-            setView('list', false);
-        }
-
         function handleViewportChange() {
             setView(currentView, false);
         }
@@ -404,6 +400,16 @@
             });
         }
 
+        function showErrorToast(message) {
+            showSuggestionConfirm({
+                title: 'Error',
+                message: message,
+                confirmLabel: 'OK',
+                confirmClass: 'btn',
+                onConfirm: function() {}
+            });
+        }
+
         function actOnSuggestion(url, btn, onSuccess) {
             if (btn) btn.disabled = true;
             fetch(url, { method: 'POST' })
@@ -414,7 +420,7 @@
                 })
                 .catch(function(err) {
                     if (btn) btn.disabled = false;
-                    alert(err.message || err);
+                    showErrorToast(err.message || String(err));
                 });
         }
 
@@ -432,10 +438,10 @@
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
                     if (!data.success) throw new Error(data.error || 'Link failed');
-                    location.reload();
+                    refreshSuggestionsData('BookFusion link created.');
                 })
                 .catch(function(err) {
-                    alert(err.message || err);
+                    showErrorToast(err.message || String(err));
                 });
         }
 
@@ -452,7 +458,7 @@
                     window.location.href = '/';
                 })
                 .catch(function(err) {
-                    alert(err.message || err);
+                    showErrorToast(err.message || String(err));
                 });
         }
 
@@ -503,8 +509,7 @@
                     }
 
                     if (data.phase === 'complete') {
-                        status.textContent = data.message || 'Rescan complete.';
-                        location.reload();
+                        refreshSuggestionsData(data.message || 'Rescan complete.');
                         return;
                     }
 
@@ -518,6 +523,25 @@
                 .catch(function(err) {
                     document.getElementById('rescan-status').textContent = err.message || String(err);
                     document.getElementById('rescan-btn').disabled = false;
+                });
+        }
+
+        function refreshSuggestionsData(statusMessage) {
+            fetch('/api/suggestions')
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    suggestionData = data;
+                    renderSuggestions();
+                    var status = document.getElementById('rescan-status');
+                    var btn = document.getElementById('rescan-btn');
+                    if (statusMessage) status.textContent = statusMessage;
+                    btn.disabled = false;
+                })
+                .catch(function(err) {
+                    var status = document.getElementById('rescan-status');
+                    var btn = document.getElementById('rescan-btn');
+                    status.textContent = 'Refresh failed: ' + (err.message || String(err));
+                    btn.disabled = false;
                 });
         }
 
