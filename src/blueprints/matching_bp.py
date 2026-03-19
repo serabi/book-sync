@@ -260,6 +260,9 @@ def _build_batch_queue_item(item):
     if item.get("audio_only"):
         status_label = "Audio Only"
         status_kind = "audio-only"
+    elif item.get("ebook_only"):
+        status_label = "Ebook Only"
+        status_kind = "ebook-only"
     elif item.get("abs_id") and item.get("ebook_filename"):
         status_label = "Ready"
         status_kind = "ready"
@@ -282,8 +285,9 @@ def _build_batch_queue_view(queue):
     return {
         "items": queue_items,
         "total_count": len(queue_items),
-        "ready_count": sum(1 for item in queue_items if item["status_kind"] in {"ready", "audio-only"}),
+        "ready_count": sum(1 for item in queue_items if item["status_kind"] in {"ready", "audio-only", "ebook-only"}),
         "audio_only_count": sum(1 for item in queue_items if item["status_kind"] == "audio-only"),
+        "ebook_only_count": sum(1 for item in queue_items if item["status_kind"] == "ebook-only"),
         "incomplete_count": sum(1 for item in queue_items if item["status_kind"] == "incomplete"),
     }
 
@@ -608,33 +612,52 @@ def batch_match():
         action = request.form.get("action")
         if action == "add_to_queue":
             session.setdefault("queue", [])
-            abs_id = request.form.get("audiobook_id")
+            abs_id = request.form.get("audiobook_id") or ""
             ebook_filename = sanitize_filename(request.form.get("ebook_filename", "")) or ""
             ebook_display_name = request.form.get("ebook_display_name", ebook_filename)
             storyteller_uuid = request.form.get("storyteller_uuid", "")
-            audiobooks = abs_service.get_audiobooks()
-            selected_ab = next((ab for ab in audiobooks if ab["id"] == abs_id), None)
-            if selected_ab:
-                if not any(item["abs_id"] == abs_id for item in session["queue"]):
-                    is_audio_only = not ebook_filename and not storyteller_uuid
-                    session["queue"].append(
-                        {
-                            "abs_id": abs_id,
-                            "title": manager.get_audiobook_title(selected_ab),
-                            "ebook_filename": ebook_filename,
-                            "ebook_display_name": ebook_display_name,
-                            "storyteller_uuid": storyteller_uuid,
-                            "storyteller_submit": bool(request.form.get("storyteller_submit")),
-                            "duration": manager.get_duration(selected_ab),
-                            "cover_url": abs_service.get_cover_proxy_url(abs_id),
-                            "audio_only": is_audio_only,
-                        }
-                    )
-                    session.modified = True
+
+            if not abs_id and not ebook_filename and not storyteller_uuid:
+                return redirect(url_for("matching.batch_match", search=request.form.get("search", "")))
+
+            # Resolve audiobook metadata if present
+            selected_ab = None
+            if abs_id:
+                audiobooks = abs_service.get_audiobooks()
+                selected_ab = next((ab for ab in audiobooks if ab["id"] == abs_id), None)
+                if not selected_ab:
+                    return redirect(url_for("matching.batch_match", search=request.form.get("search", "")))
+
+            # Dedup key: abs_id if present, otherwise ebook_filename
+            queue_key = abs_id or ebook_filename
+            if not any(item.get("queue_key") == queue_key for item in session["queue"]):
+                is_ebook_only = not abs_id and (ebook_filename or storyteller_uuid)
+                is_audio_only = abs_id and not ebook_filename and not storyteller_uuid
+                title = (
+                    manager.get_audiobook_title(selected_ab) if selected_ab
+                    else ebook_display_name or Path(ebook_filename).stem if ebook_filename
+                    else "Storyteller Book"
+                )
+                session["queue"].append(
+                    {
+                        "queue_key": queue_key,
+                        "abs_id": abs_id,
+                        "title": title,
+                        "ebook_filename": ebook_filename,
+                        "ebook_display_name": ebook_display_name,
+                        "storyteller_uuid": storyteller_uuid,
+                        "storyteller_submit": bool(request.form.get("storyteller_submit")),
+                        "duration": manager.get_duration(selected_ab) if selected_ab else 0,
+                        "cover_url": abs_service.get_cover_proxy_url(abs_id) if abs_id else None,
+                        "audio_only": is_audio_only,
+                        "ebook_only": is_ebook_only,
+                    }
+                )
+                session.modified = True
             return redirect(url_for("matching.batch_match", search=request.form.get("search", "")))
         elif action == "remove_from_queue":
-            abs_id = request.form.get("abs_id")
-            session["queue"] = [item for item in session.get("queue", []) if item["abs_id"] != abs_id]
+            remove_key = request.form.get("queue_key") or request.form.get("abs_id")
+            session["queue"] = [item for item in session.get("queue", []) if item.get("queue_key", item.get("abs_id")) != remove_key]
             session.modified = True
             return redirect(url_for("matching.batch_match"))
         elif action == "clear_queue":
@@ -666,6 +689,38 @@ def batch_match():
                         except Exception as e:
                             logger.warning(f"Hardcover automatch failed (book saved): {e}")
                         database_service.resolve_suggestion(item["abs_id"])
+                        continue
+
+                    # Handle ebook-only queue items
+                    if item.get("ebook_only"):
+                        ebook_filename = item["ebook_filename"]
+                        storyteller_uuid = item.get("storyteller_uuid") or None
+
+                        if ebook_filename:
+                            bl_book, bl_client = find_in_booklore(ebook_filename)
+                            booklore_id = bl_book.get("id") if bl_book else None
+                            kosync_doc_id = get_kosync_id_for_ebook(ebook_filename, booklore_id, bl_client=bl_client)
+                            if not kosync_doc_id:
+                                failed_items.append(item.get("ebook_display_name") or ebook_filename)
+                                continue
+                            title = item.get("ebook_display_name") or (bl_book.get("title") if bl_book else None) or Path(ebook_filename).stem
+                        else:
+                            title = item.get("title", "Storyteller Book")
+                            ebook_filename = None
+                            kosync_doc_id = None
+
+                        book = Book(
+                            abs_id=None,
+                            title=title,
+                            ebook_filename=ebook_filename,
+                            kosync_doc_id=kosync_doc_id,
+                            status="not_started",
+                            sync_mode="ebook_only",
+                            storyteller_uuid=storyteller_uuid,
+                        )
+                        database_service.save_book(book, is_new=True)
+                        if kosync_doc_id:
+                            database_service.resolve_suggestion(kosync_doc_id)
                         continue
 
                     book, error = _create_book_mapping(

@@ -264,7 +264,7 @@
                                     {% endif %}
                                     <div class="batch-queue-book-copy">
                                         <div class="batch-queue-title" title="{{ item.title }}">{{ item.title }}</div>
-                                        <div class="batch-queue-subtitle">{{ item.abs_id }}</div>
+                                        <div class="batch-queue-subtitle">{{ item.abs_id or 'Ebook only' }}</div>
                                     </div>
                                 </div>
                             </td>
@@ -284,7 +284,7 @@
                             <td class="batch-queue-actions-cell">
                                 <form method="POST" action="/batch-match" class="d-inline">
                                     <input type="hidden" name="action" value="remove_from_queue">
-                                    <input type="hidden" name="abs_id" value="{{ item.abs_id }}">
+                                    <input type="hidden" name="queue_key" value="{{ item.queue_key|default(item.abs_id) }}">
                                     <button type="submit" class="queue-item-remove batch-row-remove">Remove</button>
                                 </form>
                             </td>
@@ -369,15 +369,28 @@
             const addButton = document.getElementById('addToQueueBtn');
             const statusLabel = document.getElementById('selectionStatus');
             const hasAudiobook = Boolean(selectionState.audiobook);
-            const hasLinkedSource = Boolean(selectionState.storyteller || selectionState.ebook);
+            const hasEbook = Boolean(selectionState.ebook);
+            const hasStoryteller = Boolean(selectionState.storyteller);
+            const hasLinkedSource = hasEbook || hasStoryteller;
+            const hasAnything = hasAudiobook || hasLinkedSource;
 
-            addButton.disabled = !hasAudiobook;
-            addButton.textContent = hasAudiobook && !hasLinkedSource
-                ? 'Add Audio Only to Queue'
-                : 'Add to Queue';
+            addButton.disabled = !hasAnything;
+
+            if (hasAudiobook && !hasLinkedSource) {
+                addButton.textContent = 'Add Audio Only to Queue';
+            } else if (!hasAudiobook && hasLinkedSource) {
+                addButton.textContent = 'Add Ebook Only to Queue';
+            } else {
+                addButton.textContent = 'Add to Queue';
+            }
+
+            if (!hasAnything) {
+                statusLabel.textContent = 'Select an audiobook or ebook to enable queueing.';
+                return;
+            }
 
             if (!hasAudiobook) {
-                statusLabel.textContent = 'Select an audiobook to enable queueing.';
+                statusLabel.textContent = 'Queue will be created as ebook-only.';
                 return;
             }
 
@@ -386,12 +399,12 @@
                 return;
             }
 
-            if (selectionState.storyteller && selectionState.ebook) {
+            if (hasStoryteller && hasEbook) {
                 statusLabel.textContent = 'Queue will include both Storyteller and ebook.';
                 return;
             }
 
-            if (selectionState.storyteller) {
+            if (hasStoryteller) {
                 statusLabel.textContent = 'Queue will use Storyteller as the linked source.';
                 return;
             }

@@ -847,7 +847,8 @@ button.batch-select-card {
   color: #6ee7b7;
 }
 
-.batch-status-pill.audio-only {
+.batch-status-pill.audio-only,
+.batch-status-pill.ebook-only {
   background: rgba(245, 158, 11, 0.16);
   color: #fbbf24;
 }
