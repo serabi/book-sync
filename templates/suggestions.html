@@ -38,10 +38,12 @@
                     <option value="high">High confidence</option>
                     <option value="medium">High + medium</option>
                 </select>
+                {% if bookfusion_enabled %}
                 <select id="bookfusion-filter" onchange="renderSuggestions()">
                     <option value="all">All evidence</option>
                     <option value="bookfusion">Has BookFusion evidence</option>
                 </select>
+                {% endif %}
                 <div class="sg-view-toggle" aria-label="Suggestion view toggle">
                     <button class="sg-view-btn" data-view="grid" title="Card view" type="button" aria-pressed="false">
                         <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>
@@ -58,7 +60,9 @@
             <div class="stat-pill"><strong id="visible-count">{{ visible_count }}</strong> visible suggestions</div>
             <div class="stat-pill"><strong id="hidden-count">{{ hidden_count }}</strong> hidden suggestions</div>
             <div class="stat-pill"><strong id="total-count">{{ suggestions|length }}</strong> total actionable</div>
+            {% if bookfusion_enabled %}
             <div class="stat-pill"><strong>{{ bookfusion_catalog_count }}</strong> BookFusion catalog items cached</div>
+            {% endif %}
             <div class="stat-pill"><strong>{{ 'enabled' if suggestions_enabled else 'disabled' }}</strong> suggestions status</div>
         </div>
 
@@ -136,7 +140,8 @@
         function filterSuggestions() {
             const query = (document.getElementById('suggestion-search').value || '').toLowerCase().trim();
             const confidenceFilter = document.getElementById('confidence-filter').value;
-            const bookfusionFilter = document.getElementById('bookfusion-filter').value;
+            const bfFilterEl = document.getElementById('bookfusion-filter');
+            const bookfusionFilter = bfFilterEl ? bfFilterEl.value : 'all';
 
             return suggestionData.filter(function(suggestion) {
                 if (selectedSourceId && suggestion.source_id !== selectedSourceId) return false;

@@ -266,6 +266,10 @@ def _build_batch_queue_view(queue):
 @matching_bp.route("/suggestions")
 def suggestions():
     """Dedicated page for browsing and acting on pairing suggestions."""
+    abs_service = get_abs_service()
+    if not abs_service.is_available():
+        flash("Suggestions require Audiobookshelf to be configured.", "warning")
+        return redirect(url_for("dashboard.index"))
     container = get_container()
     database_service = get_database_service()
     raw_suggestions = database_service.get_all_actionable_suggestions()
