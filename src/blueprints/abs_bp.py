@@ -43,7 +43,7 @@ def proxy_cover(book_ref):
             token = container.abs_client().token
             base_url = container.abs_client().base_url
             url = f"{base_url.rstrip('/')}/api/items/{abs_id}/cover"
-            req = requests.get(url, headers={"Authorization": f"Bearer {token}"}, stream=True, timeout=10)
+            req = requests.get(url, headers={"Authorization": f"Bearer {token}"}, timeout=10)
             if req.status_code == 200:
                 data = req.content
                 try:

@@ -1,6 +1,17 @@
 """Cover URL resolution waterfall for book display."""
 
 
+def resolve_placeholder_logo(book, book_type, booklore_meta):
+    """Determine the placeholder logo based on a book's primary source."""
+    if (book.abs_id or "").startswith("bf-"):
+        return "/static/bookfusion-logo.svg"
+    elif book_type == "ebook-only" and booklore_meta:
+        return "/static/booklore.png"
+    elif book.abs_id:
+        return "/static/audiobookshelf.png"
+    return None
+
+
 def resolve_book_covers(book, abs_service, database_service, book_type,
                         booklore_meta=None, hardcover_details=None):
     """Resolve cover URLs for a book using the priority waterfall.
@@ -13,7 +24,7 @@ def resolve_book_covers(book, abs_service, database_service, book_type,
     ``fallback_cover_url``.
 
     Returns dict with 'cover_url', 'custom_cover_url', 'abs_cover_url',
-    'fallback_cover_url'.
+    'fallback_cover_url', 'placeholder_logo'.
     """
     custom_cover_url = book.custom_cover_url or None
     abs_cover_url = None
@@ -53,4 +64,5 @@ def resolve_book_covers(book, abs_service, database_service, book_type,
         'custom_cover_url': custom_cover_url,
         'abs_cover_url': abs_cover_url,
         'fallback_cover_url': fallback_cover_url,
+        'placeholder_logo': resolve_placeholder_logo(book, book_type, booklore_meta),
     }

@@ -69,7 +69,7 @@ def _proxy_booklore_cover_for(bl_client, book_id, cache_prefix="bl"):
             token = bl_client._get_fresh_token()
             if token:
                 url = f"{bl_client.base_url}/api/v1/media/book/{book_id}/cover"
-                req = requests.get(url, params={"token": token}, stream=True, timeout=10)
+                req = requests.get(url, params={"token": token}, timeout=10)
                 if req.status_code == 200:
                     data = req.content
                     try:
