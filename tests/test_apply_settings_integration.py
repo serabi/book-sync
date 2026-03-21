@@ -6,7 +6,6 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 import schedule
 
-
 # ---------------------------------------------------------------------------
 # Unit-level tests for apply_settings (mock dependencies directly)
 # ---------------------------------------------------------------------------

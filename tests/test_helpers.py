@@ -2,7 +2,6 @@
 
 from unittest.mock import Mock, patch
 
-
 # ── get_kosync_id_for_ebook: Booklore download failure ────────────
 
 def test_get_kosync_id_booklore_download_raises(flask_app, mock_container):

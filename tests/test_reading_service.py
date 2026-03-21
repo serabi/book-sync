@@ -11,7 +11,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.services.reading_service import ReadingService
 from src.services.reading_stats_service import ReadingStatsService
 
-
 # ---------------------------------------------------------------------------
 # ReadingStatsService.get_year_stats
 # ---------------------------------------------------------------------------

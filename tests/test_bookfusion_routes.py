@@ -5,7 +5,6 @@ from unittest.mock import Mock
 
 from tests.conftest import MockContainer
 
-
 # ── Helpers ────────────────────────────────────────────────────────
 
 def _make_mock_book(abs_id='test-abs-id', title='Test Book', book_id=1, status='active'):

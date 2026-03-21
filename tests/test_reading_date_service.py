@@ -6,7 +6,6 @@ import pytest
 
 from src.services.reading_date_service import ReadingDateService, push_booklore_read_status
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------

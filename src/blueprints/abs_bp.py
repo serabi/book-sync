@@ -27,7 +27,7 @@ def get_abs_libraries():
 def proxy_cover(book_ref):
     """Proxy cover access with local caching for offline resilience."""
     book = get_database_service().get_book_by_ref(book_ref)
-    abs_id = book.abs_id if book else book_ref
+    abs_id = book.abs_id if book and book.abs_id else book_ref
 
     if not re.fullmatch(r'[a-zA-Z0-9_\-]+', abs_id):
         return "Invalid ID", 400

@@ -40,5 +40,6 @@ function debounce(func, wait) {
  */
 function toggleHiddenSection(headerEl) {
     headerEl.classList.toggle('collapsed');
-    headerEl.nextElementSibling.classList.toggle('hidden');
+    var sibling = headerEl.nextElementSibling;
+    if (sibling) sibling.classList.toggle('hidden');
 }

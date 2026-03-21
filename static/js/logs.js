@@ -419,10 +419,7 @@ scrollToBottom.addEventListener('click', () => {
 
 loadMore.addEventListener('click', async () => {
     if (!liveMode.checked) {
-        const data = await fetchLogs(currentOffset, true);
-        if (data) {
-            currentOffset += data.displayed_lines;
-        }
+        await fetchLogs(currentOffset, true);
     }
 });
 

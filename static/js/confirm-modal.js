@@ -96,6 +96,7 @@ var PKModal = (function () {
      */
     function confirm(opts) {
         _resolve();
+        if (!_modal) return;
         var confirmClass = opts.confirmClass || 'btn btn-warning';
 
         _setIcon(_accentClassFromBtn(confirmClass));
@@ -124,6 +125,7 @@ var PKModal = (function () {
      */
     function confirmForm(opts) {
         _resolve();
+        if (!_modal) return;
         var confirmClass = opts.confirmClass || 'btn btn-warning';
 
         _setIcon(_accentClassFromBtn(confirmClass));
@@ -167,6 +169,7 @@ var PKModal = (function () {
      */
     function alert(opts) {
         _resolve();
+        if (!_modal) return;
 
         _icon.className = 'confirm-modal-icon';
         _icon.textContent = '';
@@ -195,6 +198,7 @@ var PKModal = (function () {
      */
     function close() {
         _resolve();
+        if (!_modal) return;
         _modal.style.display = 'none';
         _onConfirmCallback = null;
         _message.style.whiteSpace = '';

@@ -241,6 +241,6 @@ class TestCachingBehavior:
         bl_client = Mock()
         container = _make_container()
 
-        result = build_book_metadata(book, container, db, abs_service, booklore_client=bl_client)
+        build_book_metadata(book, container, db, abs_service, booklore_client=bl_client)
 
         bl_client.find_book_by_filename.assert_not_called()

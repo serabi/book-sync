@@ -14,6 +14,7 @@ function applySelection(card) {
     var value = card.dataset.value || '';
     var targetInputId = card.dataset.targetInput;
     var targetInput = document.getElementById(targetInputId);
+    if (!targetInput) return;
 
     document.querySelectorAll('[data-select-group="' + group + '"]').forEach(function (el) {
         el.classList.remove('selected');
@@ -36,7 +37,8 @@ function applySelection(card) {
     }
 
     if (group !== 'ebook' && !selectionState.ebook) {
-        document.getElementById('selected_ebook_display_name').value = '';
+        var displayNameInput = document.getElementById('selected_ebook_display_name');
+        if (displayNameInput) displayNameInput.value = '';
     }
 
     updateBatchActionState();
@@ -45,6 +47,7 @@ function applySelection(card) {
 function updateBatchActionState() {
     var addButton = document.getElementById('addToQueueBtn');
     var statusLabel = document.getElementById('selectionStatus');
+    if (!addButton || !statusLabel) return;
     var hasAudiobook = Boolean(selectionState.audiobook);
     var hasEbook = Boolean(selectionState.ebook);
     var hasStoryteller = Boolean(selectionState.storyteller);

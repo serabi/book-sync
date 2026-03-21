@@ -8,7 +8,6 @@ from pathlib import Path
 
 from flask import Blueprint, render_template
 
-from src.utils.cover_resolver import resolve_book_covers
 from src.blueprints.helpers import (
     find_booklore_metadata,
     get_abs_service,
@@ -18,6 +17,7 @@ from src.blueprints.helpers import (
     get_hardcover_book_url,
     get_service_web_url,
 )
+from src.utils.cover_resolver import resolve_book_covers
 from src.version import APP_VERSION
 
 logger = logging.getLogger(__name__)

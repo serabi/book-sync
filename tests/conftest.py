@@ -1,8 +1,8 @@
 """Shared pytest fixtures and module stubs for the test suite."""
 
 import os
-import sys
 import shutil
+import sys
 import tempfile
 from pathlib import Path
 from types import ModuleType
@@ -63,6 +63,7 @@ class MockContainer:
 
         # ── API Clients ──
         self.mock_abs_client = Mock()
+        self.mock_abs_client.is_configured.return_value = False
         self.mock_booklore_client = Mock()
         self.mock_booklore_client.is_configured.return_value = False
         self.mock_storyteller_client = Mock()
@@ -173,16 +174,16 @@ def flask_app(mock_container, tmp_path):
     original_init_db = src.db.migration_utils.initialize_database
     src.db.migration_utils.initialize_database = lambda data_dir: mock_container.mock_database_service
 
-    from src.web_server import create_app
-    app, _ = create_app(test_container=mock_container)
-    app.config['TESTING'] = True
-
-    yield app
-
-    src.db.migration_utils.initialize_database = original_init_db
-    # Restore environment to avoid leaking bootstrapped settings
-    os.environ.clear()
-    os.environ.update(saved_env)
+    try:
+        from src.web_server import create_app
+        app, _ = create_app(test_container=mock_container)
+        app.config['TESTING'] = True
+        yield app
+    finally:
+        src.db.migration_utils.initialize_database = original_init_db
+        # Restore environment to avoid leaking bootstrapped settings
+        os.environ.clear()
+        os.environ.update(saved_env)
 
 
 @pytest.fixture()

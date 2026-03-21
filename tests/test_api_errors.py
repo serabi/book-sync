@@ -4,7 +4,6 @@ from unittest.mock import Mock
 
 import pytest
 
-
 # ── Suggestion resolve/ignore/hide: DB raises ─────────────────────
 
 def test_hide_suggestion_returns_404_when_not_found(client, mock_container):

@@ -380,9 +380,6 @@
             }
         }
 
-        // ── Handle preselected ebook (single match) ──
-        var preselectedEb = document.querySelector('.eb-option.selected');
-
         updateLayout();
         updateFooter();
     });

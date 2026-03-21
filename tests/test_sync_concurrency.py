@@ -2,13 +2,11 @@
 
 import threading
 import time
-from concurrent.futures import TimeoutError as FuturesTimeoutError
-from unittest.mock import Mock, MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, Mock, PropertyMock, patch
 
 import pytest
 
 from src.sync_manager import SyncManager
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -260,8 +258,6 @@ class TestSyncCycleConcurrency:
         """_pending_clears set modifications under lock are safe across threads."""
         mgr = _make_sync_manager()
 
-        errors = []
-
         def writer():
             for i in range(100):
                 with mgr._pending_clears_lock:
@@ -272,7 +268,7 @@ class TestSyncCycleConcurrency:
             for _ in range(100):
                 with mgr._pending_clears_lock:
                     # Just read — should never see a partial state
-                    snapshot = set(mgr._pending_clears)
+                    set(mgr._pending_clears)  # read under lock
                 time.sleep(0.001)
 
         threads = [threading.Thread(target=writer), threading.Thread(target=reader)]
