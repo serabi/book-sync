@@ -25,6 +25,7 @@ from src.blueprints.helpers import (
     serialize_suggestion,
 )
 from src.db.models import Book, StorytellerSubmission
+from src.services.kosync_service import ensure_kosync_document
 from src.utils.logging_utils import sanitize_log_data
 from src.utils.path_utils import sanitize_filename
 
@@ -170,6 +171,7 @@ def _create_book_mapping(container, abs_id, title, ebook_filename, duration,
         **merge_metadata,
     )
     database_service.save_book(book, is_new=True)
+    ensure_kosync_document(book, database_service)
 
     # Storyteller reservation (before HTTP calls to prevent race)
     if storyteller_submit:
@@ -368,6 +370,7 @@ def match():
                 storyteller_uuid=storyteller_uuid,
             )
             database_service.save_book(book, is_new=True)
+            ensure_kosync_document(book, database_service)
             if kosync_doc_id:
                 database_service.resolve_suggestion(kosync_doc_id)
             return redirect(url_for("dashboard.index"))
@@ -392,6 +395,7 @@ def match():
             book.kosync_doc_id = kosync_doc_id
             book.status = "pending"
             database_service.save_book(book)
+            ensure_kosync_document(book, database_service)
             if bl_client:
                 try:
                     bl_client.add_to_shelf(ebook_filename)
@@ -435,6 +439,7 @@ def match():
                 ),
             )
             database_service.save_book(new_book)
+            ensure_kosync_document(new_book, database_service)
             try:
                 database_service.migrate_book_data(link_book_id, abs_id)
                 database_service.delete_book(book.id)
@@ -693,6 +698,7 @@ def batch_match():
                             storyteller_uuid=storyteller_uuid,
                         )
                         database_service.save_book(book, is_new=True)
+                        ensure_kosync_document(book, database_service)
                         if kosync_doc_id:
                             database_service.resolve_suggestion(kosync_doc_id)
                         continue

@@ -127,7 +127,7 @@ def build_book_metadata(book, container, database_service, abs_service, booklore
 
 
 def build_service_info(book, states_by_book, container, abs_service, metadata,
-                       has_bookfusion_link, booklore_client=None):
+                       has_bookfusion_link):
     """Build per-service state data, integration flags, and enabled-service map.
 
     Returns (service_states, integrations, services_enabled).
@@ -154,14 +154,14 @@ def build_service_info(book, states_by_book, container, abs_service, metadata,
     storyteller = container.storyteller_client()
     hardcover = container.hardcover_client()
     bookfusion = container.bookfusion_client()
-    booklore = booklore_client or container.booklore_client()
+    bl_group = container.booklore_client_group()
     services_enabled = {
         'abs': abs_service is not None and abs_service.is_available(),
         'kosync': True,  # KoSync is always available (built-in server)
         'storyteller': storyteller is not None and storyteller.is_configured(),
         'hardcover': hardcover is not None and hardcover.is_configured(),
         'bookfusion': bookfusion is not None and bookfusion.is_configured(),
-        'booklore': booklore is not None and booklore.is_configured(),
+        'booklore': bl_group is not None and bl_group.is_configured(),
     }
 
     return service_states, integrations, services_enabled

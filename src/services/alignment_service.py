@@ -59,6 +59,7 @@ def normalize_for_cross_format_comparison(book, config, sync_clients, ebook_pars
         if not total_text_len:
             return None
         normalized = {}
+        used_fallback = False
         for client_name in ebook_clients:
             client = sync_clients.get(client_name)
             if not client:
@@ -69,6 +70,7 @@ def normalize_for_cross_format_comparison(book, config, sync_clients, ebook_pars
                 client_pct = max(0.0, min(1.0, float(client_pct)))
             except (TypeError, ValueError):
                 client_pct = 0.0
+            matched = False
             try:
                 text_snippet = client.get_text_from_current_state(book, client_state)
                 if text_snippet:
@@ -79,11 +81,21 @@ def normalize_for_cross_format_comparison(book, config, sync_clients, ebook_pars
                     if loc and loc.match_index is not None:
                         normalized[client_name] = loc.match_index
                         logger.debug(f"'{book_label}' Normalized '{client_name}' {client_pct:.2%} -> char {loc.match_index}")
-                        continue
+                        matched = True
             except Exception as e:
                 logger.debug(f"'{book_label}' Text-based normalization failed for '{client_name}': {e}")
-            normalized[client_name] = int(client_pct * total_text_len)
-            logger.debug(f"'{book_label}' Normalized '{client_name}' {client_pct:.2%} -> char {int(client_pct * total_text_len)} (pct fallback)")
+            if not matched:
+                used_fallback = True
+                normalized[client_name] = int(client_pct * total_text_len)
+                logger.debug(f"'{book_label}' Normalized '{client_name}' {client_pct:.2%} -> char {int(client_pct * total_text_len)} (pct fallback)")
+
+        if used_fallback:
+            # Mixing text-matched positions with percentage-based estimates is
+            # unreliable — a precise XPath match and a rough percentage-to-char
+            # conversion can produce nearly identical values that invert the true
+            # ordering.  Fall back to raw percentage comparison instead.
+            logger.debug(f"'{book_label}' Discarding character normalization — not all clients had text matches")
+            return None
         return normalized if len(normalized) > 1 else None
 
     # Audio + ebook path

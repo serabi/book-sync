@@ -514,8 +514,8 @@ class SyncManager:
         """Fetch active books, pre-fetch bulk states, and trigger suggestions."""
         active_books = []
         if target_book_id:
-            logger.info(f"Instant Sync triggered for book_id={target_book_id}")
             book = self.database_service.get_book_by_id(target_book_id)
+            logger.info(f"Instant Sync triggered for '{book.title}'" if book else f"Instant Sync triggered for book_id={target_book_id} (not found)")
             if book and book.status == 'active':
                 active_books = [book]
         else:
@@ -541,7 +541,7 @@ class SyncManager:
 
     def _sync_single_book(self, book, bulk_states_per_client):
         """Process a single book in the sync cycle."""
-        abs_id = book.abs_id
+        abs_id = book.abs_id or f"book-{book.id}"
         title_snip = sanitize_log_data(book.title or 'Unknown')
         logger.info(f"'{abs_id}' Syncing '{title_snip}'")
 

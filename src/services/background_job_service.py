@@ -266,6 +266,8 @@ class BackgroundJobService:
                     if not book.original_ebook_filename:
                         book.original_ebook_filename = book.ebook_filename
                     self.database_service.save_book(book)
+                    from src.services.kosync_service import ensure_kosync_document
+                    ensure_kosync_document(book, self.database_service)
                     logger.info(f"Locked KOSync ID: {computed_hash}")
         except Exception as e:
             logger.warning(f"Failed to eager-lock KOSync ID: {e}")

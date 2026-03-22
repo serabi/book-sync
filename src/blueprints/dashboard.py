@@ -98,6 +98,11 @@ def index():
     for client_name, client in sync_clients.items():
         integrations[client_name.lower()] = client.is_configured()
 
+    # Merge Booklore 2 into booklore flag so templates show the service
+    # when either instance is configured
+    if integrations.get('booklore2') and not integrations.get('booklore'):
+        integrations['booklore'] = True
+
     # BookFusion integration status
     bf_client = container.bookfusion_client()
     integrations["bookfusion"] = bf_client.is_configured()
@@ -358,6 +363,27 @@ def index():
 
     booklore_label = os.environ.get("BOOKLORE_LABEL", "Booklore") or "Booklore"
 
+    # Unlinked KoSync documents — for dashboard toast + pending identification section
+    kosync_unlinked_count = 0
+    unlinked_reading = []
+    kosync_active = os.environ.get('KOSYNC_ENABLED', '').lower() in ('true', '1', 'yes', 'on') or os.environ.get('KOSYNC_SERVER', '')
+    if kosync_active:
+        try:
+            unlinked_docs = database_service.get_unlinked_kosync_documents()
+            kosync_unlinked_count = len(unlinked_docs)
+            unlinked_reading = [
+                {
+                    'document_hash': doc.document_hash,
+                    'percentage': float(doc.percentage) if doc.percentage else 0,
+                    'device': doc.device,
+                    'last_updated': doc.last_updated.isoformat() if doc.last_updated else None,
+                }
+                for doc in unlinked_docs
+                if doc.percentage and float(doc.percentage) > 0
+            ]
+        except Exception:
+            pass
+
     return render_template(
         "index.html",
         mappings=mappings,
@@ -365,4 +391,6 @@ def index():
         progress=overall_progress,
         app_version=APP_VERSION,
         booklore_label=booklore_label,
+        kosync_unlinked_count=kosync_unlinked_count,
+        unlinked_reading=unlinked_reading,
     )
