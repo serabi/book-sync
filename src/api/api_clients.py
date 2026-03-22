@@ -2,6 +2,7 @@ import logging
 import os
 import time
 from concurrent.futures import ThreadPoolExecutor
+from urllib.parse import urlparse
 
 import requests
 
@@ -634,8 +635,10 @@ class KoSyncClient:
 
     @property
     def _is_external(self):
-        url = self.base_url
-        return url and '127.0.0.1' not in url and 'localhost' not in url
+        if not self.base_url:
+            return False
+        hostname = urlparse(self.base_url).hostname or ''
+        return hostname not in ('127.0.0.1', '::1', 'localhost')
 
     @property
     def user(self):

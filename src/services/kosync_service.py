@@ -11,6 +11,8 @@ import threading
 from pathlib import Path
 
 from src.db.models import Book, KosyncDocument, PendingSuggestion
+from src.utils.logging_utils import sanitize_log_data
+from src.utils.path_utils import is_safe_path_within
 
 logger = logging.getLogger(__name__)
 
@@ -187,9 +189,11 @@ class KosyncService:
             try:
                 computed_hash = self._container.ebook_parser().get_kosync_id(epub_path)
 
-                # Store/update in DB
+                # Store/update in DB — never mutate document_hash (primary key)
+                if cached_doc and cached_doc.document_hash != computed_hash:
+                    self._db.delete_kosync_document(cached_doc.document_hash)
+                    cached_doc = None  # force create below
                 if cached_doc:
-                    cached_doc.document_hash = computed_hash
                     cached_doc.mtime = epub_path.stat().st_mtime
                     cached_doc.source = 'filesystem'
                     self._db.save_kosync_document(cached_doc)
@@ -217,8 +221,7 @@ class KosyncService:
         try:
             books = self._db.get_all_booklore_books()
             if not books:
-                bl_group.get_all_books()
-                logger.info("Booklore cache in DB is empty. Consider running a library sync.")
+                logger.info("Booklore cache in DB is empty. Syncing library...")
                 from src.services.library_service import LibraryService
                 lib_service = LibraryService(self._db, bl_group)
                 lib_service.sync_library_books()
@@ -254,27 +257,24 @@ class KosyncService:
                             book.filename, book_content)
 
                         if computed_hash == doc_hash:
-                            safe_title = f"{book.server_id}_{book.filename}"
+                            safe_title = f"{book.server_id}_{Path(book.filename).name}"
                             cache_dir = self._container.data_dir() / "epub_cache"
                             cache_dir.mkdir(parents=True, exist_ok=True)
                             cache_path = cache_dir / safe_title
-                            with open(cache_path, 'wb') as f:
-                                f.write(book_content)
-                            logger.info(f"Persisted Booklore book to cache: {safe_title}")
-
-                            if cached_doc:
-                                cached_doc.document_hash = computed_hash
-                                cached_doc.filename = safe_title
-                                cached_doc.source = 'booklore'
-                                self._db.save_kosync_document(cached_doc)
+                            if not is_safe_path_within(cache_path, cache_dir):
+                                logger.warning(f"Blocked cache write — path escapes cache dir: '{safe_title}'")
                             else:
-                                self._upsert_kosync_metadata(computed_hash, safe_title, 'booklore',
-                                                             booklore_id=qualified_id)
+                                with open(cache_path, 'wb') as f:
+                                    f.write(book_content)
+                                logger.info(f"Persisted Booklore book to cache: {safe_title}")
+
+                            self._upsert_kosync_metadata(computed_hash, safe_title, 'booklore',
+                                                         booklore_id=qualified_id)
 
                             logger.info(f"Matched EPUB via Booklore download: {safe_title}")
                             return safe_title
                 except Exception as e:
-                    logger.warning(f"Failed to check Booklore book '{book.title}': {e}")
+                    logger.warning(f"Failed to check Booklore book '{sanitize_log_data(book.title)}': {e}")
 
             logger.info(f"Booklore search finished. Checked {len(books)} books. No match found")
 
@@ -360,7 +360,14 @@ class KosyncService:
                 logger.debug(f"Could not auto-match EPUB for KOSync document '{doc_hash[:8]}'")
                 return
 
-            title = Path(epub_filename).stem
+            # Derive title from filename — strip server_id prefix from Booklore-cached files
+            stem = Path(epub_filename).stem
+            # Booklore cache files are named "{server_id}_{original}" — strip the prefix
+            if '_' in stem and stem.split('_', 1)[0].isalnum():
+                candidate = stem.split('_', 1)[1]
+                if candidate:
+                    stem = candidate
+            title = stem
 
             # Step 1: Search ABS for matching audiobooks
             audiobook_matches = self._search_abs_audiobooks(title)

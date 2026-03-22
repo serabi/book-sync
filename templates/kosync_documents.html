@@ -66,8 +66,8 @@
 
     <script>
         window.PK_PAGE_DATA = {
-            documents: {{ documents_json|safe }},
-            orphanedBooks: {{ orphaned_json|safe }}
+            documents: {{ documents|tojson }},
+            orphanedBooks: {{ orphaned_books|tojson }}
         };
     </script>
     <script src="/static/js/confirm-modal.js"></script>

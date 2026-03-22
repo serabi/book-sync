@@ -24,7 +24,7 @@
 }
 
 .kosync-page-title {
-    font-family: 'Outfit', sans-serif;
+    font-family: Outfit, sans-serif;
     font-size: 24px;
     font-weight: 700;
     margin: 0 0 4px;
@@ -73,7 +73,7 @@
 }
 
 .kosync-section-title {
-    font-family: 'Outfit', sans-serif;
+    font-family: Outfit, sans-serif;
     font-size: 16px;
     font-weight: 600;
     color: var(--color-text);

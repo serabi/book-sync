@@ -1,6 +1,5 @@
 """Matching blueprint — suggestions, single match, batch match."""
 
-import json
 import logging
 import os
 import threading
@@ -291,7 +290,7 @@ def suggestions():
         suggestions_enabled=suggestions_enabled,
         bookfusion_enabled=bookfusion_enabled,
         bookfusion_catalog_count=bookfusion_catalog_count,
-        suggestions_json=json.dumps(suggestions_list),
+        suggestions_data=suggestions_list,
         initial_search=initial_search,
         selected_source_id=selected_source_id,
     )

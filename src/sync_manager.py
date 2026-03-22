@@ -515,7 +515,7 @@ class SyncManager:
         active_books = []
         if target_book_id:
             book = self.database_service.get_book_by_id(target_book_id)
-            logger.info(f"Instant Sync triggered for '{book.title}'" if book else f"Instant Sync triggered for book_id={target_book_id} (not found)")
+            logger.info(f"Instant Sync triggered for '{sanitize_log_data(book.title)}'" if book else f"Instant Sync triggered for book_id={target_book_id} (not found)")
             if book and book.status == 'active':
                 active_books = [book]
         else:

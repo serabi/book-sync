@@ -618,9 +618,16 @@ def api_link_kosync_document(doc_hash):
 @admin_or_local_required
 def api_unlink_kosync_document(doc_hash):
     """Remove the ABS book link from a KOSync document."""
+    # Clear book.kosync_doc_id to prevent orphaned hash
+    doc = _database_service.get_kosync_document(doc_hash)
+    if doc and doc.linked_book_id:
+        book = _database_service.get_book_by_id(doc.linked_book_id)
+        if book and book.kosync_doc_id == doc_hash:
+            book.kosync_doc_id = None
+            _database_service.save_book(book)
+
     success = _database_service.unlink_kosync_document(doc_hash)
     if success:
-        # Cleanup cached EPUB for this hash
         _cleanup_cache_for_hash(doc_hash)
         return jsonify({'success': True, 'message': 'Document unlinked'})
     return jsonify({'error': 'Document not found'}), 404
@@ -630,7 +637,15 @@ def api_unlink_kosync_document(doc_hash):
 @admin_or_local_required
 def api_delete_kosync_document(doc_hash):
     """Delete a KOSync document."""
-    _cleanup_cache_for_hash(doc_hash)  # Must run before delete (needs doc record for filename)
+    # Clear book.kosync_doc_id to prevent orphaned hash
+    doc = _database_service.get_kosync_document(doc_hash)
+    if doc and doc.linked_book_id:
+        book = _database_service.get_book_by_id(doc.linked_book_id)
+        if book and book.kosync_doc_id == doc_hash:
+            book.kosync_doc_id = None
+            _database_service.save_book(book)
+
+    _cleanup_cache_for_hash(doc_hash)
     success = _database_service.delete_kosync_document(doc_hash)
     if success:
         return jsonify({'success': True, 'message': 'Document deleted'})
@@ -678,8 +693,6 @@ def _cleanup_cache_for_hash(doc_hash):
 @admin_or_local_required
 def kosync_documents_page():
     """Render the KoSync Document Management page."""
-    import json as _json
-
     docs = _database_service.get_all_kosync_documents()
     documents = []
     for doc in docs:
@@ -712,8 +725,8 @@ def kosync_documents_page():
     } for b in orphaned]
 
     return render_template('kosync_documents.html',
-                           documents_json=_json.dumps(documents),
-                           orphaned_json=_json.dumps(orphaned_books))
+                           documents=documents,
+                           orphaned_books=orphaned_books)
 
 
 @kosync_admin_bp.route('/api/kosync-documents/orphaned', methods=['GET'])
