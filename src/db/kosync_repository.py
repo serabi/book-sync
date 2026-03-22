@@ -75,7 +75,7 @@ class KoSyncRepository(BaseRepository):
         with self.get_session() as session:
             subq = session.query(KosyncDocument.document_hash)
             results = (session.query(Book)
-                       .filter(Book.kosync_doc_id.isnot(None))
+                       .filter(Book.kosync_doc_id != None)
                        .filter(~Book.kosync_doc_id.in_(subq))
                        .all())
             for r in results:

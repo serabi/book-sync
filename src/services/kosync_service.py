@@ -38,6 +38,9 @@ def ensure_kosync_document(book, database_service):
         if not existing.linked_book_id:
             database_service.link_kosync_document(book.kosync_doc_id, book.id, book.abs_id)
             logger.info(f"KOSync: Linked existing document {book.kosync_doc_id[:8]}... to '{book.title}'")
+        if not existing.filename and book.ebook_filename:
+            existing.filename = book.ebook_filename
+            database_service.save_kosync_document(existing)
     else:
         doc = KosyncDocument(
             document_hash=book.kosync_doc_id,
@@ -108,7 +111,10 @@ class KosyncService:
                 self._db.link_kosync_document(doc_id, book.id, book.abs_id)
                 logger.info(f"KOSync: Linked existing document {doc_id[:8]}... to '{book.title}'")
         else:
-            doc = KosyncDocument(document_hash=doc_id, linked_book_id=book.id, linked_abs_id=book.abs_id)
+            doc = KosyncDocument(
+                document_hash=doc_id, linked_book_id=book.id,
+                linked_abs_id=book.abs_id, filename=book.ebook_filename,
+            )
             self._db.save_kosync_document(doc)
             logger.info(f"KOSync: Created and linked new document {doc_id[:8]}... to '{book.title}'")
 
@@ -159,8 +165,8 @@ class KosyncService:
                     self._container.ebook_parser().resolve_book_path(book.original_ebook_filename)
                     logger.info(f"Matched EPUB via Linked Book Original Filename: {book.original_ebook_filename}")
                     return book.original_ebook_filename
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"Failed to resolve original filename for {doc.linked_abs_id}: {e}")
 
         return None
 
@@ -239,14 +245,17 @@ class KosyncService:
                         logger.debug(f"Failed to parse raw_metadata JSON: {e}")
                         continue
 
+                if not book_id:
+                    continue
+
                 qualified_id = f"{book.server_id}:{book_id}"
 
                 # Check if we have a KosyncDocument for this Booklore ID
                 cached_doc = self._db.get_kosync_doc_by_booklore_id(qualified_id)
                 if cached_doc:
                     if cached_doc.document_hash == doc_hash:
-                        logger.info(f"Matched EPUB via Booklore ID in DB: {book.filename}")
-                        return book.filename
+                        logger.info(f"Matched EPUB via Booklore ID in DB: {cached_doc.filename}")
+                        return cached_doc.filename
 
                 try:
                     book_content = bl_group.download_book(qualified_id)

@@ -535,31 +535,32 @@ def admin_or_local_required(f):
 
 # ---------------- KOSync Document Management API ----------------
 
+def _serialize_document(doc):
+    """Convert a KosyncDocument to a JSON-safe dict."""
+    linked_book = None
+    if doc.linked_book_id:
+        linked_book = _database_service.get_book_by_id(doc.linked_book_id)
+    return {
+        'document_hash': doc.document_hash,
+        'progress': doc.progress,
+        'percentage': float(doc.percentage) if doc.percentage else 0,
+        'device': doc.device,
+        'device_id': doc.device_id,
+        'timestamp': doc.timestamp.isoformat() if doc.timestamp else None,
+        'first_seen': doc.first_seen.isoformat() if doc.first_seen else None,
+        'last_updated': doc.last_updated.isoformat() if doc.last_updated else None,
+        'linked_book_id': doc.linked_book_id,
+        'linked_abs_id': doc.linked_abs_id,
+        'linked_book_title': linked_book.title if linked_book else None,
+    }
+
+
 @kosync_admin_bp.route('/api/kosync-documents', methods=['GET'])
 @admin_or_local_required
 def api_get_kosync_documents():
     """Get all KOSync documents with their link status."""
     docs = _database_service.get_all_kosync_documents()
-    result = []
-    for doc in docs:
-        linked_book = None
-        if doc.linked_book_id:
-            linked_book = _database_service.get_book_by_id(doc.linked_book_id)
-
-        result.append({
-            'document_hash': doc.document_hash,
-            'progress': doc.progress,
-            'percentage': float(doc.percentage) if doc.percentage else 0,
-            'device': doc.device,
-            'device_id': doc.device_id,
-            'timestamp': doc.timestamp.isoformat() if doc.timestamp else None,
-            'first_seen': doc.first_seen.isoformat() if doc.first_seen else None,
-            'last_updated': doc.last_updated.isoformat() if doc.last_updated else None,
-            'linked_book_id': doc.linked_book_id,
-            'linked_abs_id': doc.linked_abs_id,
-            'linked_book_title': linked_book.title if linked_book else None,
-        })
-
+    result = [_serialize_document(doc) for doc in docs]
     return jsonify({
         'documents': result,
         'total': len(result),
@@ -691,25 +692,7 @@ def _cleanup_cache_for_hash(doc_hash):
 def kosync_documents_page():
     """Render the KoSync Document Management page."""
     docs = _database_service.get_all_kosync_documents()
-    documents = []
-    for doc in docs:
-        linked_book = None
-        if doc.linked_book_id:
-            linked_book = _database_service.get_book_by_id(doc.linked_book_id)
-
-        documents.append({
-            'document_hash': doc.document_hash,
-            'progress': doc.progress,
-            'percentage': float(doc.percentage) if doc.percentage else 0,
-            'device': doc.device,
-            'device_id': doc.device_id,
-            'timestamp': doc.timestamp.isoformat() if doc.timestamp else None,
-            'first_seen': doc.first_seen.isoformat() if doc.first_seen else None,
-            'last_updated': doc.last_updated.isoformat() if doc.last_updated else None,
-            'linked_abs_id': doc.linked_abs_id,
-            'linked_book_id': doc.linked_book_id,
-            'linked_book_title': linked_book.title if linked_book else None,
-        })
+    documents = [_serialize_document(doc) for doc in docs]
 
     orphaned = _kosync_service.get_orphaned_kosync_books()
     orphaned_books = [{
@@ -772,12 +755,12 @@ def api_resolve_orphaned_hash(book_id):
         target_book = _database_service.get_book_by_id(target_book_id)
         if not target_book:
             return jsonify({'error': 'Target book not found'}), 404
-        # Clear hash from source, register on target
-        source_book.kosync_doc_id = None
-        _database_service.save_book(source_book)
-        target_book.kosync_doc_id = doc_hash
-        _database_service.save_book(target_book)
+        # Register first, then update books only on success
         _kosync_service.register_hash_for_book(doc_hash, target_book)
+        source_book.kosync_doc_id = None
+        target_book.kosync_doc_id = doc_hash
+        _database_service.save_book(source_book)
+        _database_service.save_book(target_book)
         return jsonify({'success': True, 'message': f'Linked hash to {target_book.title}'})
 
     _kosync_service.register_hash_for_book(doc_hash, source_book)

@@ -374,7 +374,8 @@
                 <!-- ─── KOSync ─── -->
                 {% set kosync_enabled = get_bool('KOSYNC_ENABLED') %}
                 {% set kosync_builtin_url = 'http://127.0.0.1:' ~ get_val('KOSYNC_PORT', '4477') %}
-                {% set kosync_is_external = get_val('KOSYNC_SERVER') and get_val('KOSYNC_SERVER') != kosync_builtin_url and get_val('KOSYNC_SERVER') != '' %}
+                {% set kosync_server_val = get_val('KOSYNC_SERVER') %}
+                {% set kosync_is_external = kosync_server_val and kosync_server_val != '' and '127.0.0.1' not in kosync_server_val and 'localhost' not in kosync_server_val and '::1' not in kosync_server_val %}
                 <div class="tab-panel" id="panel-kosync" role="tabpanel" aria-labelledby="tab-kosync" aria-hidden="true" hidden>
                     <div class="panel-header">
                         <h2>KOSync</h2>
