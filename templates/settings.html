@@ -386,8 +386,16 @@
                     <div class="sub-section">
                         <div class="sub-section-header">
                             <h3><span class="accent-dot accent-dot-kosync"></span> Sync Source</h3>
+                            <div class="toggle-switch-wrapper">
+                                <span class="toggle-label">Enable</span>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" id="toggle_kosync" name="KOSYNC_ENABLED"
+                                        onchange="toggleSection('kosync_config_body', this.checked)" {% if kosync_enabled %}checked{% endif %}>
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
                         </div>
-                        <div class="sub-section-body">
+                        <div id="kosync_config_body" class="sub-section-body {% if not kosync_enabled %}collapsed{% endif %}">
                             <p class="help-text full-width settings-help-block settings-help-block-topless">Where does PageKeeper read KOReader progress data from?</p>
                             <div class="full-width radio-card-list">
                                 <label class="radio-card">
@@ -413,16 +421,8 @@
                     <div class="sub-section{% if kosync_is_external %} hidden{% endif %}" id="kosync_builtin_section">
                         <div class="sub-section-header">
                             <h3><span class="accent-dot accent-dot-kosync"></span> Built-in Server</h3>
-                            <div class="toggle-switch-wrapper">
-                                <span class="toggle-label">Enable</span>
-                                <label class="toggle-switch">
-                                    <input type="checkbox" id="toggle_kosync" name="KOSYNC_ENABLED"
-                                        onchange="toggleSection('kosync_builtin_body', this.checked)" {% if kosync_enabled %}checked{% endif %}>
-                                    <span class="slider"></span>
-                                </label>
-                            </div>
                         </div>
-                        <div id="kosync_builtin_body" class="sub-section-body {% if not kosync_enabled %}collapsed{% endif %}">
+                        <div id="kosync_builtin_body" class="sub-section-body">
 
                             <div class="info-box info-box-kosync full-width">
                                 <strong>Security Note</strong>

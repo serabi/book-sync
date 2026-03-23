@@ -234,7 +234,7 @@ class KosyncService:
             logger.info(f"Scanning {len(books)} books from Booklore DB cache...")
 
             for book in books:
-                raw_id = book.raw_metadata_dict.get('id') if hasattr(book, 'raw_metadata_dict') else None
+                raw_id = book.raw_metadata_dict.get('id') if getattr(book, 'raw_metadata_dict', None) else None
                 book_id = str(raw_id) if raw_id is not None else None
                 if not book_id:
                     try:
@@ -369,10 +369,10 @@ class KosyncService:
 
             # Derive title from filename — strip server_id prefix from Booklore-cached files
             stem = Path(epub_filename).stem
-            # Booklore cache files are named "{server_id}_{original}" — strip the prefix
-            if '_' in stem and stem.split('_', 1)[0].isalnum():
-                candidate = stem.split('_', 1)[1]
-                if candidate:
+            # Booklore cache files are named "{server_id}_{original}" — strip numeric prefix
+            if '_' in stem:
+                prefix, candidate = stem.split('_', 1)
+                if prefix.isdigit() and candidate:
                     stem = candidate
             title = stem
 
