@@ -611,6 +611,7 @@ def search_library_books():
     books = database_service.search_books(q, limit=10)
     return jsonify([
         {
+            'id': b.id,
             'abs_id': b.abs_id,
             'title': b.title,
             'author': getattr(b, 'author', None) or '',

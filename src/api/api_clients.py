@@ -2,9 +2,11 @@ import logging
 import os
 import time
 from concurrent.futures import ThreadPoolExecutor
+from urllib.parse import urlparse
 
 import requests
 
+from src.utils.constants import BOT_DEVICE_NAME, DEFAULT_COLLECTION_NAME
 from src.utils.kosync_headers import hash_kosync_key, kosync_auth_headers
 from src.utils.logging_utils import sanitize_log_data
 
@@ -503,8 +505,8 @@ class ABSClient:
         play_url = f"{self.base_url}/api/items/{abs_id}/play"
         play_payload = {
             "deviceInfo": {
-                "id": "abs-kosync-bot",
-                "deviceId": "abs-kosync-bot",
+                "id": BOT_DEVICE_NAME,
+                "deviceId": BOT_DEVICE_NAME,
                 "clientName": "PageKeeper",
                 "clientVersion": "1.0",
                 "manufacturer": "PageKeeper",
@@ -539,7 +541,7 @@ class ABSClient:
     def add_to_collection(self, item_id, collection_name=None):
         """Add an audiobook to a collection, creating the collection if it doesn't exist."""
         if not collection_name:
-             collection_name = os.environ.get("ABS_COLLECTION_NAME", "abs-kosync")
+             collection_name = os.environ.get("ABS_COLLECTION_NAME", DEFAULT_COLLECTION_NAME)
 
         self._update_session_headers()
         try:
@@ -580,8 +582,10 @@ class ABSClient:
             logger.error(f"Error adding item to ABS collection: {e}")
             return False
 
-    def remove_from_collection(self, item_id, collection_name="abs-kosync"):
+    def remove_from_collection(self, item_id, collection_name=None):
         """Remove an audiobook from a collection."""
+        if not collection_name:
+            collection_name = os.environ.get("ABS_COLLECTION_NAME", DEFAULT_COLLECTION_NAME)
         self._update_session_headers()
         try:
             # Get collection by name
@@ -630,11 +634,26 @@ class KoSyncClient:
         return url
 
     @property
+    def _is_external(self):
+        if not self.base_url:
+            return False
+        hostname = urlparse(self.base_url).hostname or ''
+        return hostname not in ('127.0.0.1', '::1', 'localhost')
+
+    @property
     def user(self):
+        if self._is_external:
+            ext_user = os.environ.get("KOSYNC_SERVER_USER")
+            if ext_user:
+                return ext_user
         return os.environ.get("KOSYNC_USER")
 
     @property
     def auth_token(self):
+        if self._is_external:
+            ext_key = os.environ.get("KOSYNC_SERVER_KEY", "")
+            if ext_key:
+                return hash_kosync_key(ext_key)
         key = os.environ.get("KOSYNC_KEY", "")
         if not key:
             return ""
@@ -723,8 +742,8 @@ class KoSyncClient:
             "document": doc_id,
             "percentage": percentage,
             "progress": progress_val,
-            "device": "abs-sync-bot",
-            "device_id": "abs-sync-bot",
+            "device": BOT_DEVICE_NAME,
+            "device_id": BOT_DEVICE_NAME,
             "timestamp": int(time.time()),
             "force": True  # Force update to override server-side "furthest wins" logic
         }

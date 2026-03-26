@@ -28,7 +28,8 @@ URL_SETTING_KEYS = {
 
 SECRET_SETTING_KEYS = {
     'ABS_KEY', 'STORYTELLER_PASSWORD', 'BOOKLORE_PASSWORD', 'BOOKLORE_2_PASSWORD',
-    'CWA_PASSWORD', 'KOSYNC_KEY', 'TELEGRAM_BOT_TOKEN', 'HARDCOVER_TOKEN',
+    'CWA_PASSWORD', 'KOSYNC_KEY', 'KOSYNC_SERVER_KEY',
+    'TELEGRAM_BOT_TOKEN', 'HARDCOVER_TOKEN',
     'DEEPGRAM_API_KEY', 'BOOKFUSION_API_KEY', 'BOOKFUSION_UPLOAD_API_KEY',
 }
 
@@ -200,7 +201,7 @@ def settings():
 @settings_bp.route('/api/settings/secret/<key>', methods=['GET'])
 def get_secret(key):
     """Return a stored secret value (for reveal-on-demand UI)."""
-    allowed = {'KOSYNC_KEY'}
+    allowed = {'KOSYNC_KEY', 'KOSYNC_SERVER_KEY'}
     if key not in allowed:
         return jsonify({'error': 'Not allowed'}), 403
 
@@ -299,9 +300,16 @@ def _test_abs() -> tuple[bool, str]:
 
 
 def _test_kosync() -> tuple[bool, str]:
+    from urllib.parse import urlparse
     url = _request_value('server', 'KOSYNC_SERVER', normalize_url=True).rstrip('/')
-    user = _request_value('user', 'KOSYNC_USER')
-    key = _request_value('key', 'KOSYNC_KEY', secret=True)
+    hostname = urlparse(url).hostname or '' if url else ''
+    is_external = hostname not in ('127.0.0.1', '::1', 'localhost', '')
+    if is_external:
+        user = _request_value('user', 'KOSYNC_SERVER_USER') or _request_value('user', 'KOSYNC_USER')
+        key = _request_value('key', 'KOSYNC_SERVER_KEY', secret=True) or _request_value('key', 'KOSYNC_KEY', secret=True)
+    else:
+        user = _request_value('user', 'KOSYNC_USER')
+        key = _request_value('key', 'KOSYNC_KEY', secret=True)
     if not url or not user:
         return False, 'Server URL or credentials not configured'
 

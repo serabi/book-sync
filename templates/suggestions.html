@@ -99,7 +99,7 @@
 
     <script>
         window.PK_PAGE_DATA = {
-            suggestionsData: {{ suggestions_json|safe }},
+            suggestionsData: {{ suggestions_data|tojson }},
             selectedSourceId: {{ selected_source_id|tojson }}
         };
     </script>

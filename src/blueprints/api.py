@@ -358,5 +358,7 @@ def api_booklore_link(book_ref):
         book.kosync_doc_id = kosync_doc_id
     book.original_ebook_filename = book.original_ebook_filename or filename
     database_service.save_book(book)
+    from src.services.kosync_service import ensure_kosync_document
+    ensure_kosync_document(book, database_service)
     logger.info(f"Linked Booklore file '{filename}' to '{book.title}'")
     return jsonify({"success": True, "message": "Linked successfully"})

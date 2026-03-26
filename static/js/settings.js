@@ -96,8 +96,8 @@ function getServiceTestPayload(service) {
     if (service === 'kosync') {
         return {
             server: getInputValue('kosync_external_url'),
-            user: getInputValue('KOSYNC_USER'),
-            key: getInputValue('KOSYNC_KEY')
+            user: getInputValue('KOSYNC_SERVER_USER') || getInputValue('KOSYNC_USER'),
+            key: getInputValue('kosync_server_key_input') || getInputValue('KOSYNC_KEY')
         };
     }
     return {};
@@ -230,15 +230,19 @@ function togglePollSeconds(rowId, mode) {
 function toggleKosyncSourceMode() {
     var isBuiltin = document.getElementById('kosync_mode_builtin').checked;
     var hiddenInput = document.getElementById('kosync_server_input');
-    var externalGroup = document.getElementById('kosync_external_group');
+    var builtinSection = document.getElementById('kosync_builtin_section');
+    var externalSection = document.getElementById('kosync_external_section');
     var externalUrl = document.getElementById('kosync_external_url');
+    if (!hiddenInput || !builtinSection || !externalSection || !externalUrl) return;
     var builtinUrl = 'http://127.0.0.1:' + SETTINGS_CONFIG.kosyncPort;
 
     if (isBuiltin) {
         hiddenInput.value = builtinUrl;
-        externalGroup.classList.add('hidden');
+        builtinSection.classList.remove('hidden');
+        externalSection.classList.add('hidden');
     } else {
-        externalGroup.classList.remove('hidden');
+        builtinSection.classList.add('hidden');
+        externalSection.classList.remove('hidden');
         if (externalUrl.value && externalUrl.value !== builtinUrl) {
             hiddenInput.value = externalUrl.value;
         } else {

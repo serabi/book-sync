@@ -7,6 +7,7 @@ from pathlib import Path
 import requests
 
 from src.sync_clients.sync_client_interface import LocatorResult
+from src.utils.constants import DEFAULT_SHELF_NAME
 from src.utils.logging_utils import sanitize_log_data
 
 logger = logging.getLogger(__name__)
@@ -732,7 +733,7 @@ class BookloreClient:
     def add_to_shelf(self, ebook_filename, shelf_name=None):
         """Add a book to a shelf, creating the shelf if it doesn't exist."""
         if not shelf_name:
-             shelf_name = os.environ.get(f"{self.env_prefix}_SHELF_NAME") or "abs-kosync"
+             shelf_name = os.environ.get(f"{self.env_prefix}_SHELF_NAME") or DEFAULT_SHELF_NAME
 
         try:
             # Find the book
@@ -783,7 +784,7 @@ class BookloreClient:
     def remove_from_shelf(self, ebook_filename, shelf_name=None):
         """Remove a book from a shelf."""
         if not shelf_name:
-             shelf_name = os.environ.get(f"{self.env_prefix}_SHELF_NAME") or "abs-kosync"
+             shelf_name = os.environ.get(f"{self.env_prefix}_SHELF_NAME") or DEFAULT_SHELF_NAME
 
         try:
             # Find the book

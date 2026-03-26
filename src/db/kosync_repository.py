@@ -3,7 +3,7 @@
 from datetime import UTC, datetime
 
 from .base_repository import BaseRepository
-from .models import KosyncDocument
+from .models import Book, KosyncDocument
 
 
 class KoSyncRepository(BaseRepository):
@@ -27,13 +27,6 @@ class KoSyncRepository(BaseRepository):
         return self._get_all(
             KosyncDocument,
             KosyncDocument.linked_book_id == None,
-            order_by=KosyncDocument.last_updated.desc(),
-        )
-
-    def get_linked_kosync_documents(self):
-        return self._get_all(
-            KosyncDocument,
-            KosyncDocument.linked_book_id != None,
             order_by=KosyncDocument.last_updated.desc(),
         )
 
@@ -64,9 +57,6 @@ class KoSyncRepository(BaseRepository):
     def delete_kosync_document(self, document_hash):
         return self._delete_one(KosyncDocument, KosyncDocument.document_hash == document_hash)
 
-    def get_kosync_document_by_linked_book_id(self, book_id):
-        return self._get_one(KosyncDocument, KosyncDocument.linked_book_id == book_id)
-
     def get_kosync_documents_for_book_by_book_id(self, book_id):
         return self._get_all(KosyncDocument, KosyncDocument.linked_book_id == book_id)
 
@@ -79,4 +69,16 @@ class KoSyncRepository(BaseRepository):
         if booklore_id is None:
             return None
         return self._get_one(KosyncDocument, KosyncDocument.booklore_id == str(booklore_id))
+
+    def get_orphaned_kosync_books(self):
+        """Get books with kosync_doc_id set but no matching KosyncDocument."""
+        with self.get_session() as session:
+            subq = session.query(KosyncDocument.document_hash)
+            results = (session.query(Book)
+                       .filter(Book.kosync_doc_id != None)
+                       .filter(~Book.kosync_doc_id.in_(subq))
+                       .all())
+            for r in results:
+                session.expunge(r)
+            return results
 
