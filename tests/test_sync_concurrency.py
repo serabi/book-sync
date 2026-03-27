@@ -12,6 +12,7 @@ from src.sync_manager import SyncManager
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_sync_manager(**overrides):
     """Build a SyncManager with fully mocked dependencies (skips startup_checks)."""
     db = Mock()
@@ -36,11 +37,11 @@ def _make_sync_manager(**overrides):
         background_job_service=Mock(),
         data_dir=None,
         books_dir=None,
-        epub_cache_dir='/tmp/test_epub_cache',
+        epub_cache_dir="/tmp/test_epub_cache",
     )
     defaults.update(overrides)
 
-    with patch.object(SyncManager, 'startup_checks'):
+    with patch.object(SyncManager, "startup_checks"):
         mgr = SyncManager(**defaults)
     return mgr
 
@@ -67,6 +68,7 @@ def _make_mock_client(name, state=None, delay=0, error=None):
 # _fetch_states_parallel: one client times out / raises
 # ---------------------------------------------------------------------------
 
+
 class TestFetchStatesParallel:
     """_fetch_states_parallel resilience when individual clients fail."""
 
@@ -74,11 +76,11 @@ class TestFetchStatesParallel:
         """If one client throws, the other clients' states are still collected."""
         good_state = Mock()
         good_state.delta = 0.1
-        good_state.current = {'pct': 0.5}
+        good_state.current = {"pct": 0.5}
 
         clients = {
-            'Good': _make_mock_client('Good', state=good_state),
-            'Bad': _make_mock_client('Bad', error=RuntimeError('API down')),
+            "Good": _make_mock_client("Good", state=good_state),
+            "Bad": _make_mock_client("Bad", error=RuntimeError("API down")),
         }
 
         mgr = _make_sync_manager(sync_clients=clients)
@@ -86,58 +88,64 @@ class TestFetchStatesParallel:
         mgr.sync_clients = clients
 
         book = Mock()
-        book.abs_id = 'test-book'
+        book.abs_id = "test-book"
         result = mgr._fetch_states_parallel(
-            book, prev_states_by_client={}, title_snip='Test',
+            book,
+            prev_states_by_client={},
+            title_snip="Test",
             clients_to_use=clients,
         )
 
-        assert 'Good' in result
-        assert result['Good'] is good_state
-        assert 'Bad' not in result
+        assert "Good" in result
+        assert result["Good"] is good_state
+        assert "Bad" not in result
 
     def test_one_client_times_out_others_still_return(self):
         """A slow client that exceeds the timeout does not block results from fast clients."""
         fast_state = Mock()
         fast_state.delta = 0.05
-        fast_state.current = {'pct': 0.3}
+        fast_state.current = {"pct": 0.3}
 
         clients = {
-            'Fast': _make_mock_client('Fast', state=fast_state),
-            'Slow': _make_mock_client('Slow', state=Mock(), delay=2),
+            "Fast": _make_mock_client("Fast", state=fast_state),
+            "Slow": _make_mock_client("Slow", state=Mock(), delay=2),
         }
 
         mgr = _make_sync_manager(sync_clients=clients)
         mgr.sync_clients = clients
 
         book = Mock()
-        book.abs_id = 'timeout-book'
+        book.abs_id = "timeout-book"
 
         result = mgr._fetch_states_parallel(
-            book, prev_states_by_client={}, title_snip='Timeout',
+            book,
+            prev_states_by_client={},
+            title_snip="Timeout",
             clients_to_use=clients,
         )
 
         # Fast client should always be present
-        assert 'Fast' in result
-        assert result['Fast'] is fast_state
+        assert "Fast" in result
+        assert result["Fast"] is fast_state
         # Slow client may or may not be present depending on executor timeout;
         # the important thing is that the call completes and Fast is not lost
 
     def test_all_clients_raise_returns_empty(self):
         """When every client fails, result is an empty dict (no crash)."""
         clients = {
-            'A': _make_mock_client('A', error=ConnectionError('refused')),
-            'B': _make_mock_client('B', error=TimeoutError('too slow')),
+            "A": _make_mock_client("A", error=ConnectionError("refused")),
+            "B": _make_mock_client("B", error=TimeoutError("too slow")),
         }
 
         mgr = _make_sync_manager(sync_clients=clients)
         mgr.sync_clients = clients
 
         book = Mock()
-        book.abs_id = 'all-fail'
+        book.abs_id = "all-fail"
         result = mgr._fetch_states_parallel(
-            book, prev_states_by_client={}, title_snip='Fail',
+            book,
+            prev_states_by_client={},
+            title_snip="Fail",
             clients_to_use=clients,
         )
 
@@ -146,25 +154,28 @@ class TestFetchStatesParallel:
     def test_client_returns_none_is_excluded(self):
         """A client that returns None is not included in results."""
         clients = {
-            'NoneClient': _make_mock_client('NoneClient', state=None),
+            "NoneClient": _make_mock_client("NoneClient", state=None),
         }
 
         mgr = _make_sync_manager(sync_clients=clients)
         mgr.sync_clients = clients
 
         book = Mock()
-        book.abs_id = 'none-book'
+        book.abs_id = "none-book"
         result = mgr._fetch_states_parallel(
-            book, prev_states_by_client={}, title_snip='None',
+            book,
+            prev_states_by_client={},
+            title_snip="None",
             clients_to_use=clients,
         )
 
-        assert 'NoneClient' not in result
+        assert "NoneClient" not in result
 
 
 # ---------------------------------------------------------------------------
 # sync_cycle concurrent access: no state corruption
 # ---------------------------------------------------------------------------
+
 
 class TestSyncCycleConcurrency:
     """sync_cycle called from two threads must not corrupt shared state."""
@@ -201,51 +212,53 @@ class TestSyncCycleConcurrency:
         mgr.database_service.get_books_by_status.return_value = []
 
         book = Mock()
-        book.abs_id = 'targeted-book'
+        book.abs_id = "targeted-book"
         book.id = 42
-        book.status = 'active'
+        book.status = "active"
         mgr.database_service.get_book_by_id.return_value = book
 
         call_order = []
+        daemon_started = threading.Event()
 
         original_internal = mgr._sync_cycle_internal
 
         def tracking_internal(target_book_id=None):
-            label = 'targeted' if target_book_id else 'daemon'
-            call_order.append(f'{label}_start')
+            label = "targeted" if target_book_id else "daemon"
+            call_order.append(f"{label}_start")
+            if not target_book_id:
+                daemon_started.set()
             time.sleep(0.1)
             original_internal(target_book_id)
-            call_order.append(f'{label}_end')
+            call_order.append(f"{label}_end")
 
         mgr._sync_cycle_internal = tracking_internal
 
-        # Start daemon first, then targeted shortly after
         t_daemon = threading.Thread(target=mgr.sync_cycle)
-        t_targeted = threading.Thread(target=lambda: mgr.sync_cycle(target_book_id=42))
-
         t_daemon.start()
-        time.sleep(0.02)  # let daemon grab the lock first
+        daemon_started.wait(timeout=5)
+
+        t_targeted = threading.Thread(target=lambda: mgr.sync_cycle(target_book_id=42))
         t_targeted.start()
 
         t_daemon.join(timeout=5)
         t_targeted.join(timeout=12)
 
         # Both should have run (targeted waits up to 10s)
-        assert 'daemon_start' in call_order
-        assert 'daemon_end' in call_order
-        assert 'targeted_start' in call_order
-        assert 'targeted_end' in call_order
+        assert "daemon_start" in call_order
+        assert "daemon_end" in call_order
+        assert "targeted_start" in call_order
+        assert "targeted_end" in call_order
 
         # daemon must finish before targeted starts
-        daemon_end_idx = call_order.index('daemon_end')
-        targeted_start_idx = call_order.index('targeted_start')
+        daemon_end_idx = call_order.index("daemon_end")
+        targeted_start_idx = call_order.index("targeted_start")
         assert daemon_end_idx < targeted_start_idx
 
     def test_sync_lock_not_held_after_exception(self):
         """If _sync_cycle_internal raises, the lock is still released."""
         mgr = _make_sync_manager()
 
-        mgr._sync_cycle_internal = Mock(side_effect=RuntimeError('unexpected'))
+        mgr._sync_cycle_internal = Mock(side_effect=RuntimeError("unexpected"))
 
         mgr.sync_cycle()  # should not raise — exception is caught
 

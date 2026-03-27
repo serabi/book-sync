@@ -7,7 +7,6 @@ from .models import Book, KosyncDocument
 
 
 class KoSyncRepository(BaseRepository):
-
     def get_kosync_document(self, document_hash):
         return self._get_one(KosyncDocument, KosyncDocument.document_hash == document_hash)
 
@@ -32,9 +31,7 @@ class KoSyncRepository(BaseRepository):
 
     def link_kosync_document(self, document_hash, book_id, abs_id=None):
         with self.get_session() as session:
-            doc = session.query(KosyncDocument).filter(
-                KosyncDocument.document_hash == document_hash
-            ).first()
+            doc = session.query(KosyncDocument).filter(KosyncDocument.document_hash == document_hash).first()
             if doc:
                 doc.linked_book_id = book_id
                 doc.linked_abs_id = abs_id
@@ -44,9 +41,7 @@ class KoSyncRepository(BaseRepository):
 
     def unlink_kosync_document(self, document_hash):
         with self.get_session() as session:
-            doc = session.query(KosyncDocument).filter(
-                KosyncDocument.document_hash == document_hash
-            ).first()
+            doc = session.query(KosyncDocument).filter(KosyncDocument.document_hash == document_hash).first()
             if doc:
                 doc.linked_abs_id = None
                 doc.linked_book_id = None
@@ -74,11 +69,7 @@ class KoSyncRepository(BaseRepository):
         """Get books with kosync_doc_id set but no matching KosyncDocument."""
         with self.get_session() as session:
             subq = session.query(KosyncDocument.document_hash)
-            results = (session.query(Book)
-                       .filter(Book.kosync_doc_id != None)
-                       .filter(~Book.kosync_doc_id.in_(subq))
-                       .all())
+            results = session.query(Book).filter(Book.kosync_doc_id != None).filter(~Book.kosync_doc_id.in_(subq)).all()
             for r in results:
                 session.expunge(r)
             return results
-

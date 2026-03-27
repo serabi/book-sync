@@ -38,6 +38,7 @@ class TestHardcoverSyncClient(unittest.TestCase):
         self.mock_ebook_parser = Mock()
 
         self.mock_hardcover_client.is_configured.return_value = True
+        self.mock_hardcover_client.update_progress.return_value = {"success": True, "read_id": 101}
 
         self.hardcover_service = HardcoverService(
             hardcover_client=self.mock_hardcover_client,
@@ -144,6 +145,7 @@ class TestHardcoverSyncClient(unittest.TestCase):
             current_percentage=0.25,
             started_at=None,
             finished_at=None,
+            cached_read_id=None,
         )
 
         self.assertTrue(result.success)
@@ -181,6 +183,7 @@ class TestHardcoverSyncClient(unittest.TestCase):
             current_percentage=0.995,
             started_at=None,
             finished_at=None,
+            cached_read_id=None,
         )
 
     @patch('src.sync_clients.hardcover_sync_client.record_write')
@@ -354,7 +357,7 @@ class TestHardcoverSyncClient(unittest.TestCase):
         result = self.hardcover_service.push_local_rating(self.test_book, 4.5)
 
         self.assertTrue(result['hardcover_synced'])
-        self.mock_hardcover_client.update_user_book.assert_called_once_with(789, {'rating': 4.5})
+        self.mock_hardcover_client.update_user_book.assert_called_once_with(789, {'rating': 4.5})  # 4.5 is already valid
         mock_record_write.assert_called()
 
     @patch('src.services.hardcover_service.record_write')
@@ -412,6 +415,7 @@ class TestHardcoverSyncClient(unittest.TestCase):
             current_percentage=1.0,
             started_at='2024-06-01',
             finished_at='2024-07-15',
+            cached_read_id=None,
         )
 
     @patch('src.services.hardcover_service.record_write')

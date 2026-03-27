@@ -92,7 +92,7 @@ class HardcoverClient:
                 self.api_url,
                 json={"query": query, "variables": variables or {}},
                 headers=self.headers,
-                timeout=10,
+                timeout=20,
             )
 
             # Handle rate limiting (429) with exponential backoff
@@ -111,7 +111,7 @@ class HardcoverClient:
                     self.api_url,
                     json={"query": query, "variables": variables or {}},
                     headers=self.headers,
-                    timeout=10,
+                    timeout=20,
                 )
                 backoff *= 2
 
@@ -156,7 +156,7 @@ class HardcoverClient:
 
         query = """
         query GetUserBook($book_id: Int!, $user_id: Int!) {
-            user_books(where: {book_id: {_eq: $book_id}, user_id: {_eq: $user_id}}) {
+            user_books(where: {book_id: {_eq: $book_id}, user_id: {_eq: $user_id}}, distinct_on: book_id) {
                 id
                 status_id
             }
@@ -179,7 +179,7 @@ class HardcoverClient:
 
     def _extract_cover_url(self, cached_image) -> str | None:
         """Extract a cover image URL from the cached_image jsonb field.
-        The field is a JSON object like {"url": "https://..."} or similar.
+        The field is a JSON object like {"url": "https://...", "color": "#hex"} or similar.
         """
         if not cached_image:
             return None
@@ -187,6 +187,12 @@ class HardcoverClient:
             return cached_image.get("url")
         if isinstance(cached_image, str):
             return cached_image
+        return None
+
+    def _extract_cover_color(self, cached_image) -> str | None:
+        """Extract the dominant color from cached_image (hex string like '#1a2b3c')."""
+        if isinstance(cached_image, dict):
+            return cached_image.get("color")
         return None
 
     def _normalize_book(self, book: dict) -> dict:
@@ -208,6 +214,7 @@ class HardcoverClient:
             "title": book.get("title", ""),
             "author": authors[0] if authors else "",
             "cached_image": self._extract_cover_url(book.get("cached_image")),
+            "cover_color": self._extract_cover_color(book.get("cached_image")),
             "slug": book.get("slug"),
             "pages": book.get("pages"),
             "rating": parsed_rating,
@@ -258,6 +265,36 @@ class HardcoverClient:
         """
 
         result = self.query(query, {"isbn": str(isbn)})
+        if result and result.get("editions") and len(result["editions"]) > 0:
+            edition = result["editions"][0]
+            return {
+                "book_id": edition["book"]["id"],
+                "slug": edition["book"].get("slug"),
+                "edition_id": edition["id"],
+                "pages": edition["pages"],
+                "title": edition["book"]["title"],
+                "cached_image": self._extract_cover_url(edition["book"].get("cached_image")),
+            }
+        return None
+
+    def search_by_asin(self, asin: str) -> dict | None:
+        """Search by ASIN using the dedicated editions.asin field."""
+        query = """
+        query ($asin: String!) {
+            editions(where: { asin: { _eq: $asin } }) {
+                id
+                pages
+                book {
+                    id
+                    title
+                    slug
+                    cached_image
+                }
+            }
+        }
+        """
+
+        result = self.query(query, {"asin": str(asin)})
         if result and result.get("editions") and len(result["editions"]) > 0:
             edition = result["editions"][0]
             return {
@@ -439,6 +476,8 @@ class HardcoverClient:
                 return authors[0]
         return None
 
+    READING_FORMAT_LABELS = {1: "Physical", 2: "Audiobook", 3: "Physical + Audio", 4: "eBook"}
+
     def get_book_editions(self, book_id: int) -> list:
         """Fetch all editions for a book with format, pages, duration, and year."""
         query = """
@@ -447,6 +486,7 @@ class HardcoverClient:
                 id
                 pages
                 audio_seconds
+                reading_format_id
                 edition_format
                 physical_format
                 release_date
@@ -457,18 +497,17 @@ class HardcoverClient:
         if result and result.get("editions"):
             editions = []
             for ed in result["editions"]:
-                # Determine format label: prefer edition_format, fall back to physical_format
-                format_label = ed.get("edition_format") or ed.get("physical_format")
+                format_label = self.READING_FORMAT_LABELS.get(ed.get("reading_format_id"))
                 if not format_label:
-                    # Infer format from available data
+                    format_label = ed.get("edition_format") or ed.get("physical_format")
+                if not format_label:
                     if ed.get("audio_seconds") and ed.get("audio_seconds") > 0:
                         format_label = "Audiobook"
                     elif ed.get("pages") and ed.get("pages") > 0:
                         format_label = "Book"
                     else:
                         format_label = "Unknown"
-                # Normalize format label
-                if format_label and format_label != "Unknown":
+                elif format_label not in self.READING_FORMAT_LABELS.values():
                     format_lower = format_label.lower()
                     if format_lower == "ebook":
                         format_label = "eBook"
@@ -607,7 +646,7 @@ class HardcoverClient:
         """Find existing user_book with read info."""
         query = """
         query ($bookId: Int!, $userId: Int!) {
-            user_books(where: { book_id: { _eq: $bookId }, user_id: { _eq: $userId }}) {
+            user_books(where: { book_id: { _eq: $bookId }, user_id: { _eq: $userId }}, distinct_on: book_id) {
                 id
                 status_id
                 edition_id
@@ -766,39 +805,46 @@ class HardcoverClient:
         audio_seconds: int = None,
         started_at: str = None,
         finished_at: str = None,
-    ) -> bool:
+        cached_read_id: int = None,
+    ) -> dict | None:
         """
-        Update reading progress.
+        Update reading progress. Returns {"success": bool, "read_id": int} or None.
+
         Uses current_percentage > 0.02 (2%) to decide when to set 'started_at'.
         For audiobook editions, pass audio_seconds to use progress_seconds instead of progress_pages.
 
         Optional started_at/finished_at (YYYY-MM-DD strings) override the default
         of using today's date when filling missing dates on the Hardcover read.
-        """
-        # First check if there's an existing read
-        read_query = """
-        query ($userBookId: Int!) {
-            user_book_reads(where: { user_book_id: { _eq: $userBookId }}, order_by: {id: desc}, limit: 1) {
-                id
-                started_at
-                finished_at
-            }
-        }
-        """
 
-        read_result = self.query(read_query, {"userBookId": user_book_id})
+        If cached_read_id is provided, skips the fetch query for existing reads.
+        """
         today = self._get_today_date()
-
-        # LOGIC: Only set started date if we are past 2%
         should_start = current_percentage > 0.02
 
-        if (
-            read_result
-            and read_result.get("user_book_reads")
-            and len(read_result["user_book_reads"]) > 0
-        ):
+        # Use cached read ID if available, otherwise fetch
+        existing_read = None
+        if cached_read_id:
+            existing_read = {"id": cached_read_id, "started_at": None, "finished_at": None}
+        else:
+            read_query = """
+            query ($userBookId: Int!) {
+                user_book_reads(where: { user_book_id: { _eq: $userBookId }}, order_by: {id: desc}, limit: 1) {
+                    id
+                    started_at
+                    finished_at
+                }
+            }
+            """
+            read_result = self.query(read_query, {"userBookId": user_book_id})
+            if (
+                read_result
+                and read_result.get("user_book_reads")
+                and len(read_result["user_book_reads"]) > 0
+            ):
+                existing_read = read_result["user_book_reads"][0]
+
+        if existing_read:
             # --- UPDATE EXISTING READ ---
-            existing_read = read_result["user_book_reads"][0]
             read_id = existing_read["id"]
 
             started_at_val = existing_read.get("started_at")
@@ -866,9 +912,9 @@ class HardcoverClient:
 
             if result and result.get("update_user_book_read"):
                 if result["update_user_book_read"].get("error"):
-                    return False
-                return True
-            return False
+                    return None
+                return {"success": True, "read_id": read_id}
+            return None
 
         else:
             # --- CREATE NEW READ ---
@@ -927,9 +973,11 @@ class HardcoverClient:
 
             if result and result.get("insert_user_book_read"):
                 if result["insert_user_book_read"].get("error"):
-                    return False
-                return True
-            return False
+                    return None
+                read = result["insert_user_book_read"].get("user_book_read")
+                new_read_id = read["id"] if read else None
+                return {"success": True, "read_id": new_read_id}
+            return None
 
     def get_book_metadata(self, book_id: int) -> dict | None:
         """Fetch enrichment metadata for a book.
@@ -1174,6 +1222,42 @@ class HardcoverClient:
                 editions['audio'] = book["default_audio_edition"]
         return editions
 
+    def get_book_series(self, book_id: int) -> list[dict]:
+        """Fetch series info for a book (excluding compilations)."""
+        query = """
+        query ($bookId: Int!) {
+            books_by_pk(id: $bookId) {
+                book_series(where: {compilation: {_eq: false}}) {
+                    position
+                    details
+                    series {
+                        id
+                        name
+                        slug
+                        books_count
+                    }
+                }
+            }
+        }
+        """
+        result = self.query(query, {"bookId": book_id})
+        if not result or not result.get("books_by_pk"):
+            return []
+
+        entries = result["books_by_pk"].get("book_series", [])
+        return [
+            {
+                "position": bs.get("position"),
+                "details": bs.get("details"),
+                "series_id": bs["series"]["id"],
+                "series_name": bs["series"]["name"],
+                "series_slug": bs["series"].get("slug"),
+                "series_books_count": bs["series"].get("books_count"),
+            }
+            for bs in entries
+            if bs.get("series")
+        ]
+
     # ── TBR / Want-to-Read methods ──
 
     def get_want_to_read_books(self) -> list[dict]:
@@ -1232,7 +1316,7 @@ class HardcoverClient:
                 name
                 description
                 books_count
-                public
+                privacy_setting_id
                 updated_at
             }
         }
@@ -1247,7 +1331,8 @@ class HardcoverClient:
                 "name": lst.get("name", ""),
                 "description": lst.get("description", ""),
                 "books_count": lst.get("books_count", 0),
-                "public": lst.get("public", False),
+                "privacy_setting_id": lst.get("privacy_setting_id", 3),
+                "public": lst.get("privacy_setting_id") == 1,
                 "updated_at": lst.get("updated_at"),
             }
             for lst in result["lists"]

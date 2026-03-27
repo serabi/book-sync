@@ -13,7 +13,6 @@ logger = logging.getLogger(__name__)
 
 
 class BookFusionRepository(BaseRepository):
-
     # ── BookFusion Highlights ──
 
     def save_bookfusion_highlights(self, highlights):
@@ -73,7 +72,7 @@ class BookFusionRepository(BaseRepository):
                             existing.highlighted_at = h.get("highlighted_at")
                             existing.quote_text = h.get("quote_text")
                             session.flush()
-        return {'saved': saved, 'new_ids': new_ids}
+        return {"saved": saved, "new_ids": new_ids}
 
     def get_bookfusion_highlights(self):
         with self.get_session() as session:
@@ -250,12 +249,11 @@ class BookFusionRepository(BaseRepository):
                 return
             norm_book = normalize_title(book.title)
             for hl in unmatched:
-                bf_title = clean_book_title(hl.book_title or '')
+                bf_title = clean_book_title(hl.book_title or "")
                 norm_bf = normalize_title(bf_title)
                 if norm_bf == norm_book or difflib.SequenceMatcher(None, norm_bf, norm_book).ratio() > 0.85:
                     if hl.bookfusion_book_id:
                         self.link_bookfusion_highlights_by_book_id(hl.bookfusion_book_id, book.id)
                         logger.info(f"Auto-linked BookFusion highlights for '{bf_title}' to book {book.id}")
-                    break
         except (AttributeError, TypeError) as e:
             logger.warning(f"BookFusion auto-link failed: {e}")

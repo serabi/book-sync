@@ -15,6 +15,7 @@ def _setup_matching_db_defaults(mock_db):
 
 # ── _create_book_mapping: Booklore lookup fails ──────────────────
 
+
 def test_create_book_mapping_booklore_raises(flask_app, mock_container):
     """_create_book_mapping proceeds when find_in_booklore raises internally.
 
@@ -49,18 +50,18 @@ def test_create_book_mapping_kosync_id_fails(flask_app, mock_container):
     _setup_matching_db_defaults(mock_container.mock_database_service)
 
     mock_container.mock_booklore_client.is_configured.return_value = False
-    mock_container.mock_ebook_parser.get_kosync_id.return_value = None
 
     with flask_app.app_context():
-        from src.blueprints.matching_bp import _create_book_mapping
+        with patch("src.blueprints.matching_bp.get_kosync_id_for_ebook", return_value=None):
+            from src.blueprints.matching_bp import _create_book_mapping
 
-        book, error = _create_book_mapping(
-            mock_container,
-            abs_id="test-abs",
-            title="Test Book",
-            ebook_filename="test.epub",
-            duration=3600,
-        )
+            book, error = _create_book_mapping(
+                mock_container,
+                abs_id="test-abs",
+                title="Test Book",
+                ebook_filename="test.epub",
+                duration=3600,
+            )
 
     assert book is None
     assert "KOSync ID" in error
@@ -101,9 +102,7 @@ def test_create_book_mapping_booklore_add_to_shelf_fails(flask_app, mock_contain
     bl_client.add_to_shelf.side_effect = Exception("Shelf error")
 
     mock_container.mock_booklore_client.is_configured.return_value = True
-    mock_container.mock_booklore_client.find_book_by_filename.return_value = {
-        "id": 99, "_instance_id": "default"
-    }
+    mock_container.mock_booklore_client.find_book_by_filename.return_value = {"id": 99, "_instance_id": "default"}
     mock_container.mock_ebook_parser.get_kosync_id_from_bytes.return_value = "hash789"
     bl_client.download_book.return_value = b"fake epub"
     mock_container.mock_ebook_parser.get_kosync_id_from_bytes.return_value = "hash789"
@@ -128,6 +127,7 @@ def test_create_book_mapping_booklore_add_to_shelf_fails(flask_app, mock_contain
 
 
 # ── Batch match: individual book failure continues ────────────────
+
 
 def test_batch_match_process_continues_on_individual_failure(flask_app, mock_container, client):
     """Batch match should continue processing remaining items when one fails."""
@@ -231,6 +231,7 @@ def test_batch_match_ebook_only_kosync_failure_adds_to_failed(flask_app, mock_co
 
 # ── Suggestions page: serialize edge cases ────────────────────────
 
+
 def test_suggestions_page_filters_no_matches(flask_app, mock_container):
     """Suggestions page filters out suggestions with empty matches."""
     _setup_matching_db_defaults(mock_container.mock_database_service)
@@ -252,12 +253,13 @@ def test_suggestions_page_filters_no_matches(flask_app, mock_container):
     suggestion_with_matches.status = "pending"
 
     mock_container.mock_database_service.get_all_actionable_suggestions.return_value = [
-        suggestion_no_matches, suggestion_with_matches
+        suggestion_no_matches,
+        suggestion_with_matches,
     ]
 
     # Need ABS available for suggestions route
-    flask_app.config['abs_service'] = Mock()
-    flask_app.config['abs_service'].is_available.return_value = True
+    flask_app.config["abs_service"] = Mock()
+    flask_app.config["abs_service"].is_available.return_value = True
 
     with flask_app.test_client() as test_client:
         response = test_client.get("/suggestions")

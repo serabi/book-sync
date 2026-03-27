@@ -33,23 +33,29 @@ def ensure_kosync_document(book, database_service):
     """
     if not book or not book.kosync_doc_id or not book.id:
         return
-    existing = database_service.get_kosync_document(book.kosync_doc_id)
-    if existing:
-        if not existing.linked_book_id:
-            database_service.link_kosync_document(book.kosync_doc_id, book.id, book.abs_id)
-            logger.info(f"KOSync: Linked existing document {book.kosync_doc_id[:8]}... to '{book.title}'")
-        if not existing.filename and book.ebook_filename:
-            existing.filename = book.ebook_filename
-            database_service.save_kosync_document(existing)
-    else:
-        doc = KosyncDocument(
-            document_hash=book.kosync_doc_id,
-            linked_book_id=book.id,
-            linked_abs_id=book.abs_id,
-            filename=book.ebook_filename,
+    try:
+        existing = database_service.get_kosync_document(book.kosync_doc_id)
+        if existing:
+            if not existing.linked_book_id:
+                database_service.link_kosync_document(book.kosync_doc_id, book.id, book.abs_id)
+                logger.info(f"KOSync: Linked existing document {book.kosync_doc_id[:8]}... to '{book.title}'")
+            if not existing.filename and book.ebook_filename:
+                existing.filename = book.ebook_filename
+                database_service.save_kosync_document(existing)
+        else:
+            doc = KosyncDocument(
+                document_hash=book.kosync_doc_id,
+                linked_book_id=book.id,
+                linked_abs_id=book.abs_id,
+                filename=book.ebook_filename,
+            )
+            database_service.save_kosync_document(doc)
+            logger.debug(f"KOSync: Created document {book.kosync_doc_id[:8]}... for '{book.title}'")
+    except Exception:
+        logger.warning(
+            f"KOSync: Failed to ensure document for book {book.id} "
+            f"(hash {book.kosync_doc_id[:8]}...) — will retry on next sync cycle"
         )
-        database_service.save_kosync_document(doc)
-        logger.debug(f"KOSync: Created document {book.kosync_doc_id[:8]}... for '{book.title}'")
 
 
 class KosyncService:
@@ -89,8 +95,12 @@ class KosyncService:
         if doc and doc.filename:
             # Find sibling document with same filename that's linked
             sibling = self._db.get_kosync_doc_by_filename(doc.filename)
-            if sibling and sibling.linked_abs_id and sibling.document_hash != doc_id:
-                book = self._db.get_book_by_abs_id(sibling.linked_abs_id)
+            if sibling and (sibling.linked_book_id or sibling.linked_abs_id) and sibling.document_hash != doc_id:
+                book = (
+                    self._db.get_book_by_id(sibling.linked_book_id)
+                    if sibling.linked_book_id
+                    else self._db.get_book_by_abs_id(sibling.linked_abs_id)
+                )
                 if book:
                     logger.info(f"KOSync: Resolved {doc_id[:8]}... to '{book.title}' via filename sibling")
                     return book
@@ -160,8 +170,12 @@ class KosyncService:
             except FileNotFoundError:
                 logger.debug(f"DB suggested '{doc.filename}' but file is missing — Re-scanning")
 
-        if doc and doc.linked_abs_id:
-            book = self._db.get_book_by_abs_id(doc.linked_abs_id)
+        if doc and (doc.linked_book_id or doc.linked_abs_id):
+            book = (
+                self._db.get_book_by_id(doc.linked_book_id)
+                if doc.linked_book_id
+                else self._db.get_book_by_abs_id(doc.linked_abs_id)
+            )
             if book and book.original_ebook_filename:
                 try:
                     self._container.ebook_parser().resolve_book_path(book.original_ebook_filename)
@@ -244,7 +258,7 @@ class KosyncService:
                         meta = json.loads(book.raw_metadata)
                         fallback_id = meta.get("id")
                         book_id = str(fallback_id) if fallback_id is not None else None
-                    except (json.JSONDecodeError, AttributeError) as e:
+                    except (json.JSONDecodeError, AttributeError, TypeError) as e:
                         logger.debug(f"Failed to parse raw_metadata JSON: {e}")
                         continue
 
@@ -617,7 +631,9 @@ class KosyncService:
 
         # Update linked book if exists
         linked_book = None
-        if kosync_doc.linked_abs_id:
+        if kosync_doc.linked_book_id:
+            linked_book = self._db.get_book_by_id(kosync_doc.linked_book_id)
+        elif kosync_doc.linked_abs_id:
             linked_book = self._db.get_book_by_abs_id(kosync_doc.linked_abs_id)
         else:
             linked_book = self._db.get_book_by_kosync_id(doc_hash)
@@ -665,7 +681,11 @@ class KosyncService:
         # Step 1: Direct hash lookup
         kosync_doc = self._db.get_kosync_document(doc_id)
         if kosync_doc:
-            if kosync_doc.linked_abs_id:
+            if kosync_doc.linked_book_id:
+                book = self._db.get_book_by_id(kosync_doc.linked_book_id)
+                if book:
+                    return self.resolve_best_progress(doc_id, book)
+            elif kosync_doc.linked_abs_id:
                 book = self._db.get_book_by_abs_id(kosync_doc.linked_abs_id)
                 if book:
                     return self.resolve_best_progress(doc_id, book)

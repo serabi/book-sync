@@ -100,8 +100,8 @@ def index():
 
     # Merge Booklore 2 into booklore flag so templates show the service
     # when either instance is configured
-    if integrations.get('booklore2') and not integrations.get('booklore'):
-        integrations['booklore'] = True
+    if integrations.get("booklore2") and not integrations.get("booklore"):
+        integrations["booklore"] = True
 
     # BookFusion integration status
     bf_client = container.bookfusion_client()
@@ -335,11 +335,15 @@ def index():
             mapping["last_sync"] = "Never"
 
         covers = resolve_book_covers(
-            book, abs_service, database_service, book_type,
-            booklore_meta=bl_meta, hardcover_details=hardcover_details,
+            book,
+            abs_service,
+            database_service,
+            book_type,
+            booklore_meta=bl_meta,
+            hardcover_details=hardcover_details,
         )
-        mapping["cover_url"] = covers['cover_url']
-        mapping["placeholder_logo"] = covers['placeholder_logo']
+        mapping["cover_url"] = covers["cover_url"]
+        mapping["placeholder_logo"] = covers["placeholder_logo"]
 
         duration = mapping.get("duration", 0)
         progress_pct = mapping.get("unified_progress", 0)
@@ -366,17 +370,19 @@ def index():
     # Unlinked KoSync documents — for dashboard toast + pending identification section
     kosync_unlinked_count = 0
     unlinked_reading = []
-    kosync_active = os.environ.get('KOSYNC_ENABLED', '').lower() in ('true', '1', 'yes', 'on') or os.environ.get('KOSYNC_SERVER', '')
+    kosync_active = os.environ.get("KOSYNC_ENABLED", "").lower() in ("true", "1", "yes", "on") or os.environ.get(
+        "KOSYNC_SERVER", ""
+    )
     if kosync_active:
         try:
             unlinked_docs = database_service.get_unlinked_kosync_documents()
             kosync_unlinked_count = len(unlinked_docs)
             unlinked_reading = [
                 {
-                    'document_hash': doc.document_hash,
-                    'percentage': float(doc.percentage) if doc.percentage else 0,
-                    'device': doc.device,
-                    'last_updated': doc.last_updated.isoformat() if doc.last_updated else None,
+                    "document_hash": doc.document_hash,
+                    "percentage": float(doc.percentage) if doc.percentage else 0,
+                    "device": doc.device,
+                    "last_updated": doc.last_updated.isoformat() if doc.last_updated else None,
                 }
                 for doc in unlinked_docs
                 if doc.percentage and float(doc.percentage) > 0

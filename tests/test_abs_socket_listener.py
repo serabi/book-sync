@@ -200,6 +200,7 @@ class TestKosyncPutInstantSync(unittest.TestCase):
 
         mock_doc = MagicMock()
         mock_doc.linked_abs_id = "test-instant-sync"
+        mock_doc.linked_book_id = None
         mock_doc.percentage = 0.3
         mock_doc.device_id = "D1"
 
@@ -239,6 +240,7 @@ class TestKosyncPutInstantSync(unittest.TestCase):
 
         mock_doc = MagicMock()
         mock_doc.linked_abs_id = "test-disabled"
+        mock_doc.linked_book_id = None
         mock_doc.percentage = 0.1
         mock_doc.device_id = "D1"
 
@@ -272,6 +274,7 @@ class TestKosyncPutInstantSync(unittest.TestCase):
 
         mock_doc = MagicMock()
         mock_doc.linked_abs_id = "test-inactive"
+        mock_doc.linked_book_id = None
         mock_doc.percentage = 0.1
         mock_doc.device_id = "D1"
 

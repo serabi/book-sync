@@ -42,7 +42,9 @@ def _create_storyteller_reservation(database_service, abs_id):
     """
     book = database_service.get_book_by_ref(abs_id)
     storyteller_uuid = book.storyteller_uuid if book else None
-    submission = StorytellerSubmission(abs_id=abs_id, book_id=book.id if book else None, status="queued", storyteller_uuid=storyteller_uuid)
+    submission = StorytellerSubmission(
+        abs_id=abs_id, book_id=book.id if book else None, status="queued", storyteller_uuid=storyteller_uuid
+    )
     database_service.save_storyteller_submission(submission)
     return submission
 
@@ -100,9 +102,17 @@ def _copy_book_merge_metadata(existing_book, overrides=None):
     return metadata
 
 
-def _create_book_mapping(container, abs_id, title, ebook_filename, duration,
-                         storyteller_uuid=None, storyteller_submit=False,
-                         author=None, subtitle=None):
+def _create_book_mapping(
+    container,
+    abs_id,
+    title,
+    ebook_filename,
+    duration,
+    storyteller_uuid=None,
+    storyteller_submit=False,
+    author=None,
+    subtitle=None,
+):
     """Create a book mapping with full pipeline: Booklore, KOSync, merge, Hardcover, etc.
 
     Returns (book, error_message). On success error_message is None.
@@ -205,7 +215,10 @@ def _create_book_mapping(container, abs_id, title, ebook_filename, duration,
     # Storyteller submission (background thread)
     if storyteller_submit:
         _submit_to_storyteller_async(
-            container, abs_id, title, ebook_filename,
+            container,
+            abs_id,
+            title,
+            ebook_filename,
             current_app.config.get("BOOKS_DIR", ""),
             current_app.config.get("EPUB_CACHE_DIR", ""),
         )
@@ -467,7 +480,8 @@ def match():
 
         _ab_meta = selected_ab.get("media", {}).get("metadata", {})
         book, error = _create_book_mapping(
-            container, abs_id,
+            container,
+            abs_id,
             title=manager.get_audiobook_title(selected_ab),
             ebook_filename=ebook_filename,
             duration=manager.get_duration(selected_ab),
@@ -612,8 +626,10 @@ def batch_match():
                 is_ebook_only = not abs_id and (ebook_filename or storyteller_uuid)
                 is_audio_only = abs_id and not ebook_filename and not storyteller_uuid
                 title = (
-                    manager.get_audiobook_title(selected_ab) if selected_ab
-                    else ebook_display_name or Path(ebook_filename).stem if ebook_filename
+                    manager.get_audiobook_title(selected_ab)
+                    if selected_ab
+                    else ebook_display_name or Path(ebook_filename).stem
+                    if ebook_filename
                     else "Storyteller Book"
                 )
                 _ab_meta = (selected_ab or {}).get("media", {}).get("metadata", {})
@@ -638,7 +654,9 @@ def batch_match():
             return redirect(url_for("matching.batch_match", search=request.form.get("search", "")))
         elif action == "remove_from_queue":
             remove_key = request.form.get("queue_key") or request.form.get("abs_id")
-            session["queue"] = [item for item in session.get("queue", []) if item.get("queue_key", item.get("abs_id")) != remove_key]
+            session["queue"] = [
+                item for item in session.get("queue", []) if item.get("queue_key", item.get("abs_id")) != remove_key
+            ]
             session.modified = True
             return redirect(url_for("matching.batch_match"))
         elif action == "clear_queue":
@@ -681,7 +699,11 @@ def batch_match():
                             if not kosync_doc_id:
                                 failed_items.append(item.get("ebook_display_name") or ebook_filename)
                                 continue
-                            title = item.get("ebook_display_name") or (bl_book.get("title") if bl_book else None) or Path(ebook_filename).stem
+                            title = (
+                                item.get("ebook_display_name")
+                                or (bl_book.get("title") if bl_book else None)
+                                or Path(ebook_filename).stem
+                            )
                         else:
                             title = item.get("title", "Storyteller Book")
                             ebook_filename = None

@@ -204,7 +204,7 @@ class HardcoverSyncClient(SyncClient):
         current_status = self._handle_status_transition(book, hardcover_details, current_status, percentage, is_finished)
 
         try:
-            self.hardcover_client.update_progress(
+            result = self.hardcover_client.update_progress(
                 ub['id'],
                 page_num,
                 edition_id=edition_id,
@@ -212,7 +212,15 @@ class HardcoverSyncClient(SyncClient):
                 current_percentage=percentage,
                 started_at=book.started_at,
                 finished_at=book.finished_at,
+                cached_read_id=hardcover_details.hardcover_user_book_read_id,
             )
+
+            if not result or not result.get("success"):
+                return SyncResult(None, False)
+
+            if result.get("read_id") and result["read_id"] != hardcover_details.hardcover_user_book_read_id:
+                hardcover_details.hardcover_user_book_read_id = result["read_id"]
+                self.database_service.save_hardcover_details(hardcover_details)
 
             actual_pct = 1.0 if is_finished and total_pages > 0 else (
                 min(page_num / total_pages, 1.0) if total_pages > 0 else percentage
@@ -241,7 +249,7 @@ class HardcoverSyncClient(SyncClient):
 
         try:
             progress_seconds = int(audio_seconds * percentage)
-            self.hardcover_client.update_progress(
+            result = self.hardcover_client.update_progress(
                 ub['id'],
                 0,
                 edition_id=edition_id or hardcover_details.hardcover_edition_id,
@@ -250,7 +258,15 @@ class HardcoverSyncClient(SyncClient):
                 audio_seconds=audio_seconds,
                 started_at=book.started_at,
                 finished_at=book.finished_at,
+                cached_read_id=hardcover_details.hardcover_user_book_read_id,
             )
+
+            if not result or not result.get("success"):
+                return SyncResult(None, False)
+
+            if result.get("read_id") and result["read_id"] != hardcover_details.hardcover_user_book_read_id:
+                hardcover_details.hardcover_user_book_read_id = result["read_id"]
+                self.database_service.save_hardcover_details(hardcover_details)
 
             updated_state = {
                 'pct': percentage,
