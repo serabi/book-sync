@@ -339,7 +339,7 @@ class LocatorSearchService:
         return " > ".join(reversed(segments))
 
     def _generate_cfi(self, spine_index, html_content, local_target_index):
-        """Generate an EPUB CFI for Booklore/Readium."""
+        """Generate an EPUB CFI for Grimmory/Readium."""
         soup = BeautifulSoup(html_content, "html.parser")
         current_char_count = 0
         target_tag = None

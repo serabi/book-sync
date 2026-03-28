@@ -10,7 +10,7 @@ from pathlib import Path
 
 from .book_repository import BookRepository
 from .bookfusion_repository import BookFusionRepository
-from .booklore_repository import BookloreRepository
+from .grimmory_repository import GrimmoryRepository
 from .hardcover_repository import HardcoverRepository
 from .kosync_repository import KoSyncRepository
 from .models import (
@@ -69,7 +69,7 @@ class DatabaseService:
         self._hardcover = HardcoverRepository(self.db_manager)
         self._storyteller = StorytellerRepository(self.db_manager)
         self._bookfusion = BookFusionRepository(self.db_manager)
-        self._booklore = BookloreRepository(self.db_manager)
+        self._grimmory = GrimmoryRepository(self.db_manager)
         self._tbr = TbrRepository(self.db_manager)
 
         # Post-startup schema health check
@@ -150,8 +150,7 @@ class DatabaseService:
         except Exception as e:
             self._migration_failed = True
             logger.error(
-                "Alembic migration failed — database schema may be incomplete. "
-                "Check logs above for details. Error: %s",
+                "Alembic migration failed — database schema may be incomplete. Check logs above for details. Error: %s",
                 e,
             )
 
@@ -285,12 +284,21 @@ class DatabaseService:
     # Only methods with cross-cutting logic are defined explicitly below.
     # Everything else is resolved via __getattr__.
 
-    _REPOS = ('_settings', '_books', '_kosync', '_reading',
-              '_suggestions', '_hardcover', '_storyteller',
-              '_bookfusion', '_booklore', '_tbr')
+    _REPOS = (
+        "_settings",
+        "_books",
+        "_kosync",
+        "_reading",
+        "_suggestions",
+        "_hardcover",
+        "_storyteller",
+        "_bookfusion",
+        "_grimmory",
+        "_tbr",
+    )
 
     def __getattr__(self, name):
-        if name.startswith('_'):
+        if name.startswith("_"):
             raise AttributeError(name)
         for repo_name in DatabaseService._REPOS:
             repo = object.__getattribute__(self, repo_name)
@@ -309,12 +317,12 @@ class DatabaseService:
             result.setdefault(state.book_id, []).append(state)
         return result
 
-    def get_booklore_by_filename(self, enabled_server_ids=None):
-        """Return all Booklore books grouped by lowercase filename: dict[str, list[BookloreBook]].
+    def get_grimmory_by_filename(self, enabled_server_ids=None):
+        """Return all Grimmory books grouped by lowercase filename.
 
         When *enabled_server_ids* is given, only books from those instances are included.
         """
-        all_books = self._booklore.get_all_booklore_books()
+        all_books = self._grimmory.get_all_grimmory_books()
         result = {}
         for bl_book in all_books:
             if bl_book.filename:
@@ -555,16 +563,16 @@ class DatabaseMigrator:
                     )
                 )
 
-            if "booklore_pct" in data:
+            if "grimmory_pct" in data:
                 self.db_service.save_state(
                     State(
                         abs_id=abs_id,
                         book_id=book_id,
-                        client_name="booklore",
+                        client_name="grimmory",
                         last_updated=last_updated,
-                        percentage=data["booklore_pct"],
-                        xpath=data.get("booklore_xpath"),
-                        cfi=data.get("booklore_cfi"),
+                        percentage=data["grimmory_pct"],
+                        xpath=data.get("grimmory_xpath"),
+                        cfi=data.get("grimmory_cfi"),
                     )
                 )
 

@@ -11,7 +11,6 @@ from src.api.open_library_client import OpenLibraryClient
 
 
 class TestOpenLibraryClient(unittest.TestCase):
-
     def setUp(self):
         self.client = OpenLibraryClient()
         self.sample_doc = {
@@ -33,7 +32,7 @@ class TestOpenLibraryClient(unittest.TestCase):
 
     # -- Output shape --
 
-    @patch('src.api.open_library_client.requests.get')
+    @patch("src.api.open_library_client.requests.get")
     def test_normalized_output_shape(self, mock_get):
         """Verify all expected fields are present in result."""
         mock_get.return_value = self._mock_response([self.sample_doc])
@@ -42,42 +41,42 @@ class TestOpenLibraryClient(unittest.TestCase):
 
         self.assertEqual(len(results), 1)
         r = results[0]
-        self.assertEqual(r['title'], 'Dune')
-        self.assertEqual(r['author'], 'Frank Herbert')
-        self.assertIn('covers.openlibrary.org', r['cover_url'])
-        self.assertEqual(r['isbn'], '9780441013593')
-        self.assertEqual(r['ol_work_key'], '/works/OL45883W')
-        self.assertEqual(r['first_publish_year'], 1965)
+        self.assertEqual(r["title"], "Dune")
+        self.assertEqual(r["author"], "Frank Herbert")
+        self.assertIn("covers.openlibrary.org", r["cover_url"])
+        self.assertEqual(r["isbn"], "9780441013593")
+        self.assertEqual(r["ol_work_key"], "/works/OL45883W")
+        self.assertEqual(r["first_publish_year"], 1965)
 
     # -- Missing fields --
 
-    @patch('src.api.open_library_client.requests.get')
+    @patch("src.api.open_library_client.requests.get")
     def test_missing_cover(self, mock_get):
         """No cover_i → cover_url is None."""
         doc = {**self.sample_doc}
-        del doc['cover_i']
+        del doc["cover_i"]
         mock_get.return_value = self._mock_response([doc])
 
         results = self.client.search_books("Dune")
-        self.assertIsNone(results[0]['cover_url'])
+        self.assertIsNone(results[0]["cover_url"])
 
-    @patch('src.api.open_library_client.requests.get')
+    @patch("src.api.open_library_client.requests.get")
     def test_missing_author(self, mock_get):
         """No author_name → author is None."""
-        doc = {**self.sample_doc, 'author_name': []}
+        doc = {**self.sample_doc, "author_name": []}
         mock_get.return_value = self._mock_response([doc])
 
         results = self.client.search_books("Dune")
-        self.assertIsNone(results[0]['author'])
+        self.assertIsNone(results[0]["author"])
 
-    @patch('src.api.open_library_client.requests.get')
+    @patch("src.api.open_library_client.requests.get")
     def test_missing_isbn(self, mock_get):
         """Empty isbn list → isbn is None."""
-        doc = {**self.sample_doc, 'isbn': []}
+        doc = {**self.sample_doc, "isbn": []}
         mock_get.return_value = self._mock_response([doc])
 
         results = self.client.search_books("Dune")
-        self.assertIsNone(results[0]['isbn'])
+        self.assertIsNone(results[0]["isbn"])
 
     # -- ISBN selection --
 
@@ -98,16 +97,17 @@ class TestOpenLibraryClient(unittest.TestCase):
 
     # -- Error handling --
 
-    @patch('src.api.open_library_client.requests.get')
+    @patch("src.api.open_library_client.requests.get")
     def test_request_exception_returns_empty(self, mock_get):
         """RequestException → empty list."""
         import requests
+
         mock_get.side_effect = requests.RequestException("timeout")
 
         results = self.client.search_books("anything")
         self.assertEqual(results, [])
 
-    @patch('src.api.open_library_client.requests.get')
+    @patch("src.api.open_library_client.requests.get")
     def test_bad_json_returns_empty(self, mock_get):
         """Invalid JSON response → empty list."""
         mock_resp = MagicMock()
@@ -120,7 +120,7 @@ class TestOpenLibraryClient(unittest.TestCase):
 
     # -- Limit param --
 
-    @patch('src.api.open_library_client.requests.get')
+    @patch("src.api.open_library_client.requests.get")
     def test_limit_passed_to_api(self, mock_get):
         """The limit parameter is forwarded to the API call."""
         mock_get.return_value = self._mock_response([])
@@ -128,8 +128,8 @@ class TestOpenLibraryClient(unittest.TestCase):
         self.client.search_books("test", limit=5)
 
         _, kwargs = mock_get.call_args
-        self.assertEqual(kwargs['params']['limit'], 5)
+        self.assertEqual(kwargs["params"]["limit"], 5)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

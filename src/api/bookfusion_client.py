@@ -19,9 +19,9 @@ import requests
 
 logger = logging.getLogger(__name__)
 
-BASE_URL = 'https://www.bookfusion.com'
-CALIBRE_API = f'{BASE_URL}/calibre-api/v1'
-CALIBRE_USER_AGENT = 'BookFusion Calibre Plugin 0.5.2'
+BASE_URL = "https://www.bookfusion.com"
+CALIBRE_API = f"{BASE_URL}/calibre-api/v1"
+CALIBRE_USER_AGENT = "BookFusion Calibre Plugin 0.5.2"
 
 
 def _build_multipart(fields: list[tuple[str, str | tuple[str, bytes]]]) -> tuple[bytes, str]:
@@ -43,35 +43,30 @@ def _build_multipart(fields: list[tuple[str, str | tuple[str, bytes]]]) -> tuple
         if isinstance(value, tuple):
             fname, fdata = value
             parts.append(
-                f'--{boundary}\r\n'
-                f'Content-Disposition: form-data; name="{name}"; filename="{fname}"\r\n'
-                f'\r\n'.encode() + fdata + b'\r\n'
+                f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"; filename="{fname}"\r\n\r\n'.encode()
+                + fdata
+                + b"\r\n"
             )
         else:
-            parts.append(
-                f'--{boundary}\r\n'
-                f'Content-Disposition: form-data; name="{name}"\r\n'
-                f'\r\n'
-                f'{value}\r\n'.encode()
-            )
-    parts.append(f'--{boundary}--\r\n'.encode())
-    body = b''.join(parts)
-    content_type = f'multipart/form-data; boundary={boundary}'
+            parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n'.encode())
+    parts.append(f"--{boundary}--\r\n".encode())
+    body = b"".join(parts)
+    content_type = f"multipart/form-data; boundary={boundary}"
     return body, content_type
 
 
 def _calibre_auth_header(api_key: str) -> str:
     """Build Basic auth header matching the Calibre plugin's format (key: with empty password)."""
-    token = base64.b64encode(f'{api_key}:'.encode()).decode('ascii')
-    return f'Basic {token}'
+    token = base64.b64encode(f"{api_key}:".encode()).decode("ascii")
+    return f"Basic {token}"
 
 
 def _calibre_headers(api_key: str, extra: dict | None = None) -> dict:
     """Standard headers for Calibre API requests."""
     headers = {
-        'User-Agent': CALIBRE_USER_AGENT,
-        'Authorization': _calibre_auth_header(api_key),
-        'Accept': 'application/json',
+        "User-Agent": CALIBRE_USER_AGENT,
+        "Authorization": _calibre_auth_header(api_key),
+        "Accept": "application/json",
     }
     if extra:
         headers.update(extra)
@@ -85,10 +80,10 @@ def _calibre_digest(file_bytes: bytes) -> str:
     """
     h = hashlib.sha256()
     h.update(str(len(file_bytes)).encode())
-    h.update(b'\0')
+    h.update(b"\0")
     offset = 0
     while offset < len(file_bytes):
-        h.update(file_bytes[offset:offset + 65536])
+        h.update(file_bytes[offset : offset + 65536])
         offset += 65536
     return h.hexdigest()
 
@@ -96,40 +91,40 @@ def _calibre_digest(file_bytes: bytes) -> str:
 def _parse_frontmatter_title(frontmatter: str | None) -> str:
     """Extract title from a YAML frontmatter string (e.g. 'title: My Book\\nauthor: ...')."""
     if not frontmatter:
-        return ''
+        return ""
     for line in frontmatter.splitlines():
-        if line.startswith('title:'):
-            return line[len('title:'):].strip().strip('"').strip("'")
-    return ''
+        if line.startswith("title:"):
+            return line[len("title:") :].strip().strip('"').strip("'")
+    return ""
 
 
 def _parse_frontmatter(frontmatter: str | None) -> dict:
     """Parse YAML frontmatter into a dict with title, authors, tags, series."""
-    result = {'title': '', 'authors': '', 'tags': '', 'series': ''}
+    result = {"title": "", "authors": "", "tags": "", "series": ""}
     if not frontmatter:
         return result
 
     for line in frontmatter.splitlines():
         line = line.strip()
-        if line.startswith('title:'):
-            result['title'] = line[len('title:'):].strip().strip('"').strip("'")
-        elif line.startswith('author:') or line.startswith('authors:'):
-            key = 'authors:' if line.startswith('authors:') else 'author:'
-            result['authors'] = line[len(key):].strip().strip('"').strip("'")
-        elif line.startswith('tags:'):
-            result['tags'] = line[len('tags:'):].strip().strip('"').strip("'")
-        elif line.startswith('series:'):
-            result['series'] = line[len('series:'):].strip().strip('"').strip("'")
+        if line.startswith("title:"):
+            result["title"] = line[len("title:") :].strip().strip('"').strip("'")
+        elif line.startswith("author:") or line.startswith("authors:"):
+            key = "authors:" if line.startswith("authors:") else "author:"
+            result["authors"] = line[len(key) :].strip().strip('"').strip("'")
+        elif line.startswith("tags:"):
+            result["tags"] = line[len("tags:") :].strip().strip('"').strip("'")
+        elif line.startswith("series:"):
+            result["series"] = line[len("series:") :].strip().strip('"').strip("'")
 
     return result
 
 
 def _parse_highlight_date(content: str) -> datetime | None:
     """Parse the Date Created timestamp from a BookFusion highlight markdown string."""
-    m = re.search(r'\*\*Date Created\*\*:\s*(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})\s*UTC', content)
+    m = re.search(r"\*\*Date Created\*\*:\s*(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})\s*UTC", content)
     if m:
         try:
-            return datetime.strptime(m.group(1), '%Y-%m-%d %H:%M:%S').replace(tzinfo=UTC)
+            return datetime.strptime(m.group(1), "%Y-%m-%d %H:%M:%S").replace(tzinfo=UTC)
         except ValueError:
             return None
     return None
@@ -137,33 +132,32 @@ def _parse_highlight_date(content: str) -> datetime | None:
 
 def _parse_highlight_quote(content: str) -> str | None:
     """Extract blockquoted text from a BookFusion highlight markdown string."""
-    lines = content.split('\n')
+    lines = content.split("\n")
     quote_lines = []
     for line in lines:
         stripped = line.strip()
-        if stripped.startswith('>'):
-            txt = stripped.lstrip('>').strip()
+        if stripped.startswith(">"):
+            txt = stripped.lstrip(">").strip()
             if txt:
                 quote_lines.append(txt)
-    return ' '.join(quote_lines) if quote_lines else None
+    return " ".join(quote_lines) if quote_lines else None
 
 
 class BookFusionClient:
-
     def __init__(self):
         self.session = requests.Session()
 
     @property
     def highlights_api_key(self) -> str:
-        return os.environ.get('BOOKFUSION_API_KEY', '')
+        return os.environ.get("BOOKFUSION_API_KEY", "")
 
     @property
     def upload_api_key(self) -> str:
-        return os.environ.get('BOOKFUSION_UPLOAD_API_KEY', '')
+        return os.environ.get("BOOKFUSION_UPLOAD_API_KEY", "")
 
     def is_configured(self) -> bool:
-        enabled_val = os.environ.get('BOOKFUSION_ENABLED', '').lower()
-        if enabled_val == 'false':
+        enabled_val = os.environ.get("BOOKFUSION_ENABLED", "").lower()
+        if enabled_val == "false":
             return False
         return bool(self.highlights_api_key) or bool(self.upload_api_key)
 
@@ -171,17 +165,17 @@ class BookFusionClient:
         """Test connectivity by hitting the highlights sync endpoint with a null cursor."""
         key = api_key_override or self.highlights_api_key
         if not key:
-            return False, 'Highlights API key not configured'
+            return False, "Highlights API key not configured"
         try:
             resp = self.session.post(
-                f'{BASE_URL}/obsidian-api/sync',
-                headers={'X-Token': key, 'API-Version': '1', 'Content-Type': 'application/json'},
-                json={'cursor': None},
+                f"{BASE_URL}/obsidian-api/sync",
+                headers={"X-Token": key, "API-Version": "1", "Content-Type": "application/json"},
+                json={"cursor": None},
                 timeout=15,
             )
             if resp.status_code == 200:
-                return True, 'Connected'
-            return False, f'HTTP {resp.status_code}'
+                return True, "Connected"
+            return False, f"HTTP {resp.status_code}"
         except requests.RequestException as e:
             return False, str(e)
 
@@ -189,16 +183,16 @@ class BookFusionClient:
         """Test connectivity to the Calibre upload API."""
         key = api_key_override or self.upload_api_key
         if not key:
-            return False, 'Upload API key not configured'
+            return False, "Upload API key not configured"
         try:
             resp = self.session.get(
-                f'{CALIBRE_API}/uploads?isbn=test',
+                f"{CALIBRE_API}/uploads?isbn=test",
                 headers=_calibre_headers(key),
                 timeout=15,
             )
             if resp.status_code == 200:
-                return True, 'Connected'
-            return False, f'HTTP {resp.status_code}'
+                return True, "Connected"
+            return False, f"HTTP {resp.status_code}"
         except requests.RequestException as e:
             return False, str(e)
 
@@ -210,7 +204,7 @@ class BookFusionClient:
             return None
         try:
             resp = self.session.get(
-                f'{CALIBRE_API}/uploads/{digest}',
+                f"{CALIBRE_API}/uploads/{digest}",
                 headers=_calibre_headers(self.upload_api_key),
                 timeout=15,
             )
@@ -236,13 +230,15 @@ class BookFusionClient:
 
         # Step 1: Init upload — POST /uploads/init (multipart: filename + digest)
         try:
-            body, ct = _build_multipart([
-                ('filename', filename),
-                ('digest', digest),
-            ])
+            body, ct = _build_multipart(
+                [
+                    ("filename", filename),
+                    ("digest", digest),
+                ]
+            )
             init_resp = self.session.post(
-                f'{CALIBRE_API}/uploads/init',
-                headers={**headers, 'Content-Type': ct},
+                f"{CALIBRE_API}/uploads/init",
+                headers={**headers, "Content-Type": ct},
                 data=body,
                 timeout=15,
             )
@@ -255,8 +251,8 @@ class BookFusionClient:
             return None
 
         # Step 2: Upload to S3 — POST to pre-signed URL (form params + file)
-        s3_url = init_data.get('url')
-        s3_params = init_data.get('params') or {}
+        s3_url = init_data.get("url")
+        s3_params = init_data.get("params") or {}
         if not s3_url:
             logger.error("BookFusion upload init returned no S3 URL")
             return None
@@ -265,12 +261,12 @@ class BookFusionClient:
             s3_fields: list[tuple[str, str | tuple[str, bytes]]] = []
             for k, v in s3_params.items():
                 s3_fields.append((k, v))
-            s3_fields.append(('file', (filename, file_bytes)))
+            s3_fields.append(("file", (filename, file_bytes)))
             s3_body, s3_ct = _build_multipart(s3_fields)
 
             s3_resp = self.session.post(
                 s3_url,
-                headers={'Content-Type': s3_ct},
+                headers={"Content-Type": s3_ct},
                 data=s3_body,
                 timeout=120,
             )
@@ -283,29 +279,29 @@ class BookFusionClient:
             return None
 
         # Step 3: Finalize — POST /uploads/finalize (multipart: key, digest, metadata)
-        s3_key = s3_params.get('key', '')
+        s3_key = s3_params.get("key", "")
         try:
             # Build metadata digest matching the Calibre plugin's get_metadata_digest
             h = hashlib.sha256()
-            h.update(title.encode('utf-8'))
-            author_list = [a.strip() for a in authors.split(',') if a.strip()]
+            h.update(title.encode("utf-8"))
+            author_list = [a.strip() for a in authors.split(",") if a.strip()]
             for author in author_list:
-                h.update(author.encode('utf-8'))
+                h.update(author.encode("utf-8"))
             meta_digest = h.hexdigest()
 
             finalize_fields: list[tuple[str, str]] = [
-                ('key', s3_key),
-                ('digest', digest),
-                ('metadata[calibre_metadata_digest]', meta_digest),
-                ('metadata[title]', title),
+                ("key", s3_key),
+                ("digest", digest),
+                ("metadata[calibre_metadata_digest]", meta_digest),
+                ("metadata[title]", title),
             ]
             for author in author_list:
-                finalize_fields.append(('metadata[author_list][]', author))
+                finalize_fields.append(("metadata[author_list][]", author))
 
             body, ct = _build_multipart(finalize_fields)
             finalize_resp = self.session.post(
-                f'{CALIBRE_API}/uploads/finalize',
-                headers={**headers, 'Content-Type': ct},
+                f"{CALIBRE_API}/uploads/finalize",
+                headers={**headers, "Content-Type": ct},
                 data=body,
                 timeout=30,
             )
@@ -339,16 +335,16 @@ class BookFusionClient:
                 break
             try:
                 resp = self.session.get(
-                    f'{CALIBRE_API}/uploads',
+                    f"{CALIBRE_API}/uploads",
                     headers=_calibre_headers(self.upload_api_key),
-                    params={'page': page, 'per_page': 100},
+                    params={"page": page, "per_page": 100},
                     timeout=30,
                 )
                 if resp.status_code != 200:
                     logger.warning(f"BookFusion library fetch failed: HTTP {resp.status_code}")
                     break
                 data = resp.json()
-                books = data if isinstance(data, list) else data.get('books', data.get('uploads', []))
+                books = data if isinstance(data, list) else data.get("books", data.get("uploads", []))
                 if not books:
                     break
                 all_books.extend(books)
@@ -366,11 +362,11 @@ class BookFusionClient:
     def fetch_highlights(self, cursor: str | None = None) -> dict:
         """Fetch one page of highlights from the Obsidian sync API."""
         if not self.highlights_api_key:
-            raise ValueError('Highlights API key not configured')
+            raise ValueError("Highlights API key not configured")
         resp = self.session.post(
-            f'{BASE_URL}/obsidian-api/sync',
-            headers={'X-Token': self.highlights_api_key, 'API-Version': '1', 'Content-Type': 'application/json'},
-            json={'cursor': cursor},
+            f"{BASE_URL}/obsidian-api/sync",
+            headers={"X-Token": self.highlights_api_key, "API-Version": "1", "Content-Type": "application/json"},
+            json={"cursor": cursor},
             timeout=30,
         )
         resp.raise_for_status()
@@ -395,65 +391,67 @@ class BookFusionClient:
 
         while True:
             data = self.fetch_highlights(cursor)
-            pages = data.get('pages') or []
+            pages = data.get("pages") or []
 
-            if data.get('next_sync_cursor'):
-                last_next_sync_cursor = data['next_sync_cursor']
+            if data.get("next_sync_cursor"):
+                last_next_sync_cursor = data["next_sync_cursor"]
 
             highlights_batch = []
             for page in pages:
                 if not isinstance(page, dict):
                     continue
-                if page.get('type') != 'book':
+                if page.get("type") != "book":
                     continue
 
-                book_id = str(page.get('id', '')).strip()
+                book_id = str(page.get("id", "")).strip()
                 if not book_id:
                     continue
-                raw_frontmatter = page.get('frontmatter')
+                raw_frontmatter = page.get("frontmatter")
                 parsed = _parse_frontmatter(raw_frontmatter)
-                book_title = parsed['title'] or page.get('filename', '')
-                if book_title.endswith('.md'):
+                book_title = parsed["title"] or page.get("filename", "")
+                if book_title.endswith(".md"):
                     book_title = book_title[:-3].strip()
 
-                hl_count = len(page.get('highlights') or [])
+                hl_count = len(page.get("highlights") or [])
                 if book_id not in all_books:
                     all_books[book_id] = {
-                        'bookfusion_id': book_id,
-                        'title': book_title,
-                        'authors': parsed['authors'],
-                        'filename': page.get('filename', ''),
-                        'frontmatter': raw_frontmatter,
-                        'tags': parsed['tags'],
-                        'series': parsed['series'],
-                        'highlight_count': hl_count,
+                        "bookfusion_id": book_id,
+                        "title": book_title,
+                        "authors": parsed["authors"],
+                        "filename": page.get("filename", ""),
+                        "frontmatter": raw_frontmatter,
+                        "tags": parsed["tags"],
+                        "series": parsed["series"],
+                        "highlight_count": hl_count,
                     }
                 else:
-                    all_books[book_id]['highlight_count'] += hl_count
+                    all_books[book_id]["highlight_count"] += hl_count
 
-                for hl in (page.get('highlights') or []):
+                for hl in page.get("highlights") or []:
                     if not isinstance(hl, dict):
                         continue
-                    highlight_id = str(hl.get('id', '')).strip()
+                    highlight_id = str(hl.get("id", "")).strip()
                     if not highlight_id:
                         continue
-                    content = hl.get('content') or ''
-                    highlights_batch.append({
-                        'bookfusion_book_id': book_id,
-                        'highlight_id': highlight_id,
-                        'content': content,
-                        'chapter_heading': hl.get('chapter_heading'),
-                        'book_title': book_title,
-                        'highlighted_at': _parse_highlight_date(content),
-                        'quote_text': _parse_highlight_quote(content),
-                    })
+                    content = hl.get("content") or ""
+                    highlights_batch.append(
+                        {
+                            "bookfusion_book_id": book_id,
+                            "highlight_id": highlight_id,
+                            "content": content,
+                            "chapter_heading": hl.get("chapter_heading"),
+                            "book_title": book_title,
+                            "highlighted_at": _parse_highlight_date(content),
+                            "quote_text": _parse_highlight_quote(content),
+                        }
+                    )
 
             if highlights_batch:
                 result = db_service.save_bookfusion_highlights(highlights_batch)
-                total_new += result['saved']
-                all_new_ids.extend(result['new_ids'])
+                total_new += result["saved"]
+                all_new_ids.extend(result["new_ids"])
 
-            next_page = data.get('cursor')
+            next_page = data.get("cursor")
             if next_page is None:
                 break
             if next_page == cursor:
@@ -473,24 +471,24 @@ class BookFusionClient:
         try:
             library = self.fetch_library()
             for item in library:
-                bid = str(item.get('id', '')).strip()
+                bid = str(item.get("id", "")).strip()
                 if not bid or bid in all_books:
                     continue
-                title = item.get('title', '') or item.get('filename', '')
-                if title.endswith('.md'):
+                title = item.get("title", "") or item.get("filename", "")
+                if title.endswith(".md"):
                     title = title[:-3].strip()
-                authors = item.get('author', '') or item.get('authors', '')
+                authors = item.get("author", "") or item.get("authors", "")
                 if isinstance(authors, list):
-                    authors = ', '.join(authors)
+                    authors = ", ".join(authors)
                 all_books[bid] = {
-                    'bookfusion_id': bid,
-                    'title': title,
-                    'authors': authors,
-                    'filename': item.get('filename', ''),
-                    'frontmatter': None,
-                    'tags': '',
-                    'series': '',
-                    'highlight_count': 0,
+                    "bookfusion_id": bid,
+                    "title": title,
+                    "authors": authors,
+                    "filename": item.get("filename", ""),
+                    "frontmatter": None,
+                    "tags": "",
+                    "series": "",
+                    "highlight_count": 0,
                 }
         except Exception as e:
             logger.warning(f"Could not fetch full BookFusion library: {e}")
@@ -499,4 +497,4 @@ class BookFusionClient:
         if all_books:
             books_saved = db_service.save_bookfusion_books(list(all_books.values()))
 
-        return {'new_highlights': total_new, 'books_saved': books_saved, 'new_ids': all_new_ids}
+        return {"new_highlights": total_new, "books_saved": books_saved, "new_ids": all_new_ids}

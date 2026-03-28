@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 # Add project root to path
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, project_root)
 
 from src.db.models import Book
@@ -28,11 +28,7 @@ def test_clear_progress_optimization():
     db_service.delete_states_for_book.return_value = 5
     db_service.get_kosync_documents_for_book_by_book_id.return_value = []
 
-    sync_manager = SyncManager(
-        database_service=db_service,
-        alignment_service=alignment_service,
-        sync_clients={}
-    )
+    sync_manager = SyncManager(database_service=db_service, alignment_service=alignment_service, sync_clients={})
 
     # CASE A: Smart Reset Enabled (Default), Alignment EXISTS
     print("\n[CASE A] Smart Reset enabled, Alignment EXISTS")
@@ -67,10 +63,13 @@ def test_clear_progress_optimization():
         sync_manager.clear_progress("test_book")
 
         print(f"DEBUG: Book status: {book.status}")
-        assert book.status == "not_started", "Book should be not_started after clearing progress with smart reset disabled"
+        assert book.status == "not_started", (
+            "Book should be not_started after clearing progress with smart reset disabled"
+        )
         db_service.save_book.assert_called()
 
     print("\n[PASS] All clear_progress optimization tests passed!")
+
 
 if __name__ == "__main__":
     try:
@@ -78,5 +77,6 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"\n[FAIL] Test failed: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)

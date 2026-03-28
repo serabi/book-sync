@@ -7,7 +7,7 @@ from datetime import datetime
 
 from flask import Blueprint, current_app, jsonify, render_template, request
 
-from src.blueprints.helpers import get_booklore_client, get_container, get_database_service
+from src.blueprints.helpers import get_container, get_database_service, get_grimmory_client
 from src.db.models import Book, HardcoverDetails
 from src.utils.title_utils import clean_book_title, normalize_title
 
@@ -27,16 +27,16 @@ def bookfusion_page():
     return render_template("bookfusion.html")
 
 
-@bookfusion_bp.route("/api/bookfusion/booklore-books")
-def booklore_books():
-    """List Booklore books for upload selection, filtered by supported formats."""
+@bookfusion_bp.route("/api/bookfusion/grimmory-books")
+def grimmory_books():
+    """List Grimmory books for upload selection, filtered by supported formats."""
     q = request.args.get("q", "").strip()
     results = []
 
-    client = get_booklore_client()
+    client = get_grimmory_client()
     if client.is_configured():
         try:
-            label = current_app.config.get("BOOKLORE_LABEL", "Booklore")
+            label = current_app.config.get("GRIMMORY_LABEL", "Grimmory")
             books = client.search_books(q) if q else client.get_all_books()
             for b in books or []:
                 fname = b.get("fileName", "")
@@ -52,14 +52,14 @@ def booklore_books():
                     }
                 )
         except Exception as e:
-            logger.warning(f"Booklore search failed: {e}")
+            logger.warning(f"Grimmory search failed: {e}")
 
     return jsonify(results)
 
 
 @bookfusion_bp.route("/api/bookfusion/upload", methods=["POST"])
 def upload_book():
-    """Upload a book from Booklore to BookFusion."""
+    """Upload a book from Grimmory to BookFusion."""
     data = request.get_json()
     if not data:
         return jsonify({"error": "No data provided"}), 400
@@ -78,14 +78,14 @@ def upload_book():
     if not bf_client.upload_api_key:
         return jsonify({"error": "BookFusion upload API key not configured"}), 400
 
-    bl_client = get_booklore_client()
+    bl_client = get_grimmory_client()
     if not bl_client.is_configured():
-        return jsonify({"error": "Booklore not configured"}), 400
+        return jsonify({"error": "Grimmory not configured"}), 400
 
-    # Download from Booklore
+    # Download from Grimmory
     file_bytes = bl_client.download_book(book_id)
     if not file_bytes:
-        return jsonify({"error": "Failed to download book from Booklore"}), 500
+        return jsonify({"error": "Failed to download book from Grimmory"}), 500
 
     # Upload to BookFusion
     logger.info(f"BookFusion upload request: title='{title}', authors='{authors}', filename='{filename}'")

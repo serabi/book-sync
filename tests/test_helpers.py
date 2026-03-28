@@ -2,28 +2,29 @@
 
 from unittest.mock import Mock, patch
 
-# ── get_kosync_id_for_ebook: Booklore download failure ────────────
+# ── get_kosync_id_for_ebook: Grimmory download failure ────────────
 
-def test_get_kosync_id_booklore_download_raises(flask_app, mock_container):
-    """When Booklore download_book raises, fall through to filesystem lookup."""
+
+def test_get_kosync_id_grimmory_download_raises(flask_app, mock_container):
+    """When Grimmory download_book raises, fall through to filesystem lookup."""
     bl_client = Mock()
     bl_client.is_configured.return_value = True
-    bl_client.download_book.side_effect = Exception("Booklore network error")
+    bl_client.download_book.side_effect = Exception("Grimmory network error")
 
     mock_container.mock_ebook_parser.get_kosync_id.return_value = None
 
     with flask_app.app_context():
         from src.blueprints.helpers import get_kosync_id_for_ebook
 
-        result = get_kosync_id_for_ebook("book.epub", booklore_id=42, bl_client=bl_client)
+        result = get_kosync_id_for_ebook("book.epub", grimmory_id=42, bl_client=bl_client)
 
     # Should return None because filesystem also doesn't have the file
     assert result is None
     bl_client.download_book.assert_called_once_with(42)
 
 
-def test_get_kosync_id_booklore_download_returns_none(flask_app, mock_container):
-    """When Booklore download_book returns None, fall through to filesystem."""
+def test_get_kosync_id_grimmory_download_returns_none(flask_app, mock_container):
+    """When Grimmory download_book returns None, fall through to filesystem."""
     bl_client = Mock()
     bl_client.is_configured.return_value = True
     bl_client.download_book.return_value = None
@@ -31,7 +32,7 @@ def test_get_kosync_id_booklore_download_returns_none(flask_app, mock_container)
     with flask_app.app_context():
         from src.blueprints.helpers import get_kosync_id_for_ebook
 
-        result = get_kosync_id_for_ebook("book.epub", booklore_id=42, bl_client=bl_client)
+        result = get_kosync_id_for_ebook("book.epub", grimmory_id=42, bl_client=bl_client)
 
     assert result is None
 
@@ -64,58 +65,60 @@ def test_get_kosync_id_cwa_download_raises(flask_app, mock_container):
     assert result is None
 
 
-# ── find_in_booklore: API raises ──────────────────────────────────
+# ── find_in_grimmory: API raises ──────────────────────────────────
 
-def test_find_in_booklore_empty_filename(flask_app, mock_container):
-    """find_in_booklore returns (None, None) for empty filename."""
+
+def test_find_in_grimmory_empty_filename(flask_app, mock_container):
+    """find_in_grimmory returns (None, None) for empty filename."""
     with flask_app.app_context():
-        from src.blueprints.helpers import find_in_booklore
+        from src.blueprints.helpers import find_in_grimmory
 
-        book, client = find_in_booklore("")
+        book, client = find_in_grimmory("")
 
     assert book is None
     assert client is None
 
 
-def test_find_in_booklore_none_filename(flask_app, mock_container):
-    """find_in_booklore returns (None, None) for None filename."""
+def test_find_in_grimmory_none_filename(flask_app, mock_container):
+    """find_in_grimmory returns (None, None) for None filename."""
     with flask_app.app_context():
-        from src.blueprints.helpers import find_in_booklore
+        from src.blueprints.helpers import find_in_grimmory
 
-        book, client = find_in_booklore(None)
+        book, client = find_in_grimmory(None)
 
     assert book is None
     assert client is None
 
 
-def test_find_in_booklore_not_configured(flask_app, mock_container):
-    """find_in_booklore returns (None, None) when Booklore is not configured."""
-    mock_container.mock_booklore_client.is_configured.return_value = False
+def test_find_in_grimmory_not_configured(flask_app, mock_container):
+    """find_in_grimmory returns (None, None) when Grimmory is not configured."""
+    mock_container.mock_grimmory_client.is_configured.return_value = False
 
     with flask_app.app_context():
-        from src.blueprints.helpers import find_in_booklore
+        from src.blueprints.helpers import find_in_grimmory
 
-        book, client = find_in_booklore("test.epub")
+        book, client = find_in_grimmory("test.epub")
 
     assert book is None
     assert client is None
 
 
-def test_find_in_booklore_no_match(flask_app, mock_container):
-    """find_in_booklore returns (None, None) when no book matches."""
-    mock_container.mock_booklore_client.is_configured.return_value = True
-    mock_container.mock_booklore_client.find_book_by_filename.return_value = None
+def test_find_in_grimmory_no_match(flask_app, mock_container):
+    """find_in_grimmory returns (None, None) when no book matches."""
+    mock_container.mock_grimmory_client.is_configured.return_value = True
+    mock_container.mock_grimmory_client.find_book_by_filename.return_value = None
 
     with flask_app.app_context():
-        from src.blueprints.helpers import find_in_booklore
+        from src.blueprints.helpers import find_in_grimmory
 
-        book, client = find_in_booklore("missing.epub")
+        book, client = find_in_grimmory("missing.epub")
 
     assert book is None
     assert client is None
 
 
 # ── serialize_suggestion with None fields ─────────────────────────
+
 
 def test_serialize_suggestion_with_none_fields():
     """serialize_suggestion handles None created_at and empty matches."""
@@ -155,7 +158,12 @@ def test_serialize_suggestion_with_bookfusion_evidence():
     suggestion.author = "Author"
     suggestion.cover_url = "/cover.jpg"
     suggestion.matches = [
-        {"ebook_filename": "test.epub", "evidence": ["bookfusion_catalog"], "source_family": "bookfusion", "bookfusion_ids": [1]},
+        {
+            "ebook_filename": "test.epub",
+            "evidence": ["bookfusion_catalog"],
+            "source_family": "bookfusion",
+            "bookfusion_ids": [1],
+        },
     ]
     suggestion.created_at = None
     suggestion.status = "pending"
@@ -189,6 +197,7 @@ def test_serialize_suggestion_hidden_status():
 
 # ── attempt_hardcover_automatch: exception swallowed ──────────────
 
+
 def test_attempt_hardcover_automatch_swallows_exception(flask_app, mock_container):
     """attempt_hardcover_automatch logs but does not raise on failure."""
     mock_container.mock_hardcover_service.is_configured.return_value = True
@@ -204,24 +213,25 @@ def test_attempt_hardcover_automatch_swallows_exception(flask_app, mock_containe
     mock_container.mock_hardcover_service.automatch_hardcover.assert_called_once()
 
 
-# ── find_booklore_metadata ────────────────────────────────────────
+# ── find_grimmory_metadata ────────────────────────────────────────
 
-def test_find_booklore_metadata_no_match():
-    """find_booklore_metadata returns None when no filename matches."""
-    from src.blueprints.helpers import find_booklore_metadata
+
+def test_find_grimmory_metadata_no_match():
+    """find_grimmory_metadata returns None when no filename matches."""
+    from src.blueprints.helpers import find_grimmory_metadata
 
     book = Mock()
     book.ebook_filename = "missing.epub"
     book.original_ebook_filename = None
 
-    result = find_booklore_metadata(book, {})
+    result = find_grimmory_metadata(book, {})
 
     assert result is None
 
 
-def test_find_booklore_metadata_matches_original():
-    """find_booklore_metadata falls back to original_ebook_filename."""
-    from src.blueprints.helpers import find_booklore_metadata
+def test_find_grimmory_metadata_matches_original():
+    """find_grimmory_metadata falls back to original_ebook_filename."""
+    from src.blueprints.helpers import find_grimmory_metadata
 
     book = Mock()
     book.ebook_filename = "renamed.epub"
@@ -229,8 +239,8 @@ def test_find_booklore_metadata_matches_original():
 
     meta = Mock()
     meta.title = "Original Title"
-    booklore_by_filename = {"original.epub": [meta]}
+    grimmory_by_filename = {"original.epub": [meta]}
 
-    result = find_booklore_metadata(book, booklore_by_filename)
+    result = find_grimmory_metadata(book, grimmory_by_filename)
 
     assert result == meta

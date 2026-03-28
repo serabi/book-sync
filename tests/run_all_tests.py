@@ -20,14 +20,12 @@ def run_test_file(test_file, description):
 
         # Merge PYTHONPATH with existing environment to preserve system paths
         import os
-        env = os.environ.copy()
-        env['PYTHONPATH'] = str(project_root)
-        env['PYTHONIOENCODING'] = 'utf-8'
 
-        result = subprocess.run([
-            sys.executable, test_file
-        ], cwd=project_root, env=env,
-        capture_output=True, text=True)
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(project_root)
+        env["PYTHONIOENCODING"] = "utf-8"
+
+        result = subprocess.run([sys.executable, test_file], cwd=project_root, env=env, capture_output=True, text=True)
 
         if result.returncode == 0:
             print(result.stderr)  # unittest output goes to stderr
@@ -45,6 +43,7 @@ def run_test_file(test_file, description):
     except Exception as e:
         print(f"[FAIL] {description} FAILED with exception: {e}")
         return False
+
 
 def main():
     """Run all dependency injection unit tests."""
@@ -114,6 +113,7 @@ def main():
         print(f"\n[FAIL] {total - passed} test(s) failed. Please review the failures above.")
         return False
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     success = main()
     sys.exit(0 if success else 1)

@@ -1,5 +1,5 @@
 {# Book card macro — extracted from index.html for reuse and readability #}
-{% macro render_book_card(mapping, integrations, booklore_label='Booklore') %}
+{% macro render_book_card(mapping, integrations, grimmory_label='Grimmory') %}
 {# Calculate sync discrepancy for highlighting #}
 {% set progress_values = [] %}
 {% if mapping.states.abs is defined and mapping.states.abs.percentage is not none %}
@@ -8,11 +8,11 @@
 {% if mapping.states.storyteller is defined and mapping.states.storyteller.percentage is not none %}
 {% set _ = progress_values.append(mapping.states.storyteller.percentage) %}
 {% endif %}
-{% if mapping.states.booklore is defined and mapping.states.booklore.percentage is not none %}
-{% set _ = progress_values.append(mapping.states.booklore.percentage) %}
+{% if mapping.states.grimmory is defined and mapping.states.grimmory.percentage is not none %}
+{% set _ = progress_values.append(mapping.states.grimmory.percentage) %}
 {% endif %}
-{% if mapping.states.booklore2 is defined and mapping.states.booklore2.percentage is not none %}
-{% set _ = progress_values.append(mapping.states.booklore2.percentage) %}
+{% if mapping.states.grimmory2 is defined and mapping.states.grimmory2.percentage is not none %}
+{% set _ = progress_values.append(mapping.states.grimmory2.percentage) %}
 {% endif %}
 {% if mapping.states.kosync is defined and mapping.states.kosync.percentage is not none %}
 {% set _ = progress_values.append(mapping.states.kosync.percentage) %}
@@ -228,16 +228,16 @@ else 0 %}
                             </div>
                             {% endif %}
 
-                            {# Booklore - hide for audio-only #}
-                            {% if bt != 'audio-only' and integrations.booklore %}
-                            {% if mapping.states.booklore is defined or mapping.booklore_id %}
-                            <a href="{{ mapping.booklore_url|default('#') }}" target="_blank" rel="noopener noreferrer"
-                                class="service-item" title="Open in {{ booklore_label }}">
-                                <img src="/static/booklore.png" alt="BL" class="service-icon">
-                                <span class="service-name">{{ booklore_label }}</span>
+                            {# Grimmory - hide for audio-only #}
+                            {% if bt != 'audio-only' and integrations.grimmory %}
+                            {% if mapping.states.grimmory is defined or mapping.grimmory_id %}
+                            <a href="{{ mapping.grimmory_url|default('#') }}" target="_blank" rel="noopener noreferrer"
+                                class="service-item" title="Open in {{ grimmory_label }}">
+                                <img src="/static/grimmory.png" alt="GR" class="service-icon">
+                                <span class="service-name">{{ grimmory_label }}</span>
                                 <span class="service-value">
-                                    {% if mapping.states.booklore is defined %}
-                                    {{ '%.1f' | format(mapping.states.booklore.percentage) }}%
+                                    {% if mapping.states.grimmory is defined %}
+                                    {{ '%.1f' | format(mapping.states.grimmory.percentage) }}%
                                     {% else %}
                                     0.0%
                                     {% endif %}
@@ -245,11 +245,11 @@ else 0 %}
                             </a>
                             {% else %}
                             <div class="service-item">
-                                <img src="/static/booklore.png" alt="BL" class="service-icon grayscale-muted">
-                                <span class="service-name">{{ booklore_label }}</span>
+                                <img src="/static/grimmory.png" alt="GR" class="service-icon grayscale-muted">
+                                <span class="service-name">{{ grimmory_label }}</span>
                                 <span class="service-value cursor-pointer color-inherit"
-                                    onclick='openBookloreModal({{ mapping.id }}, {{ mapping.title|tojson }})'
-                                    title="Link to {{ booklore_label }}">
+                                    onclick='openGrimmoryModal({{ mapping.id }}, {{ mapping.title|tojson }})'
+                                    title="Link to {{ grimmory_label }}">
                                     <span class="link-icon">+</span>
                                 </span>
                             </div>

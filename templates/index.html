@@ -74,7 +74,7 @@
         </div>
         <div class="book-grid" id="processing-grid">
             {% for mapping in processing_books %}
-            {{ render_book_card(mapping, integrations, booklore_label) }}
+            {{ render_book_card(mapping, integrations, grimmory_label) }}
             {% endfor %}
         </div>
         </div>
@@ -109,7 +109,7 @@
         <div class="book-grid" id="currently-reading-grid">
             {% for mapping in mappings %}
             {% if mapping.unified_progress > 0 and mapping.unified_progress < 100 and mapping.status not in ['completed', 'paused', 'dnf', 'not_started', 'pending', 'processing', 'failed_retry_later'] %} {{ render_book_card(mapping,
-                integrations, booklore_label) }} {% endif %} {% endfor %} </div>
+                integrations, grimmory_label) }} {% endif %} {% endfor %} </div>
         </div>
 
                 {% set finished_books = mappings|selectattr('status', 'equalto', 'completed')|list + mappings|rejectattr('status', 'equalto', 'completed')|selectattr('unified_progress', 'ge', 100)|list %}
@@ -119,7 +119,7 @@
                 </div>
                 <div class="book-grid" id="finished-grid">
                     {% for mapping in finished_books %}
-                    {{ render_book_card(mapping, integrations, booklore_label) }}
+                    {{ render_book_card(mapping, integrations, grimmory_label) }}
                     {% endfor %}
                 </div>
                 </div>
@@ -131,7 +131,7 @@
                 </div>
                 <div class="book-grid" id="paused-grid">
                     {% for mapping in paused_books %}
-                    {{ render_book_card(mapping, integrations, booklore_label) }}
+                    {{ render_book_card(mapping, integrations, grimmory_label) }}
                     {% endfor %}
                 </div>
                 </div>
@@ -143,7 +143,7 @@
                 </div>
                 <div class="book-grid" id="dnf-grid">
                     {% for mapping in dnf_books %}
-                    {{ render_book_card(mapping, integrations, booklore_label) }}
+                    {{ render_book_card(mapping, integrations, grimmory_label) }}
                     {% endfor %}
                 </div>
                 </div>
@@ -155,7 +155,7 @@
 
                 <div class="book-grid" id="all-books-grid">
                     {% for mapping in mappings %}
-                    {{ render_book_card(mapping, integrations, booklore_label) }}
+                    {{ render_book_card(mapping, integrations, grimmory_label) }}
                     {% endfor %}
                 </div>
                 </div>
@@ -227,13 +227,13 @@
             </div>
         </div>
         <script src="/static/js/hardcover-modal.js" defer></script>
-        <!-- Booklore Link Modal -->
+        <!-- Grimmory Link Modal -->
         <div id="bl-modal" class="hc-modal" style="display:none;">
-            <div class="hc-modal-backdrop" onclick="closeBookloreModal()"></div>
+            <div class="hc-modal-backdrop" onclick="closeGrimmoryModal()"></div>
             <div class="hc-modal-content">
                 <div class="hc-modal-header">
-                    <h3 id="bl-modal-title">Link to Booklore</h3>
-                    <button class="hc-modal-close" onclick="closeBookloreModal()" aria-label="Close">
+                    <h3 id="bl-modal-title">Link to Grimmory</h3>
+                    <button class="hc-modal-close" onclick="closeGrimmoryModal()" aria-label="Close">
                         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor"
                             stroke-width="2" stroke-linecap="round">
                             <path d="M1 1l12 12M13 1L1 13" />
@@ -242,14 +242,14 @@
                 </div>
                 <div class="hc-modal-body">
                     <div class="st-search-bar">
-                        <input type="text" id="bl-search-input" placeholder="Search Booklore..." class="modal-search-input">
-                        <button onclick="searchBooklore()" class="btn btn-primary">Search</button>
+                        <input type="text" id="bl-search-input" placeholder="Search Grimmory..." class="modal-search-input">
+                        <button onclick="searchGrimmory()" class="btn btn-primary">Search</button>
                     </div>
                     <div id="bl-results" class="st-results"></div>
                 </div>
             </div>
         </div>
-        <script src="/static/js/booklore-link-modal.js" defer></script>
+        <script src="/static/js/grimmory-link-modal.js" defer></script>
         <!-- Storyteller Link Modal -->
         <div id="st-modal" class="hidden">
             <div class="st-modal-content">

@@ -34,11 +34,7 @@ def initialize_database(data_dir: str = "data") -> DatabaseService:
     json_mapping_path = data_path / "mapping_db.json"
     json_state_path = data_path / "last_state.json"
 
-    migrator = DatabaseMigrator(
-        db_service,
-        str(json_mapping_path),
-        str(json_state_path)
-    )
+    migrator = DatabaseMigrator(db_service, str(json_mapping_path), str(json_state_path))
 
     if migrator.should_migrate():
         logger.info("Performing one-time migration from JSON to SQLAlchemy...")

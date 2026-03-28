@@ -8,10 +8,10 @@ from pathlib import Path
 from flask import Blueprint, current_app, flash, redirect, render_template, request, session, url_for
 
 from src.blueprints.helpers import (
-    any_booklore_configured,
+    any_grimmory_configured,
     attempt_hardcover_automatch,
     audiobook_matches_search,
-    find_in_booklore,
+    find_in_grimmory,
     get_abs_service,
     get_audiobook_author,
     get_audiobooks_conditionally,
@@ -60,7 +60,7 @@ def _submit_to_storyteller_async(container, abs_id, book_title, ebook_filename, 
                 return
             from src.utils.epub_resolver import get_local_epub
 
-            epub_path = get_local_epub(ebook_filename, books_dir, epub_cache_dir, container.booklore_client())
+            epub_path = get_local_epub(ebook_filename, books_dir, epub_cache_dir, container.grimmory_client())
             audio_files = container.abs_client().get_audio_files(abs_id)
             if epub_path and audio_files:
                 result = st_sub_svc.submit_book(abs_id, book_title, Path(epub_path), audio_files)
@@ -113,7 +113,7 @@ def _create_book_mapping(
     author=None,
     subtitle=None,
 ):
-    """Create a book mapping with full pipeline: Booklore, KOSync, merge, Hardcover, etc.
+    """Create a book mapping with full pipeline: Grimmory, KOSync, merge, Hardcover, etc.
 
     Returns (book, error_message). On success error_message is None.
     On failure book is None and error_message describes the problem.
@@ -121,14 +121,14 @@ def _create_book_mapping(
     database_service = get_database_service()
     abs_service = get_abs_service()
 
-    # Booklore lookup
-    booklore_id = None
-    bl_match, bl_match_client = find_in_booklore(ebook_filename)
+    # Grimmory lookup
+    grimmory_id = None
+    bl_match, bl_match_client = find_in_grimmory(ebook_filename)
     if bl_match:
-        booklore_id = bl_match.get("id")
+        grimmory_id = bl_match.get("id")
 
     # KOSync ID
-    kosync_doc_id = get_kosync_id_for_ebook(ebook_filename, booklore_id, bl_client=bl_match_client)
+    kosync_doc_id = get_kosync_id_for_ebook(ebook_filename, grimmory_id, bl_client=bl_match_client)
     if not kosync_doc_id:
         logger.warning(f"Cannot compute KOSync ID for '{sanitize_log_data(ebook_filename)}'")
         return None, "Could not compute KOSync ID for ebook"
@@ -204,13 +204,13 @@ def _create_book_mapping(
     if not migration_source_id:
         abs_service.add_to_collection(abs_id, current_app.config["ABS_COLLECTION_NAME"])
 
-    # Booklore shelf add
+    # Grimmory shelf add
     if bl_match_client:
         shelf_filename = original_ebook_filename or ebook_filename
         try:
             bl_match_client.add_to_shelf(shelf_filename)
         except Exception as e:
-            logger.warning(f"Booklore add_to_shelf failed for '{sanitize_log_data(shelf_filename)}': {e}")
+            logger.warning(f"Grimmory add_to_shelf failed for '{sanitize_log_data(shelf_filename)}': {e}")
 
     # Storyteller submission (background thread)
     if storyteller_submit:
@@ -357,12 +357,12 @@ def match():
 
             if ebook_filename:
                 # Ebook present (possibly with Storyteller too)
-                booklore_id = None
+                grimmory_id = None
                 matched_bl_client = None
-                bl_book, matched_bl_client = find_in_booklore(ebook_filename)
+                bl_book, matched_bl_client = find_in_grimmory(ebook_filename)
                 if bl_book:
-                    booklore_id = bl_book.get("id")
-                kosync_doc_id = get_kosync_id_for_ebook(ebook_filename, booklore_id, bl_client=matched_bl_client)
+                    grimmory_id = bl_book.get("id")
+                kosync_doc_id = get_kosync_id_for_ebook(ebook_filename, grimmory_id, bl_client=matched_bl_client)
                 if not kosync_doc_id:
                     return "Could not compute KOSync ID for ebook", 404
                 title = ebook_display_name or (bl_book.get("title") if bl_book else None) or Path(ebook_filename).stem
@@ -396,11 +396,11 @@ def match():
             book = database_service.get_book_by_ref(attach_abs_id)
             if not book:
                 return "Book not found", 404
-            booklore_id = None
-            bl_book, bl_client = find_in_booklore(ebook_filename)
+            grimmory_id = None
+            bl_book, bl_client = find_in_grimmory(ebook_filename)
             if bl_book:
-                booklore_id = bl_book.get("id")
-            kosync_doc_id = get_kosync_id_for_ebook(ebook_filename, booklore_id, bl_client=bl_client)
+                grimmory_id = bl_book.get("id")
+            kosync_doc_id = get_kosync_id_for_ebook(ebook_filename, grimmory_id, bl_client=bl_client)
             if not kosync_doc_id:
                 return "Could not compute KOSync ID for ebook", 404
             book.ebook_filename = ebook_filename
@@ -412,7 +412,7 @@ def match():
                 try:
                     bl_client.add_to_shelf(ebook_filename)
                 except Exception as e:
-                    logger.warning(f"Booklore add_to_shelf failed for '{sanitize_log_data(ebook_filename)}': {e}")
+                    logger.warning(f"Grimmory add_to_shelf failed for '{sanitize_log_data(ebook_filename)}': {e}")
             database_service.resolve_suggestion(kosync_doc_id)
             return redirect(url_for("dashboard.index"))
 
@@ -555,7 +555,7 @@ def match():
     # Detect available services for smart mode defaults
     abs_configured = abs_service.is_available()
     has_ebook_sources = (
-        any_booklore_configured()
+        any_grimmory_configured()
         or container.cwa_client().is_configured()
         or abs_service.has_ebook_libraries()
         or get_ebook_dir().exists()
@@ -693,9 +693,9 @@ def batch_match():
                         storyteller_uuid = item.get("storyteller_uuid") or None
 
                         if ebook_filename:
-                            bl_book, bl_client = find_in_booklore(ebook_filename)
-                            booklore_id = bl_book.get("id") if bl_book else None
-                            kosync_doc_id = get_kosync_id_for_ebook(ebook_filename, booklore_id, bl_client=bl_client)
+                            bl_book, bl_client = find_in_grimmory(ebook_filename)
+                            grimmory_id = bl_book.get("id") if bl_book else None
+                            kosync_doc_id = get_kosync_id_for_ebook(ebook_filename, grimmory_id, bl_client=bl_client)
                             if not kosync_doc_id:
                                 failed_items.append(item.get("ebook_display_name") or ebook_filename)
                                 continue
@@ -779,7 +779,7 @@ def batch_match():
 
     abs_configured = abs_service.is_available()
     has_ebook_sources = (
-        any_booklore_configured()
+        any_grimmory_configured()
         or container.cwa_client().is_configured()
         or abs_service.has_ebook_libraries()
         or get_ebook_dir().exists()

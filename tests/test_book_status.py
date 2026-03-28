@@ -36,10 +36,10 @@ class MockContainer:
     def abs_client(self):
         return self.mock_abs_client
 
-    def booklore_client(self):
+    def grimmory_client(self):
         return Mock(is_configured=Mock(return_value=False))
 
-    def booklore_client_group(self):
+    def grimmory_client_group(self):
         return Mock(is_configured=Mock(return_value=False))
 
     def hardcover_client(self):

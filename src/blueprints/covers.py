@@ -1,4 +1,4 @@
-"""Covers blueprint — /covers/<filename> and /api/cover-proxy/booklore/."""
+"""Covers blueprint — /covers/<filename> and /api/cover-proxy/grimmory/."""
 
 import logging
 
@@ -50,21 +50,21 @@ def serve_cover(filename):
     return "Cover not found", 404
 
 
-@covers_bp.route("/api/cover-proxy/booklore/<int:book_id>")
-def proxy_booklore_cover(book_id):
-    """Proxy cover access to Booklore (auth via query-parameter JWT)."""
+@covers_bp.route("/api/cover-proxy/grimmory/<int:book_id>")
+def proxy_grimmory_cover(book_id):
+    """Proxy cover access to Grimmory (auth via query-parameter JWT)."""
     container = get_container()
-    return _proxy_booklore_cover_for(container.booklore_client(), book_id, cache_prefix="bl")
+    return _proxy_grimmory_cover_for(container.grimmory_client(), book_id, cache_prefix="bl")
 
 
-@covers_bp.route("/api/cover-proxy/booklore2/<int:book_id>")
-def proxy_booklore2_cover(book_id):
-    """Proxy cover access to Booklore 2nd instance."""
+@covers_bp.route("/api/cover-proxy/grimmory2/<int:book_id>")
+def proxy_grimmory2_cover(book_id):
+    """Proxy cover access to Grimmory 2nd instance."""
     container = get_container()
-    return _proxy_booklore_cover_for(container.booklore_client_2(), book_id, cache_prefix="bl2")
+    return _proxy_grimmory_cover_for(container.grimmory_client_2(), book_id, cache_prefix="bl2")
 
 
-def _proxy_booklore_cover_for(bl_client, book_id, cache_prefix="bl"):
+def _proxy_grimmory_cover_for(bl_client, book_id, cache_prefix="bl"):
     """Shared cover proxy logic with local caching for offline resilience."""
     covers_dir = get_covers_dir()
     cache_file = covers_dir / f"{cache_prefix}-{book_id}.jpg"
@@ -80,12 +80,12 @@ def _proxy_booklore_cover_for(bl_client, book_id, cache_prefix="bl"):
                     try:
                         cache_file.write_bytes(data)
                     except Exception:
-                        logger.debug(f"Failed to cache Booklore cover for book {book_id}")
+                        logger.debug(f"Failed to cache Grimmory cover for book {book_id}")
                     resp = Response(data, content_type="image/jpeg")
                     resp.headers["Cache-Control"] = "public, max-age=86400, immutable"
                     return resp
         except Exception as e:
-            logger.error(f"Error proxying Booklore cover for book {book_id}: {e}")
+            logger.error(f"Error proxying Grimmory cover for book {book_id}: {e}")
 
     # Fall back to local cache
     if cache_file.exists():

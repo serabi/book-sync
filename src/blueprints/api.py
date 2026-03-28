@@ -1,4 +1,4 @@
-"""API blueprint — /api/status, /api/suggestions/*, /api/storyteller/*, /api/booklore/*.
+"""API blueprint — /api/status, /api/suggestions/*, /api/storyteller/*, /api/grimmory/*.
 
 ABS-specific routes (/api/abs/*, /api/cover-proxy/*) are in abs_bp.py.
 """
@@ -8,11 +8,11 @@ import logging
 from flask import Blueprint, current_app, jsonify, request
 
 from src.blueprints.helpers import (
-    find_in_booklore,
+    find_in_grimmory,
     get_book_or_404,
-    get_booklore_client,
     get_container,
     get_database_service,
+    get_grimmory_client,
     get_kosync_id_for_ebook,
     serialize_suggestion,
 )
@@ -75,9 +75,9 @@ def api_status():
             elif client_name == "storyteller":
                 mapping["storyteller_pct"] = pct_val
                 mapping["storyteller_xpath"] = getattr(state, "xpath", None)
-            elif client_name == "booklore":
-                mapping["booklore_pct"] = pct_val
-                mapping["booklore_xpath"] = getattr(state, "xpath", None)
+            elif client_name == "grimmory":
+                mapping["grimmory_pct"] = pct_val
+                mapping["grimmory_xpath"] = getattr(state, "xpath", None)
 
         # Compute unified_progress — max percentage across all clients
         all_pcts = [s["percentage"] for s in mapping["states"].values()]
@@ -272,10 +272,10 @@ def api_storyteller_link(book_ref):
     return jsonify({"message": "Linked successfully"}), 200
 
 
-# ---------------- Booklore ----------------
+# ---------------- Grimmory ----------------
 
 
-def _get_booklore_libraries(client_getter, name):
+def _get_grimmory_libraries(client_getter, name):
     container = get_container()
     client = client_getter(container)
     if not client.is_configured():
@@ -283,31 +283,31 @@ def _get_booklore_libraries(client_getter, name):
     return jsonify(client.get_libraries())
 
 
-@api_bp.route("/api/booklore/libraries", methods=["GET"])
-def get_booklore_libraries():
-    """Return available Booklore libraries."""
-    return _get_booklore_libraries(lambda c: c.booklore_client(), "Booklore")
+@api_bp.route("/api/grimmory/libraries", methods=["GET"])
+def get_grimmory_libraries():
+    """Return available Grimmory libraries."""
+    return _get_grimmory_libraries(lambda c: c.grimmory_client(), "Grimmory")
 
 
-@api_bp.route("/api/booklore2/libraries", methods=["GET"])
-def get_booklore2_libraries():
-    """Return available Booklore 2 libraries."""
-    return _get_booklore_libraries(lambda c: c.booklore_client_2(), "Booklore 2")
+@api_bp.route("/api/grimmory2/libraries", methods=["GET"])
+def get_grimmory2_libraries():
+    """Return available Grimmory 2 libraries."""
+    return _get_grimmory_libraries(lambda c: c.grimmory_client_2(), "Grimmory 2")
 
 
-@api_bp.route("/api/booklore/search", methods=["GET"])
-def api_booklore_search():
-    """Search Booklore books by title/author/filename."""
+@api_bp.route("/api/grimmory/search", methods=["GET"])
+def api_grimmory_search():
+    """Search Grimmory books by title/author/filename."""
     query = request.args.get("q", "").strip()
     if not query:
         return jsonify([])
 
-    client = get_booklore_client()
+    client = get_grimmory_client()
     if not client.is_configured():
         return jsonify([])
 
     try:
-        label = current_app.config.get("BOOKLORE_LABEL", "Booklore")
+        label = current_app.config.get("GRIMMORY_LABEL", "Grimmory")
         results = []
         books = client.search_books(query)
         for b in books or []:
@@ -322,13 +322,13 @@ def api_booklore_search():
             )
         return jsonify(results)
     except Exception:
-        logger.warning("Booklore search failed", exc_info=True)
+        logger.warning("Grimmory search failed", exc_info=True)
         return jsonify([])
 
 
-@api_bp.route("/api/booklore/link/<book_ref>", methods=["POST"])
-def api_booklore_link(book_ref):
-    """Link or unlink a PageKeeper book to a Booklore book by filename."""
+@api_bp.route("/api/grimmory/link/<book_ref>", methods=["POST"])
+def api_grimmory_link(book_ref):
+    """Link or unlink a PageKeeper book to a Grimmory book by filename."""
     database_service = get_database_service()
     book = get_book_or_404(book_ref)
 
@@ -347,20 +347,20 @@ def api_booklore_link(book_ref):
         filename = filename_raw.strip()
 
     if not filename:
-        logger.info(f"Unlinking Booklore for '{book.title}'")
+        logger.info(f"Unlinking Grimmory for '{book.title}'")
         book.ebook_filename = None
         book.original_ebook_filename = None
         book.kosync_doc_id = None
         database_service.save_book(book)
-        return jsonify({"success": True, "message": "Booklore unlinked"})
+        return jsonify({"success": True, "message": "Grimmory unlinked"})
 
     book.ebook_filename = filename
     # Recompute KOSync ID for the new ebook file
-    booklore_id = None
-    bl_book, bl_client = find_in_booklore(filename)
+    grimmory_id = None
+    bl_book, bl_client = find_in_grimmory(filename)
     if bl_book:
-        booklore_id = bl_book.get("id")
-    kosync_doc_id = get_kosync_id_for_ebook(filename, booklore_id, bl_client=bl_client)
+        grimmory_id = bl_book.get("id")
+    kosync_doc_id = get_kosync_id_for_ebook(filename, grimmory_id, bl_client=bl_client)
     if kosync_doc_id:
         book.kosync_doc_id = kosync_doc_id
     book.original_ebook_filename = book.original_ebook_filename or filename
@@ -368,5 +368,5 @@ def api_booklore_link(book_ref):
     from src.services.kosync_service import ensure_kosync_document
 
     ensure_kosync_document(book, database_service)
-    logger.info(f"Linked Booklore file '{filename}' to '{book.title}'")
+    logger.info(f"Linked Grimmory file '{filename}' to '{book.title}'")
     return jsonify({"success": True, "message": "Linked successfully"})

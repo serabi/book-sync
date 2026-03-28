@@ -11,13 +11,17 @@ logger = logging.getLogger(__name__)
 
 # Fields that can be passed to add/update — keeps validation in one place.
 ENRICHMENT_FIELDS = (
-    'description', 'page_count', 'rating', 'ratings_count',
-    'release_year', 'genres', 'subtitle',
+    "description",
+    "page_count",
+    "rating",
+    "ratings_count",
+    "release_year",
+    "genres",
+    "subtitle",
 )
 
 
 class TbrRepository(BaseRepository):
-
     def get_tbr_items(self, source=None):
         """Get all TBR items, optionally filtered by source.
 
@@ -37,11 +41,23 @@ class TbrRepository(BaseRepository):
         """Get a single TBR item by ID."""
         return self._get_one(TbrItem, TbrItem.id == item_id)
 
-    def add_tbr_item(self, title, author=None, cover_url=None, notes=None,
-                     source='manual', hardcover_book_id=None, hardcover_slug=None,
-                     ol_work_key=None, isbn=None,
-                     hardcover_list_id=None, hardcover_list_name=None,
-                     book_abs_id=None, book_id=None, **enrichment):
+    def add_tbr_item(
+        self,
+        title,
+        author=None,
+        cover_url=None,
+        notes=None,
+        source="manual",
+        hardcover_book_id=None,
+        hardcover_slug=None,
+        ol_work_key=None,
+        isbn=None,
+        hardcover_list_id=None,
+        hardcover_list_name=None,
+        book_abs_id=None,
+        book_id=None,
+        **enrichment,
+    ):
         """Add a TBR item, deduplicating by hardcover_book_id or ol_work_key.
 
         Returns (item, created) tuple — created=False if duplicate found.
@@ -50,18 +66,14 @@ class TbrRepository(BaseRepository):
         with self.get_session() as session:
             # Dedup by Hardcover book ID
             if hardcover_book_id:
-                existing = session.query(TbrItem).filter(
-                    TbrItem.hardcover_book_id == hardcover_book_id
-                ).first()
+                existing = session.query(TbrItem).filter(TbrItem.hardcover_book_id == hardcover_book_id).first()
                 if existing:
                     session.expunge(existing)
                     return existing, False
 
             # Dedup by Open Library work key
             if ol_work_key:
-                existing = session.query(TbrItem).filter(
-                    TbrItem.ol_work_key == ol_work_key
-                ).first()
+                existing = session.query(TbrItem).filter(TbrItem.ol_work_key == ol_work_key).first()
                 if existing:
                     session.expunge(existing)
                     return existing, False
@@ -69,11 +81,20 @@ class TbrRepository(BaseRepository):
             extras = {k: v for k, v in enrichment.items() if k in ENRICHMENT_FIELDS and v is not None}
 
             item = TbrItem(
-                title=title, author=author, cover_url=cover_url, notes=notes,
-                source=source, hardcover_book_id=hardcover_book_id,
-                hardcover_slug=hardcover_slug, ol_work_key=ol_work_key, isbn=isbn,
-                hardcover_list_id=hardcover_list_id, hardcover_list_name=hardcover_list_name,
-                book_abs_id=book_abs_id, book_id=book_id, **extras,
+                title=title,
+                author=author,
+                cover_url=cover_url,
+                notes=notes,
+                source=source,
+                hardcover_book_id=hardcover_book_id,
+                hardcover_slug=hardcover_slug,
+                ol_work_key=ol_work_key,
+                isbn=isbn,
+                hardcover_list_id=hardcover_list_id,
+                hardcover_list_name=hardcover_list_name,
+                book_abs_id=book_abs_id,
+                book_id=book_id,
+                **extras,
             )
             session.add(item)
             session.flush()
@@ -83,9 +104,16 @@ class TbrRepository(BaseRepository):
 
     def update_tbr_item(self, item_id, **fields):
         """Update arbitrary fields on a TBR item. Returns the updated item or None."""
-        ALLOWED = {'title', 'author', 'cover_url', 'notes', 'priority',
-                    'hardcover_book_id', 'hardcover_slug',
-                    *ENRICHMENT_FIELDS}
+        ALLOWED = {
+            "title",
+            "author",
+            "cover_url",
+            "notes",
+            "priority",
+            "hardcover_book_id",
+            "hardcover_slug",
+            *ENRICHMENT_FIELDS,
+        }
         with self.get_session() as session:
             item = session.query(TbrItem).filter(TbrItem.id == item_id).first()
             if not item:
@@ -136,9 +164,7 @@ class TbrRepository(BaseRepository):
     def get_unlinked_items(self):
         """Return TBR items where book_id is NULL (not linked to a library book)."""
         with self.get_session() as session:
-            items = session.query(TbrItem).filter(
-                TbrItem.book_id.is_(None)
-            ).all()
+            items = session.query(TbrItem).filter(TbrItem.book_id.is_(None)).all()
             for item in items:
                 session.expunge(item)
             return items

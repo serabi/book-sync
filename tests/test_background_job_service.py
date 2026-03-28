@@ -16,7 +16,7 @@ def _make_service(**overrides):
     defaults = dict(
         database_service=Mock(),
         abs_client=Mock(),
-        booklore_client=Mock(),
+        grimmory_client=Mock(),
         ebook_parser=Mock(),
         transcriber=Mock(),
         alignment_service=Mock(),
@@ -155,8 +155,9 @@ class TestCheckPendingJobs:
 
         service = _make_service(database_service=db)
 
-        with patch("threading.Thread") as mock_thread, patch.dict(
-            "os.environ", {"JOB_MAX_RETRIES": "5", "JOB_RETRY_DELAY_MINS": "15"}
+        with (
+            patch("threading.Thread") as mock_thread,
+            patch.dict("os.environ", {"JOB_MAX_RETRIES": "5", "JOB_RETRY_DELAY_MINS": "15"}),
         ):
             mock_instance = Mock()
             mock_thread.return_value = mock_instance
@@ -273,9 +274,11 @@ class TestRunBackgroundJob:
 
         service._phase_acquire_epub = Mock(side_effect=RuntimeError("fail"))
 
-        with patch.dict("os.environ", {"JOB_MAX_RETRIES": "5"}), \
-             patch("shutil.rmtree") as mock_rmtree, \
-             patch.object(Path, "exists", return_value=True):
+        with (
+            patch.dict("os.environ", {"JOB_MAX_RETRIES": "5"}),
+            patch("shutil.rmtree") as mock_rmtree,
+            patch.object(Path, "exists", return_value=True),
+        ):
             service._run_background_job(book)
 
             mock_rmtree.assert_called_once()
@@ -290,9 +293,11 @@ class TestRunBackgroundJob:
 
         service._phase_acquire_epub = Mock(side_effect=RuntimeError("fail"))
 
-        with patch.dict("os.environ", {"JOB_MAX_RETRIES": "5"}), \
-             patch("shutil.rmtree", side_effect=OSError("permission denied")), \
-             patch.object(Path, "exists", return_value=True):
+        with (
+            patch.dict("os.environ", {"JOB_MAX_RETRIES": "5"}),
+            patch("shutil.rmtree", side_effect=OSError("permission denied")),
+            patch.object(Path, "exists", return_value=True),
+        ):
             # Should not raise
             service._run_background_job(book)
 
@@ -324,9 +329,7 @@ class TestCleanupStaleJobs:
     def test_resets_crashed_books(self):
         crashed_book = _make_book(status="crashed")
         db = Mock()
-        db.get_books_by_status.side_effect = lambda s: (
-            [crashed_book] if s == "crashed" else []
-        )
+        db.get_books_by_status.side_effect = lambda s: [crashed_book] if s == "crashed" else []
         service = _make_service(database_service=db)
 
         service.cleanup_stale_jobs()
@@ -341,9 +344,7 @@ class TestCleanupStaleJobs:
         alignment.has_alignment.return_value = True
 
         db = Mock()
-        db.get_books_by_status.side_effect = lambda s: (
-            [book] if s == "processing" else []
-        )
+        db.get_books_by_status.side_effect = lambda s: [book] if s == "processing" else []
         service = _make_service(database_service=db, alignment_service=alignment)
 
         service.cleanup_stale_jobs()
@@ -359,9 +360,7 @@ class TestCleanupStaleJobs:
         alignment.has_alignment.return_value = False
 
         db = Mock()
-        db.get_books_by_status.side_effect = lambda s: (
-            [book] if s == "processing" else []
-        )
+        db.get_books_by_status.side_effect = lambda s: [book] if s == "processing" else []
         db.get_latest_job.return_value = existing_job
         service = _make_service(database_service=db, alignment_service=alignment)
 
@@ -379,9 +378,7 @@ class TestCleanupStaleJobs:
         alignment.has_alignment.return_value = False
 
         db = Mock()
-        db.get_books_by_status.side_effect = lambda s: (
-            [book] if s == "processing" else []
-        )
+        db.get_books_by_status.side_effect = lambda s: [book] if s == "processing" else []
         db.get_latest_job.return_value = None
         service = _make_service(database_service=db, alignment_service=alignment)
 
@@ -406,9 +403,7 @@ class TestCleanupStaleJobs:
         alignment.has_alignment.return_value = True
 
         db = Mock()
-        db.get_books_by_status.side_effect = lambda s: (
-            [book] if s == "failed_permanent" else []
-        )
+        db.get_books_by_status.side_effect = lambda s: [book] if s == "failed_permanent" else []
         service = _make_service(database_service=db, alignment_service=alignment)
 
         service.cleanup_stale_jobs()
@@ -529,8 +524,15 @@ class TestPhaseAlignment:
         service = _make_service(database_service=db)
 
         service._phase_alignment(
-            book, "abs-123", "Test", Path("/tmp/t.epub"),
-            None, "STORYTELLER_NATIVE", "text", [], Mock(),
+            book,
+            "abs-123",
+            "Test",
+            Path("/tmp/t.epub"),
+            None,
+            "STORYTELLER_NATIVE",
+            "text",
+            [],
+            Mock(),
         )
 
         assert book.status == "active"
@@ -540,8 +542,15 @@ class TestPhaseAlignment:
         service = _make_service()
         with pytest.raises(Exception, match="Failed to generate transcript"):
             service._phase_alignment(
-                _make_book(), "abs-123", "Test", Path("/tmp/t.epub"),
-                None, "WHISPER", "text", [], Mock(),
+                _make_book(),
+                "abs-123",
+                "Test",
+                Path("/tmp/t.epub"),
+                None,
+                "WHISPER",
+                "text",
+                [],
+                Mock(),
             )
 
     def test_no_alignment_service_raises(self):
@@ -549,8 +558,15 @@ class TestPhaseAlignment:
         service = _make_service(alignment_service=None)
         with pytest.raises(Exception, match="alignment_service not available"):
             service._phase_alignment(
-                _make_book(), "abs-123", "Test", Path("/tmp/t.epub"),
-                "transcript", "WHISPER", "text", [], Mock(),
+                _make_book(),
+                "abs-123",
+                "Test",
+                Path("/tmp/t.epub"),
+                "transcript",
+                "WHISPER",
+                "text",
+                [],
+                Mock(),
             )
 
     def test_alignment_failure_raises(self):
@@ -561,8 +577,15 @@ class TestPhaseAlignment:
 
         with pytest.raises(Exception, match="Alignment failed"):
             service._phase_alignment(
-                _make_book(), "abs-123", "Test", Path("/tmp/t.epub"),
-                "transcript", "WHISPER", "text", [], Mock(),
+                _make_book(),
+                "abs-123",
+                "Test",
+                Path("/tmp/t.epub"),
+                "transcript",
+                "WHISPER",
+                "text",
+                [],
+                Mock(),
             )
 
     def test_success_updates_book_and_job(self):
@@ -576,8 +599,15 @@ class TestPhaseAlignment:
         service = _make_service(database_service=db, alignment_service=alignment)
 
         service._phase_alignment(
-            book, "abs-123", "Test", Path("/tmp/test.epub"),
-            "transcript", "WHISPER", "text", [], Mock(),
+            book,
+            "abs-123",
+            "Test",
+            Path("/tmp/test.epub"),
+            "transcript",
+            "WHISPER",
+            "text",
+            [],
+            Mock(),
         )
 
         assert book.status == "active"
@@ -597,8 +627,15 @@ class TestPhaseAlignment:
 
         # Should not raise
         service._phase_alignment(
-            book, "abs-123", "Test", Path("/tmp/test.epub"),
-            "transcript", "WHISPER", "text", [], Mock(),
+            book,
+            "abs-123",
+            "Test",
+            Path("/tmp/test.epub"),
+            "transcript",
+            "WHISPER",
+            "text",
+            [],
+            Mock(),
         )
 
         assert book.status == "active"

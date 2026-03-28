@@ -1,9 +1,9 @@
 /**
- * Booklore Link Modal
- * Allows linking a PageKeeper book to a Booklore book by searching and selecting.
+ * Grimmory Link Modal
+ * Allows linking a PageKeeper book to a Grimmory book by searching and selecting.
  */
 
-var bookloreModalState = { bookId: null, searchRequestId: 0 };
+var grimmoryModalState = { bookId: null, searchRequestId: 0 };
 
 function _blEl(tag, className, text) {
     var e = document.createElement(tag);
@@ -12,41 +12,41 @@ function _blEl(tag, className, text) {
     return e;
 }
 
-function openBookloreModal(bookId, title) {
+function openGrimmoryModal(bookId, title) {
     if (typeof closeActionPanel === 'function') closeActionPanel();
-    bookloreModalState.bookId = bookId;
-    document.getElementById('bl-modal-title').textContent = 'Link to Booklore: ' + title;
+    grimmoryModalState.bookId = bookId;
+    document.getElementById('bl-modal-title').textContent = 'Link to Grimmory: ' + title;
     document.getElementById('bl-modal').style.display = 'flex';
     document.getElementById('bl-search-input').value = title;
     var resultsDiv = document.getElementById('bl-results');
     while (resultsDiv.firstChild) resultsDiv.removeChild(resultsDiv.firstChild);
     document.getElementById('bl-search-input').focus();
-    if (title) searchBooklore();
+    if (title) searchGrimmory();
 }
 
-function closeBookloreModal() {
+function closeGrimmoryModal() {
     document.getElementById('bl-modal').style.display = 'none';
-    bookloreModalState.bookId = null;
-    bookloreModalState.searchRequestId += 1;
+    grimmoryModalState.bookId = null;
+    grimmoryModalState.searchRequestId += 1;
 }
 
-function searchBooklore() {
+function searchGrimmory() {
     var query = document.getElementById('bl-search-input').value.trim();
     if (!query) return;
 
     var resultsDiv = document.getElementById('bl-results');
     while (resultsDiv.firstChild) resultsDiv.removeChild(resultsDiv.firstChild);
-    resultsDiv.appendChild(_blEl('div', 'st-loading', 'Searching Booklore...'));
+    resultsDiv.appendChild(_blEl('div', 'st-loading', 'Searching Grimmory...'));
 
-    var requestId = ++bookloreModalState.searchRequestId;
+    var requestId = ++grimmoryModalState.searchRequestId;
 
-    fetch('/api/booklore/search?q=' + encodeURIComponent(query))
+    fetch('/api/grimmory/search?q=' + encodeURIComponent(query))
         .then(function(r) {
             if (!r.ok) throw new Error('Search failed: ' + r.status);
             return r.json();
         })
         .then(function(books) {
-            if (requestId !== bookloreModalState.searchRequestId) return;
+            if (requestId !== grimmoryModalState.searchRequestId) return;
             while (resultsDiv.firstChild) resultsDiv.removeChild(resultsDiv.firstChild);
 
             // Unlink option
@@ -54,13 +54,13 @@ function searchBooklore() {
             noneCard.style.border = '1px dashed #666';
             var noneInfo = _blEl('div', 'st-card-info');
             noneInfo.appendChild(_blEl('div', 'st-card-title', 'None - Do not link'));
-            var noneDesc = _blEl('div', 'st-card-author', 'Unlink current Booklore book');
+            var noneDesc = _blEl('div', 'st-card-author', 'Unlink current Grimmory book');
             noneDesc.style.fontStyle = 'italic';
             noneDesc.style.color = '#888';
             noneInfo.appendChild(noneDesc);
             noneCard.appendChild(noneInfo);
             var unlinkBtn = _blEl('button', 'action-btn secondary', 'Unlink');
-            unlinkBtn.addEventListener('click', function() { linkBooklore(''); });
+            unlinkBtn.addEventListener('click', function() { linkGrimmory(''); });
             noneCard.appendChild(unlinkBtn);
             resultsDiv.appendChild(noneCard);
 
@@ -85,27 +85,27 @@ function searchBooklore() {
 
                 var btn = _blEl('button', 'action-btn success', 'Link');
                 btn.addEventListener('click', function() {
-                    linkBooklore(book.fileName);
+                    linkGrimmory(book.fileName);
                 });
                 card.appendChild(btn);
                 resultsDiv.appendChild(card);
             });
         })
         .catch(function(e) {
-            if (requestId !== bookloreModalState.searchRequestId) return;
+            if (requestId !== grimmoryModalState.searchRequestId) return;
             while (resultsDiv.firstChild) resultsDiv.removeChild(resultsDiv.firstChild);
             resultsDiv.appendChild(_blEl('div', 'st-error', 'Error: ' + e.message));
         });
 }
 
-function linkBooklore(filename) {
-    if (!bookloreModalState.bookId) return;
+function linkGrimmory(filename) {
+    if (!grimmoryModalState.bookId) return;
 
     var resultsDiv = document.getElementById('bl-results');
     while (resultsDiv.firstChild) resultsDiv.removeChild(resultsDiv.firstChild);
     resultsDiv.appendChild(_blEl('div', 'st-loading', 'Linking...'));
 
-    fetch('/api/booklore/link/' + encodeURIComponent(bookloreModalState.bookId), {
+    fetch('/api/grimmory/link/' + encodeURIComponent(grimmoryModalState.bookId), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ filename: filename })
@@ -130,10 +130,10 @@ function linkBooklore(filename) {
 document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('bl-modal').addEventListener('click', function(e) {
         if (e.target === document.getElementById('bl-modal')) {
-            closeBookloreModal();
+            closeGrimmoryModal();
         }
     });
     document.getElementById('bl-search-input').addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') searchBooklore();
+        if (e.key === 'Enter') searchGrimmory();
     });
 });

@@ -16,17 +16,21 @@ from pathlib import Path
 # Cross-platform file locking: prefer fcntl (Unix); on Windows try msvcrt; otherwise no-op
 try:
     import fcntl
+
     _LOCK_EX = fcntl.LOCK_EX
     _LOCK_SH = fcntl.LOCK_SH
     _LOCK_UN = fcntl.LOCK_UN
+
     def _flock(fd, operation):
         return fcntl.flock(fd, operation)
 except ImportError:
     try:
         import msvcrt
+
         _LOCK_EX = 1
         _LOCK_SH = 2
         _LOCK_UN = 3
+
         def _flock(fd, operation):
             # msvcrt.locking works with the file descriptor returned by file.fileno().
             # Use a large length to lock the whole file; map unlock explicitly.
@@ -36,15 +40,17 @@ except ImportError:
                 else:
                     # No distinct shared lock in msvcrt; use exclusive as fallback
                     flag = msvcrt.LK_LOCK
-                msvcrt.locking(fd, flag, 0x7fffffff)
+                msvcrt.locking(fd, flag, 0x7FFFFFFF)
             except Exception:
                 # Best-effort; if locking fails, don't crash the app
                 return
     except ImportError:
         # No file locking capabilities available; use no-op placeholders
         _LOCK_EX = _LOCK_SH = _LOCK_UN = 0
+
         def _flock(fd, operation):
             return
+
 
 logger = logging.getLogger(__name__)
 
@@ -66,17 +72,17 @@ class JsonDB:
         self.filepath.parent.mkdir(parents=True, exist_ok=True)
 
     @contextmanager
-    def _locked_file(self, mode='r'):
+    def _locked_file(self, mode="r"):
         """
         Context manager that acquires an exclusive lock on the file.
 
         For reads: acquires shared lock (LOCK_SH) - multiple readers OK
         For writes: acquires exclusive lock (LOCK_EX) - single writer only
         """
-        lock_type = _LOCK_EX if 'w' in mode else _LOCK_SH
+        lock_type = _LOCK_EX if "w" in mode else _LOCK_SH
 
         # Create file if it doesn't exist (for write mode)
-        if 'w' in mode and not self.filepath.exists():
+        if "w" in mode and not self.filepath.exists():
             self.filepath.touch()
 
         f = None
@@ -104,7 +110,7 @@ class JsonDB:
             return default
 
         try:
-            with self._locked_file('r') as f:
+            with self._locked_file("r") as f:
                 content = f.read().strip()
                 if not content:
                     return default
@@ -122,7 +128,7 @@ class JsonDB:
         Uses atomic write pattern: write, flush, fsync.
         """
         try:
-            with self._locked_file('w') as f:
+            with self._locked_file("w") as f:
                 json.dump(data, f, indent=2)
                 f.flush()
                 os.fsync(f.fileno())
@@ -150,7 +156,7 @@ class JsonDB:
             self.filepath.touch()
 
         try:
-            with open(self.filepath, 'r+') as f:
+            with open(self.filepath, "r+") as f:
                 _flock(f.fileno(), _LOCK_EX)
                 try:
                     content = f.read().strip()

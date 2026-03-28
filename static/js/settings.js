@@ -51,18 +51,18 @@ function getServiceTestPayload(service) {
             password: getInputValue('STORYTELLER_PASSWORD')
         };
     }
-    if (service === 'booklore') {
+    if (service === 'grimmory') {
         return {
-            server: getInputValue('BOOKLORE_SERVER'),
-            user: getInputValue('BOOKLORE_USER'),
-            password: getInputValue('BOOKLORE_PASSWORD')
+            server: getInputValue('GRIMMORY_SERVER'),
+            user: getInputValue('GRIMMORY_USER'),
+            password: getInputValue('GRIMMORY_PASSWORD')
         };
     }
-    if (service === 'booklore2') {
+    if (service === 'grimmory2') {
         return {
-            server: getInputValue('BOOKLORE_2_SERVER'),
-            user: getInputValue('BOOKLORE_2_USER'),
-            password: getInputValue('BOOKLORE_2_PASSWORD')
+            server: getInputValue('GRIMMORY_2_SERVER'),
+            user: getInputValue('GRIMMORY_2_USER'),
+            password: getInputValue('GRIMMORY_2_PASSWORD')
         };
     }
     if (service === 'cwa') {
@@ -176,8 +176,8 @@ function extractBfToken(input) {
     }
 }
 
-/* ─── Booklore Library Scanning ─── */
-function fetchBookloreLibs(url, event) {
+/* ─── Grimmory Library Scanning ─── */
+function fetchGrimmoryLibs(url, event) {
     var btn = event.target;
     var originalText = btn.textContent;
     btn.textContent = 'Scanning...';

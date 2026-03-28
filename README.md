@@ -41,7 +41,7 @@ The goal of PageKeeper is to be a full fledged reading tracking and journaling s
 | [Audiobookshelf](https://www.audiobookshelf.org/) | Main audiobook server |
 | [KOReader](https://koreader.rocks/) (via KoSync) | E-ink reader progress (Boox, Kobo, jailbroken Kindle, etc.) |
 | [Storyteller](https://storyteller-platform.gitlab.io/storyteller/) | Audiobook companion app with synced EPUB3 support |
-| [Booklore](https://github.com/booklore) | Ebook library and shelf manager |
+| [Grimmory](https://github.com/grimmory) | Ebook library and shelf manager |
 | [Hardcover](https://hardcover.app/) | Book tracking service (write-only) |
 | [BookFusion](https://bookfusion.com/) | eBook reader, includes excellent EPUB3 support (limited integration) |
 
@@ -55,7 +55,7 @@ PageKeeper runs three sync layers simultaneously, from fastest to slowest:
 
 1. **Instant sync** — Listens to Audiobookshelf's Socket.IO stream and KOReader's KoSync updates in real time. When you pause an audiobook or push an update from KoReader via KoSync, PageKeeper picks up the change within seconds.
 
-2. **Per-client polling** — Lightweight checks against individual services (Storyteller, Booklore) at their own intervals. Only triggers a sync when the position has actually changed.
+2. **Per-client polling** — Lightweight checks against individual services (Storyteller, Grimmory) at their own intervals. Only triggers a sync when the position has actually changed.
 
 3. **Scheduled full sync** — A background sweep every few minutes that catches anything the other layers missed.
 

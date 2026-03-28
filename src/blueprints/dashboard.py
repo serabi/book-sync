@@ -9,11 +9,11 @@ from pathlib import Path
 from flask import Blueprint, render_template
 
 from src.blueprints.helpers import (
-    find_booklore_metadata,
+    find_grimmory_metadata,
     get_abs_service,
     get_container,
     get_database_service,
-    get_enabled_booklore_server_ids,
+    get_enabled_grimmory_server_ids,
     get_hardcover_book_url,
     get_service_web_url,
 )
@@ -30,7 +30,7 @@ def index():
     """
     Render the dashboard with enriched book and progress data.
 
-    Loads books, listening states, hardcover and Booklore metadata, and integration statuses, then renders the dashboard page with per-book mappings, overall progress, app version and update information.
+    Loads books, listening states, hardcover and Grimmory metadata, and integration statuses, then renders the dashboard page with per-book mappings, overall progress, app version and update information.
 
     Returns:
         Rendered template response for the dashboard page.
@@ -88,20 +88,20 @@ def index():
     all_hardcover = database_service.get_all_hardcover_details()
     hardcover_by_book = {h.book_id: h for h in all_hardcover}
 
-    # Fetch Booklore metadata for ebook-only title/author enrichment
-    enabled_bl_ids = get_enabled_booklore_server_ids()
-    booklore_by_filename = database_service.get_booklore_by_filename(enabled_server_ids=enabled_bl_ids)
-    booklore_by_filename_all = database_service.get_booklore_by_filename()  # unfiltered fallback
+    # Fetch Grimmory metadata for ebook-only title/author enrichment
+    enabled_bl_ids = get_enabled_grimmory_server_ids()
+    grimmory_by_filename = database_service.get_grimmory_by_filename(enabled_server_ids=enabled_bl_ids)
+    grimmory_by_filename_all = database_service.get_grimmory_by_filename()  # unfiltered fallback
 
     integrations = {}
     sync_clients = container.sync_clients()
     for client_name, client in sync_clients.items():
         integrations[client_name.lower()] = client.is_configured()
 
-    # Merge Booklore 2 into booklore flag so templates show the service
+    # Merge Grimmory 2 into grimmory flag so templates show the service
     # when either instance is configured
-    if integrations.get("booklore2") and not integrations.get("booklore"):
-        integrations["booklore"] = True
+    if integrations.get("grimmory2") and not integrations.get("grimmory"):
+        integrations["grimmory"] = True
 
     # BookFusion integration status
     bf_client = container.bookfusion_client()
@@ -147,10 +147,10 @@ def index():
             book_type = "linked"
 
         # bl_meta: filtered to enabled instances (used for covers/deep-links)
-        bl_meta = find_booklore_metadata(book, booklore_by_filename)
+        bl_meta = find_grimmory_metadata(book, grimmory_by_filename)
 
         # bl_meta_enrichment: unfiltered fallback for title/author (stale metadata is fine)
-        bl_meta_enrichment = bl_meta or find_booklore_metadata(book, booklore_by_filename_all)
+        bl_meta_enrichment = bl_meta or find_grimmory_metadata(book, grimmory_by_filename_all)
 
         # Skip ABS metadata enrichment for ebook-only books (synthetic ID won't resolve)
         if book_type == "ebook-only":
@@ -161,7 +161,7 @@ def index():
             abs_subtitle = _abs_meta.get("subtitle", "") or book.subtitle or ""
             abs_author = _abs_meta.get("author", "") or book.author or ""
 
-        # Enrich title from Booklore if stored title looks like a filename
+        # Enrich title from Grimmory if stored title looks like a filename
         enriched_title = book.title
         if bl_meta_enrichment and bl_meta_enrichment.title:
             stems = set()
@@ -298,15 +298,15 @@ def index():
         else:
             mapping["abs_url"] = None
 
-        # Booklore deep links (from pre-built lookup — avoids per-book fuzzy matching)
-        mapping["booklore_id"] = None
-        mapping["booklore_url"] = None
+        # Grimmory deep links (from pre-built lookup — avoids per-book fuzzy matching)
+        mapping["grimmory_id"] = None
+        mapping["grimmory_url"] = None
         bl_id = bl_meta.raw_metadata_dict.get("id") if bl_meta else None
         if bl_id:
-            mapping["booklore_id"] = bl_id
-            bl_prefix = f"BOOKLORE{'_2' if bl_meta.server_id == '2' else ''}"
+            mapping["grimmory_id"] = bl_id
+            bl_prefix = f"GRIMMORY{'_2' if bl_meta.server_id == '2' else ''}"
             bl_web = get_service_web_url(bl_prefix)
-            mapping["booklore_url"] = f"{bl_web}/book/{bl_id}?tab=view" if bl_web else None
+            mapping["grimmory_url"] = f"{bl_web}/book/{bl_id}?tab=view" if bl_web else None
 
         if mapping.get("hardcover_slug"):
             mapping["hardcover_url"] = get_hardcover_book_url(mapping["hardcover_slug"])
@@ -339,7 +339,7 @@ def index():
             abs_service,
             database_service,
             book_type,
-            booklore_meta=bl_meta,
+            grimmory_meta=bl_meta,
             hardcover_details=hardcover_details,
         )
         mapping["cover_url"] = covers["cover_url"]
@@ -354,7 +354,7 @@ def index():
 
         mappings.append(mapping)
 
-    # Batch-save books that had their titles enriched from Booklore
+    # Batch-save books that had their titles enriched from Grimmory
     for book in books_needing_title_save:
         database_service.save_book(book)
 
@@ -365,7 +365,7 @@ def index():
     else:
         overall_progress = 0
 
-    booklore_label = os.environ.get("BOOKLORE_LABEL", "Booklore") or "Booklore"
+    grimmory_label = os.environ.get("GRIMMORY_LABEL", "Grimmory") or "Grimmory"
 
     # Unlinked KoSync documents — for dashboard toast + pending identification section
     kosync_unlinked_count = 0
@@ -396,7 +396,7 @@ def index():
         integrations=integrations,
         progress=overall_progress,
         app_version=APP_VERSION,
-        booklore_label=booklore_label,
+        grimmory_label=grimmory_label,
         kosync_unlinked_count=kosync_unlinked_count,
         unlinked_reading=unlinked_reading,
     )

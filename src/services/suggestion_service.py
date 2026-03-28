@@ -34,7 +34,7 @@ class SuggestionService:
         self,
         database_service,
         abs_client,
-        booklore_client,
+        grimmory_client,
         storyteller_client,
         library_service,
         books_dir,
@@ -42,7 +42,7 @@ class SuggestionService:
     ):
         self.database_service = database_service
         self.abs_client = abs_client
-        self.booklore_client = booklore_client
+        self.grimmory_client = grimmory_client
         self.storyteller_client = storyteller_client
         self.library_service = library_service
         self.books_dir = books_dir
@@ -69,7 +69,7 @@ class SuggestionService:
         }
 
     SOURCE_PRIORITY = {
-        "booklore": 0.06,
+        "grimmory": 0.06,
         "cwa": 0.03,
         "filesystem": 0.0,
         "bookfusion": -0.03,
@@ -240,23 +240,23 @@ class SuggestionService:
         candidates = []
         seen = set()
 
-        self._update_rescan_status(phase="loading_booklore", message="Loading Booklore candidates...")
-        bl_client = self.booklore_client
+        self._update_rescan_status(phase="loading_grimmory", message="Loading Grimmory candidates...")
+        bl_client = self.grimmory_client
         if bl_client and bl_client.is_configured():
             try:
                 for book in bl_client.get_all_books() or []:
                     filename = book.get("fileName", "")
                     if not filename or not filename.lower().endswith(".epub"):
                         continue
-                    dedupe_key = ("booklore", filename.lower())
+                    dedupe_key = ("grimmory", filename.lower())
                     if dedupe_key in seen:
                         continue
                     seen.add(dedupe_key)
                     candidates.append(
                         {
-                            "source_family": "booklore",
-                            "source": "booklore",
-                            "source_key": f"booklore:{filename}",
+                            "source_family": "grimmory",
+                            "source": "grimmory",
+                            "source_key": f"grimmory:{filename}",
                             "title": book.get("title") or Path(filename).stem,
                             "author": book.get("authors") or "",
                             "filename": filename,
@@ -265,7 +265,7 @@ class SuggestionService:
                         }
                     )
             except Exception as e:
-                logger.warning(f"Booklore cache scan failed during suggestions rescan: {e}")
+                logger.warning(f"Grimmory cache scan failed during suggestions rescan: {e}")
 
         if include_filesystem and self.books_dir and self.books_dir.exists():
             try:
@@ -387,7 +387,11 @@ class SuggestionService:
             ranked.append(match)
 
         ranked.sort(
-            key=lambda m: (m.get("score", 0.0), m.get("source_family") == "booklore", m.get("highlight_count", 0)),
+            key=lambda m: (
+                m.get("score", 0.0),
+                m.get("source_family") in ("grimmory", "booklore"),
+                m.get("highlight_count", 0),
+            ),
             reverse=True,
         )
         return ranked[:6]
@@ -467,7 +471,7 @@ class SuggestionService:
         return bool(self.database_service.suggestion_exists(abs_id))
 
     def _check_reverse_suggestions(self):
-        """Check Storyteller and Booklore for books with progress that could match ABS audiobooks."""
+        """Check Storyteller and Grimmory for books with progress that could match ABS audiobooks."""
         if not self.abs_client:
             return
 
@@ -515,27 +519,27 @@ class SuggestionService:
             except Exception as e:
                 logger.debug(f"Reverse suggestions: Storyteller check failed: {e}")
 
-        # Check Booklore books
-        if self.booklore_client and self.booklore_client.is_configured():
+        # Check Grimmory books
+        if self.grimmory_client and self.grimmory_client.is_configured():
             try:
-                bl_books = self.booklore_client.get_all_books()
+                bl_books = self.grimmory_client.get_all_books()
                 for bl_book in bl_books:
                     title = bl_book.get("title", "")
                     filename = bl_book.get("fileName", "")
                     if not title:
                         continue
 
-                    pct_raw, _ = self.booklore_client.get_progress(filename)
+                    pct_raw, _ = self.grimmory_client.get_progress(filename)
                     if not pct_raw or pct_raw < 0.01 or pct_raw > 0.70:
                         continue
 
                     clean_title = re.sub(r"\s*[\(\[].*?[\)\]]", "", title).strip().lower()
-                    source_key = f"booklore:{filename}"
+                    source_key = f"grimmory:{filename}"
                     matches = self._find_abs_audiobook_matches(clean_title, abs_by_title, mapped_abs_ids)
                     if matches:
                         self._save_reverse_suggestion(matches, title, source_key)
             except Exception as e:
-                logger.debug(f"Reverse suggestions: Booklore check failed: {e}")
+                logger.debug(f"Reverse suggestions: Grimmory check failed: {e}")
 
     def _find_abs_audiobook_matches(self, clean_title: str, abs_by_title: dict, mapped_abs_ids: set) -> list[dict]:
         """Find ABS audiobooks matching a title, excluding already-mapped ones."""
@@ -760,9 +764,9 @@ class SuggestionService:
             if author:
                 query = f"{query} {author}"
 
-            if self.booklore_client and self.booklore_client.is_configured():
+            if self.grimmory_client and self.grimmory_client.is_configured():
                 try:
-                    live_results = self.booklore_client.search_books(query) or []
+                    live_results = self.grimmory_client.search_books(query) or []
                     live_candidates = []
                     for book in live_results:
                         filename = book.get("fileName", "")
@@ -770,9 +774,9 @@ class SuggestionService:
                             continue
                         live_candidates.append(
                             {
-                                "source_family": "booklore",
-                                "source": "booklore",
-                                "source_key": f"booklore:{filename}",
+                                "source_family": "grimmory",
+                                "source": "grimmory",
+                                "source_key": f"grimmory:{filename}",
                                 "title": book.get("title") or Path(filename).stem,
                                 "author": book.get("authors") or "",
                                 "filename": filename,
@@ -789,7 +793,7 @@ class SuggestionService:
                         )
                     )
                 except Exception as e:
-                    logger.warning(f"Booklore live search failed during suggestion: {e}")
+                    logger.warning(f"Grimmory live search failed during suggestion: {e}")
 
             if (
                 self.library_service

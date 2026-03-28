@@ -22,10 +22,10 @@ class MemoryLogHandler(logging.Handler):
     def emit(self, record):
         try:
             log_entry = {
-                'timestamp': datetime.fromtimestamp(record.created).strftime('%Y-%m-%d %H:%M:%S'),
-                'level': record.levelname,
-                'message': record.getMessage(),
-                'module': record.name
+                "timestamp": datetime.fromtimestamp(record.created).strftime("%Y-%m-%d %H:%M:%S"),
+                "level": record.levelname,
+                "message": record.getMessage(),
+                "module": record.name,
             }
             self.logs.append(log_entry)
             # Keep only the most recent logs
@@ -34,6 +34,7 @@ class MemoryLogHandler(logging.Handler):
         except Exception as e:
             # Use sys.stderr to avoid infinite recursion in the log handler
             import sys
+
             print(f"MemoryLogHandler.emit failed: {e}", file=sys.stderr)
 
     def get_recent_logs(self, count=100):
@@ -51,11 +52,11 @@ def setup_file_logging():
     LOG_DIR = DATA_DIR / "logs"
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     LOG_PATH = LOG_DIR / "unified_app.log"
-    log_level = getattr(logging, os.environ.get('LOG_LEVEL', 'INFO').upper(), logging.INFO)
+    log_level = getattr(logging, os.environ.get("LOG_LEVEL", "INFO").upper(), logging.INFO)
 
-    file_handler = RotatingFileHandler(str(LOG_PATH), maxBytes=10*1024*1024, backupCount=5, encoding='utf-8')
+    file_handler = RotatingFileHandler(str(LOG_PATH), maxBytes=10 * 1024 * 1024, backupCount=5, encoding="utf-8")
     file_handler.setLevel(log_level)
-    file_handler.setFormatter(logging.Formatter('[%(asctime)s] %(levelname)s - %(name)s: %(message)s'))
+    file_handler.setFormatter(logging.Formatter("[%(asctime)s] %(levelname)s - %(name)s: %(message)s"))
 
     # Attach to the root logger so all module loggers go to the same file
     root_logger = logging.getLogger()
@@ -68,9 +69,9 @@ def setup_console_logging():
     """Setup console logging handler."""
     console_handler = logging.StreamHandler()
     # Use LOG_LEVEL env variable or fallback to INFO
-    log_level = getattr(logging, os.environ.get('LOG_LEVEL', 'INFO').upper(), logging.INFO)
+    log_level = getattr(logging, os.environ.get("LOG_LEVEL", "INFO").upper(), logging.INFO)
     console_handler.setLevel(log_level)
-    console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+    console_handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
 
     # Add to root logger
     root_logger = logging.getLogger()
@@ -80,7 +81,7 @@ def setup_console_logging():
     root_logger.setLevel(logging.DEBUG)
 
     # Prevent Werkzeug from propagating its logs up to the root logger (avoids duplicate access lines)
-    werkzeug_logger = logging.getLogger('werkzeug')
+    werkzeug_logger = logging.getLogger("werkzeug")
     werkzeug_logger.propagate = False
     werkzeug_logger.setLevel(logging.WARNING)
 
@@ -103,6 +104,7 @@ def setup_memory_logging():
 
 class TelegramHandler(logging.Handler):
     """Log handler that sends logs to a Telegram chat via bot API."""
+
     def __init__(self, bot_token, chat_id, min_level=logging.ERROR):
         super().__init__(min_level)
         self.bot_token = bot_token
@@ -111,17 +113,12 @@ class TelegramHandler(logging.Handler):
 
     def emit(self, record):
         # Prevent infinite loops - don't log failures from this handler itself
-        if record.name == __name__ and 'TelegramHandler' in record.getMessage():
+        if record.name == __name__ and "TelegramHandler" in record.getMessage():
             return
 
         try:
             message = self.format(record)
-            payload = {
-                'chat_id': self.chat_id,
-                'text': message,
-                'parse_mode': 'HTML',
-                'disable_notification': False
-            }
+            payload = {"chat_id": self.chat_id, "text": message, "parse_mode": "HTML", "disable_notification": False}
             response = requests.post(self.api_url, data=payload, timeout=5)
             response.raise_for_status()  # Raise exception for HTTP errors
         except Exception as e:
@@ -149,13 +146,13 @@ def _remove_telegram_handlers():
 
 def setup_telegram_logging():
     """Setup Telegram logging handler if environment variables are set."""
-    bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
-    chat_id = os.environ.get('TELEGRAM_CHAT_ID')
-    log_level_name = os.environ.get('TELEGRAM_LOG_LEVEL', 'ERROR').upper()
+    bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+    log_level_name = os.environ.get("TELEGRAM_LOG_LEVEL", "ERROR").upper()
     log_level = getattr(logging, log_level_name, logging.ERROR)
 
     enabled_val = os.environ.get("TELEGRAM_ENABLED", "").lower()
-    if enabled_val == 'false':
+    if enabled_val == "false":
         return None
 
     if not bot_token or not chat_id:
@@ -163,9 +160,12 @@ def setup_telegram_logging():
 
     logger.info("Setting up telegram logger")
     handler = TelegramHandler(bot_token, chat_id, min_level=log_level)
-    handler.setFormatter(logging.Formatter(
-        '<b>[%(asctime)s]</b> <code>%(levelname)s</code> - <b>%(name)s</b>: %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'))
+    handler.setFormatter(
+        logging.Formatter(
+            "<b>[%(asctime)s]</b> <code>%(levelname)s</code> - <b>%(name)s</b>: %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+    )
     root_logger = logging.getLogger()
     root_logger.addHandler(handler)
     return handler
@@ -180,7 +180,7 @@ def reconcile_telegram_logging():
     return telegram_log_handler
 
 
-_SECRET_ENV_VARS = ('KOSYNC_KEY', 'HARDCOVER_TOKEN', 'TELEGRAM_BOT_TOKEN')
+_SECRET_ENV_VARS = ("KOSYNC_KEY", "HARDCOVER_TOKEN", "TELEGRAM_BOT_TOKEN")
 
 
 def sanitize_exception(exc: Exception) -> str:
@@ -189,7 +189,7 @@ def sanitize_exception(exc: Exception) -> str:
     for var in _SECRET_ENV_VARS:
         val = os.environ.get(var)
         if val:
-            msg = msg.replace(val, '***')
+            msg = msg.replace(val, "***")
     return msg
 
 
@@ -217,8 +217,10 @@ def time_execution(func):
             logger.info(f"[{func.__name__}] took {ms}ms")
         except Exception as e:
             import sys
+
             print(f"time_execution logging failed for {func.__name__}: {e}", file=sys.stderr)
         return result
+
     return wrapper
 
 

@@ -11,7 +11,6 @@ from .models import Setting
 
 
 class SettingsRepository(BaseRepository):
-
     @staticmethod
     def _persist_and_detach(session, obj):
         """Flush, refresh, and detach an object so it's usable outside the session."""

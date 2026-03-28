@@ -139,12 +139,12 @@ class _KosyncMockContainer:
     def __init__(self):
         self.mock_sync_manager = Mock()
         self.mock_abs_client = Mock()
-        self.mock_booklore_client = Mock()
+        self.mock_grimmory_client = Mock()
         self.mock_database_service = Mock()
         self.mock_database_service.get_all_settings.return_value = {}
 
         self.mock_sync_manager.abs_client = self.mock_abs_client
-        self.mock_sync_manager.booklore_client = self.mock_booklore_client
+        self.mock_sync_manager.grimmory_client = self.mock_grimmory_client
         self.mock_sync_manager.get_title.return_value = "Test Book"
         self.mock_sync_manager.get_duration.return_value = 3600
 
@@ -154,11 +154,11 @@ class _KosyncMockContainer:
     def abs_client(self):
         return self.mock_abs_client
 
-    def booklore_client(self):
-        return self.mock_booklore_client
+    def grimmory_client(self):
+        return self.mock_grimmory_client
 
-    def booklore_client_group(self):
-        return self.mock_booklore_client
+    def grimmory_client_group(self):
+        return self.mock_grimmory_client
 
     def ebook_parser(self):
         return Mock()

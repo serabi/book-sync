@@ -1,4 +1,3 @@
-
 # from pathlib import Path # Not needed if we mock objects
 import pytest
 
@@ -26,7 +25,7 @@ class TestFixSyncIssues(unittest.TestCase):
             self.mock_abs_client,
             self.mock_transcriber,
             self.mock_ebook_parser,
-            alignment_service=self.mock_alignment_service
+            alignment_service=self.mock_alignment_service,
         )
 
     def test_smart_fallback_missing_file_db_success(self):
@@ -41,20 +40,20 @@ class TestFixSyncIssues(unittest.TestCase):
 
         # Mock State
         state = MagicMock()
-        state.current = {'ts': 100.0, 'pct': 0.1}
+        state.current = {"ts": 100.0, "pct": 0.1}
 
         # Mock Alignment Service
         self.mock_alignment_service.get_char_for_time.return_value = 500
 
         # Mock Ebook Parser to return a MOCK path (not real Path)
         mock_book_path = MagicMock()
-        mock_book_path.exists.return_value = True # Book exists!
+        mock_book_path.exists.return_value = True  # Book exists!
         self.mock_ebook_parser.resolve_book_path.return_value = mock_book_path
 
         self.mock_ebook_parser.extract_text_and_map.return_value = ("A" * 1000, {})
 
         # Patch Path in the client module to control transcript check
-        with patch('src.sync_clients.abs_sync_client.Path') as MockPath:
+        with patch("src.sync_clients.abs_sync_client.Path") as MockPath:
             # When Path(transcript) is called, return a mock that says exists=False
             mock_transcript_path = MagicMock()
             mock_transcript_path.exists.return_value = False
@@ -82,14 +81,14 @@ class TestFixSyncIssues(unittest.TestCase):
         book.transcript_file = "/tmp/exists.json"
 
         state = MagicMock()
-        state.current = {'ts': 100.0}
+        state.current = {"ts": 100.0}
 
         self.mock_transcriber.get_text_at_time.return_value = "Legacy Text"
 
         # Patch Path again
-        with patch('src.sync_clients.abs_sync_client.Path') as MockPath:
+        with patch("src.sync_clients.abs_sync_client.Path") as MockPath:
             mock_transcript_path = MagicMock()
-            mock_transcript_path.exists.return_value = True # File exists!
+            mock_transcript_path.exists.return_value = True  # File exists!
             MockPath.return_value = mock_transcript_path
 
             result = self.client.get_text_from_current_state(book, state)
@@ -98,5 +97,6 @@ class TestFixSyncIssues(unittest.TestCase):
             self.mock_alignment_service.get_char_for_time.assert_not_called()
             print("\n✅ Test Passed: Used legacy file when present.")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

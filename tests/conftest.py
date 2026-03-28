@@ -12,13 +12,14 @@ import pytest
 
 # Stub native modules only available inside Docker so that test files
 # can import production code without raising ImportError.
-for _mod_name in ('epubcfi',):
+for _mod_name in ("epubcfi",):
     if _mod_name not in sys.modules:
         sys.modules[_mod_name] = ModuleType(_mod_name)
 
 
 # ── MockABSService ─────────────────────────────────────────────────
 # Lightweight stand-in for ABSService that avoids network calls.
+
 
 class MockABSService:
     """Minimal ABS service mock suitable for route-level tests."""
@@ -30,7 +31,7 @@ class MockABSService:
         return []
 
     def get_cover_proxy_url(self, abs_id):
-        return f'/covers/{abs_id}.jpg'
+        return f"/covers/{abs_id}.jpg"
 
     def add_to_collection(self, abs_id, collection_name):
         pass
@@ -39,6 +40,7 @@ class MockABSService:
 # ── Canonical MockContainer ────────────────────────────────────────
 # Superset of every per-file variant.  Individual tests can override
 # attributes after construction (e.g. ``mc.mock_abs_client.is_configured …``).
+
 
 class MockContainer:
     """Test-friendly replacement for the DI Container.
@@ -64,16 +66,16 @@ class MockContainer:
         # ── API Clients ──
         self.mock_abs_client = Mock()
         self.mock_abs_client.is_configured.return_value = False
-        self.mock_booklore_client = Mock()
-        self.mock_booklore_client.is_configured.return_value = False
+        self.mock_grimmory_client = Mock()
+        self.mock_grimmory_client.is_configured.return_value = False
         self.mock_storyteller_client = Mock()
         self.mock_storyteller_client.is_configured.return_value = False
         self.mock_hardcover_client = Mock()
         self.mock_hardcover_client.is_configured.return_value = False
         self.mock_bookfusion_client = Mock()
         self.mock_bookfusion_client.is_configured.return_value = False
-        self.mock_bookfusion_client.highlights_api_key = ''
-        self.mock_bookfusion_client.upload_api_key = ''
+        self.mock_bookfusion_client.highlights_api_key = ""
+        self.mock_bookfusion_client.upload_api_key = ""
 
         # ── Services ──
         self.mock_abs_service = MockABSService()
@@ -93,9 +95,9 @@ class MockContainer:
         # ── Manager ──
         self.mock_sync_manager = Mock()
         self.mock_sync_manager.abs_client = self.mock_abs_client
-        self.mock_sync_manager.booklore_client = self.mock_booklore_client
+        self.mock_sync_manager.grimmory_client = self.mock_grimmory_client
         self.mock_sync_manager.storyteller_client = self.mock_storyteller_client
-        self.mock_sync_manager.get_audiobook_title.return_value = 'Test Book Title'
+        self.mock_sync_manager.get_audiobook_title.return_value = "Test Book Title"
         self.mock_sync_manager.get_duration.return_value = 3600
         self.mock_sync_manager.clear_progress = Mock()
 
@@ -116,11 +118,11 @@ class MockContainer:
     def abs_service(self):
         return self.mock_abs_service
 
-    def booklore_client(self):
-        return self.mock_booklore_client
+    def grimmory_client(self):
+        return self.mock_grimmory_client
 
-    def booklore_client_group(self):
-        return self.mock_booklore_client
+    def grimmory_client_group(self):
+        return self.mock_grimmory_client
 
     def storyteller_client(self):
         return self.mock_storyteller_client
@@ -147,16 +149,17 @@ class MockContainer:
         return {}
 
     def data_dir(self):
-        return self._tmp / 'test_data'
+        return self._tmp / "test_data"
 
     def books_dir(self):
-        return self._tmp / 'test_books'
+        return self._tmp / "test_books"
 
     def epub_cache_dir(self):
-        return self._tmp / 'test_epub_cache'
+        return self._tmp / "test_epub_cache"
 
 
 # ── Pytest fixtures ────────────────────────────────────────────────
+
 
 @pytest.fixture()
 def mock_container():
@@ -168,16 +171,18 @@ def mock_container():
 def flask_app(mock_container, tmp_path):
     """Create a Flask test app wired to the given mock_container."""
     saved_env = os.environ.copy()
-    os.environ['DATA_DIR'] = str(tmp_path)
+    os.environ["DATA_DIR"] = str(tmp_path)
 
     import src.db.migration_utils
+
     original_init_db = src.db.migration_utils.initialize_database
     src.db.migration_utils.initialize_database = lambda data_dir: mock_container.mock_database_service
 
     try:
         from src.web_server import create_app
+
         app, _ = create_app(test_container=mock_container)
-        app.config['TESTING'] = True
+        app.config["TESTING"] = True
         yield app
     finally:
         src.db.migration_utils.initialize_database = original_init_db
@@ -194,6 +199,7 @@ def client(flask_app):
 
 # ── Test data helpers ──────────────────────────────────────────────
 
+
 def make_test_book(**overrides):
     """Build a dict resembling a book/mapping row, with sensible defaults.
 
@@ -202,18 +208,18 @@ def make_test_book(**overrides):
         book = make_test_book(title='Dune', abs_id='abc-123')
     """
     defaults = {
-        'id': 1,
-        'abs_id': 'test-abs-id',
-        'title': 'Test Book',
-        'author': 'Test Author',
-        'status': 'active',
-        'ebook_source': None,
-        'ebook_id': None,
-        'audio_progress': 0.0,
-        'ebook_progress': 0.0,
-        'duration': 3600,
-        'hardcover_book_id': None,
-        'hardcover_edition_id': None,
+        "id": 1,
+        "abs_id": "test-abs-id",
+        "title": "Test Book",
+        "author": "Test Author",
+        "status": "active",
+        "ebook_source": None,
+        "ebook_id": None,
+        "audio_progress": 0.0,
+        "ebook_progress": 0.0,
+        "duration": 3600,
+        "hardcover_book_id": None,
+        "hardcover_edition_id": None,
     }
     defaults.update(overrides)
     return defaults
@@ -227,14 +233,14 @@ def make_test_state(**overrides):
         state = make_test_state(abs_id='abc-123', audio_progress=0.5)
     """
     defaults = {
-        'id': 1,
-        'abs_id': 'test-abs-id',
-        'audio_progress': 0.0,
-        'audio_current_time': 0.0,
-        'ebook_progress': 0.0,
-        'ebook_cfi': None,
-        'last_sync_source': None,
-        'last_updated': None,
+        "id": 1,
+        "abs_id": "test-abs-id",
+        "audio_progress": 0.0,
+        "audio_current_time": 0.0,
+        "ebook_progress": 0.0,
+        "ebook_cfi": None,
+        "last_sync_source": None,
+        "last_updated": None,
     }
     defaults.update(overrides)
     return defaults

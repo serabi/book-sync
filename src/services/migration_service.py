@@ -7,10 +7,11 @@ import json
 import logging
 from pathlib import Path
 
-from src.db.models import BookAlignment, BookloreBook
+from src.db.models import BookAlignment, GrimmoryBook
 from src.services.alignment_service import AlignmentService
 
 logger = logging.getLogger(__name__)
+
 
 class MigrationService:
     def __init__(self, database_service, alignment_service: AlignmentService, data_dir: Path):
@@ -32,11 +33,11 @@ class MigrationService:
            Option A: Load the transcript into a temporary structure? No, we want unified structure.
         Migrate all legacy JSON data to database:
         1. Transcripts/Alignments
-        2. Booklore Cache
+        2. Grimmory Cache
         3. Clean up obsolete files
         """
         self._migrate_alignments()
-        self._migrate_booklore_cache()
+        self._migrate_grimmory_cache()
         self._cleanup_legacy_files()
 
     def _migrate_alignments(self):
@@ -64,7 +65,7 @@ class MigrationService:
                         continue
 
                     try:
-                        with open(map_file, encoding='utf-8') as f:
+                        with open(map_file, encoding="utf-8") as f:
                             data = json.load(f)
 
                         # Create new DB entry
@@ -85,68 +86,65 @@ class MigrationService:
         except Exception as e:
             logger.error(f"Migration error: {e}")
 
-    def _migrate_booklore_cache(self):
-        """Migrate booklore_cache.json to booklore_books table."""
-        cache_file = self.data_dir / "booklore_cache.json"
+    def _migrate_grimmory_cache(self):
+        """Migrate grimmory_cache.json (or legacy booklore_cache.json) to grimmory_books table."""
+        cache_file = self.data_dir / "grimmory_cache.json"
+        if not cache_file.exists():
+            cache_file = self.data_dir / "booklore_cache.json"
         if not cache_file.exists():
             return
 
         # Check if we've already migrated (simple check: is table empty?)
         # A more robust check might be needed if we support partial migrations,
         # but for now we assume if DB has data, we are good.
-        existing_count = len(self.database_service.get_all_booklore_books())
+        existing_count = len(self.database_service.get_all_grimmory_books())
         if existing_count > 0:
             return
 
-        logger.info("Migrating Booklore cache to database...")
+        logger.info("Migrating Grimmory cache to database...")
         try:
-            with open(cache_file, encoding='utf-8') as f:
+            with open(cache_file, encoding="utf-8") as f:
                 data = json.load(f)
 
-            books = data.get('books', {})
+            books = data.get("books", {})
             count = 0
 
             for filename, info in books.items():
                 try:
                     # Convert to model
-                    b = BookloreBook(
-                        filename=filename.lower(), # Normalize key
-                        title=info.get('title'),
-                        authors=info.get('authors'),
-                        raw_metadata=json.dumps(info)
+                    b = GrimmoryBook(
+                        filename=filename.lower(),  # Normalize key
+                        title=info.get("title"),
+                        authors=info.get("authors"),
+                        raw_metadata=json.dumps(info),
                     )
-                    self.database_service.save_booklore_book(b)
+                    self.database_service.save_grimmory_book(b)
                     count += 1
                 except Exception as e:
                     logger.warning(f"Failed to migrate book '{filename}': {e}")
 
             if count > 0:
-                logger.info(f"Migrated {count} Booklore books to database")
+                logger.info(f"Migrated {count} Grimmory books to database")
                 # Rename to .bak to prevent re-reading and confusion
                 try:
-                    cache_file.rename(cache_file.with_suffix('.json.bak'))
-                    logger.info("Renamed legacy booklore_cache.json to .bak")
+                    cache_file.rename(cache_file.with_suffix(".json.bak"))
+                    logger.info(f"Renamed legacy {cache_file.name} to .bak")
                 except Exception as e:
                     logger.warning(f"Failed to rename legacy cache file: {e}")
 
         except Exception as e:
-            logger.error(f"Booklore migration failed: {e}")
+            logger.error(f"Grimmory migration failed: {e}")
 
     def _cleanup_legacy_files(self):
         """Identify and optionally rename/delete obsolete JSON files."""
-        legacy_files = [
-            "kosync_hash_cache.json",
-            "mapping_db.json",
-            "last_state.json",
-            "settings.json"
-        ]
+        legacy_files = ["kosync_hash_cache.json", "mapping_db.json", "last_state.json", "settings.json"]
 
         for fname in legacy_files:
             fpath = self.data_dir / fname
             if fpath.exists():
                 try:
                     # Renaming to .bak allows user recovery if needed
-                    bak_path = fpath.with_suffix('.json.bak')
+                    bak_path = fpath.with_suffix(".json.bak")
                     if not bak_path.exists():
                         fpath.rename(bak_path)
                         logger.info(f"Renamed legacy file {fname} to .bak")
