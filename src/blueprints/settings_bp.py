@@ -287,7 +287,7 @@ def _test_conn_error(e: Exception) -> str:
         return "Request timed out"
     if "NameResolutionError" in msg or "getaddrinfo" in msg:
         return "Server hostname could not be resolved — check the URL"
-    return _redact_secrets(str(sanitize_log_data(msg)))
+    return str(sanitize_log_data(_redact_secrets(msg)))
 
 
 _HTTP_FRIENDLY = {

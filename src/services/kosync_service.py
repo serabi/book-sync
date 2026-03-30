@@ -6,11 +6,15 @@ document management. Route handlers in kosync_server.py delegate here.
 
 import json
 import logging
+import os
 import re
 import threading
+import time
+from datetime import datetime
 from pathlib import Path
 
 from src.db.models import Book, KosyncDocument
+from src.utils.constants import INTERNAL_DEVICE_NAMES
 from src.utils.logging_utils import sanitize_log_data
 from src.utils.path_utils import is_safe_path_within
 
@@ -542,10 +546,6 @@ class KosyncService:
 
     def handle_put_progress(self, data, remote_addr, debounce_manager=None):
         """Process a KoSync PUT progress request. Returns (response_dict, status_code)."""
-        import os
-        from datetime import datetime
-
-        from src.utils.constants import INTERNAL_DEVICE_NAMES
 
         if not data:
             logger.warning(f"KOSync: PUT progress with no JSON data from {remote_addr}")
@@ -636,7 +636,7 @@ class KosyncService:
             discovery_started = auto_create and self.start_discovery_if_available(doc_hash)
             if discovery_started:
                 threading.Thread(target=self.run_put_auto_discovery, args=(doc_hash,), daemon=True).start()
-            elif not auto_create or not discovery_started:
+            else:
                 # Auto-discovery disabled or slots full — try suggestion via title matching
                 try:
                     suggestion_svc = self._container.suggestion_service()
@@ -673,7 +673,6 @@ class KosyncService:
 
     def handle_get_progress(self, doc_id, remote_addr):
         """Process a KoSync GET progress request. Returns (response_dict, status_code)."""
-        import os
 
         if len(doc_id) > 64:
             return {"error": "Document ID too long"}, 400
@@ -723,7 +722,6 @@ class KosyncService:
 
         Returns (response_dict, status_code).
         """
-        import time
 
         states = self._db.get_states_for_book(book.id)
 

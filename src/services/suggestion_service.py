@@ -125,9 +125,8 @@ class SuggestionService:
                 author_score = max(author_score, _AUTHOR_PARTIAL_MATCH_FLOOR)
                 evidence.append("author_partial")
 
-        score = (title_score * _TITLE_WEIGHT) + (
-            author_score * _AUTHOR_WEIGHT if norm_source_author and norm_candidate_author else 0.0
-        )
+        has_author = norm_source_author and norm_candidate_author
+        score = (title_score * _TITLE_WEIGHT) + (author_score * _AUTHOR_WEIGHT) if has_author else title_score
 
         source_numbers = self._extract_title_numbers(norm_source_title)
         candidate_numbers = self._extract_title_numbers(norm_candidate_title)
@@ -390,7 +389,7 @@ class SuggestionService:
         ranked.sort(
             key=lambda m: (
                 m.get("score", 0.0),
-                m.get("source_family") in ("grimmory", "booklore"),
+                m.get("source_family") == "grimmory",
                 m.get("highlight_count", 0),
             ),
             reverse=True,
@@ -418,12 +417,7 @@ class SuggestionService:
         """Create a reverse suggestion for a KoSync document (ebook -> ABS audiobook)."""
         if os.environ.get("SUGGESTIONS_ENABLED", "true").lower() != "true":
             return
-        if not self.abs_client:
-            return
-
         if self.database_service.suggestion_exists(doc_hash, source="kosync"):
-            return
-        if self.database_service.is_suggestion_ignored(doc_hash, source="kosync"):
             return
 
         title = ""
@@ -437,32 +431,31 @@ class SuggestionService:
             logger.debug(f"KoSync suggestion: no title derivable for {doc_hash[:8]}..., skipping")
             return
 
-        try:
-            all_audiobooks = self.abs_client.get_all_audiobooks()
-        except Exception as e:
-            logger.debug(f"KoSync suggestion: failed to fetch ABS audiobooks: {e}")
-            return
+        # Try ABS audiobook matching first (if ABS is configured)
+        matches = []
+        if self.abs_client:
+            try:
+                all_audiobooks = self.abs_client.get_all_audiobooks() or []
+            except Exception as e:
+                logger.debug(f"KoSync suggestion: failed to fetch ABS audiobooks: {e}")
+                all_audiobooks = []
 
-        if not all_audiobooks:
-            return
+            if all_audiobooks:
+                all_books = self.database_service.get_all_books()
+                mapped_abs_ids = {b.abs_id for b in all_books}
+                abs_by_title: dict[str, list[dict]] = {}
+                for ab in all_audiobooks:
+                    meta = ab.get("media", {}).get("metadata", {})
+                    ab_title = meta.get("title", "")
+                    if ab_title:
+                        clean = self._normalize_title(ab_title)
+                        if clean:
+                            abs_by_title.setdefault(clean, []).append(ab)
 
-        all_books = self.database_service.get_all_books()
-        mapped_abs_ids = {b.abs_id for b in all_books}
+                clean_title = self._normalize_title(title)
+                matches = self._find_abs_audiobook_matches(clean_title, abs_by_title, mapped_abs_ids)
 
-        # Build ABS title index for matching
-        abs_by_title: dict[str, list[dict]] = {}
-        for ab in all_audiobooks:
-            meta = ab.get("media", {}).get("metadata", {})
-            ab_title = meta.get("title", "")
-            if ab_title:
-                clean = self._normalize_title(ab_title)
-                if clean:
-                    abs_by_title.setdefault(clean, []).append(ab)
-
-        clean_title = self._normalize_title(title)
-        matches = self._find_abs_audiobook_matches(clean_title, abs_by_title, mapped_abs_ids)
-
-        # If no ABS matches, try cross-ebook matching (Storyteller + Grimmory)
+        # Fallback: cross-ebook matching (Storyteller + Grimmory)
         if not matches:
             ebook_candidates = self._build_ebook_source_candidates()
             all_ebook = ebook_candidates.get("storyteller", []) + ebook_candidates.get("grimmory", [])
@@ -483,7 +476,7 @@ class SuggestionService:
             source="kosync",
             source_id=doc_hash,
             title=title,
-            author="",
+            author=best.get("author") or best.get("authorName") or "",
             cover_url=cover,
             matches_json=json.dumps(matches),
         )
@@ -914,6 +907,7 @@ class SuggestionService:
         created = 0
         updated = 0
         kept_ids = set()
+        all_abs_books = []
 
         if self.abs_client:
             try:
@@ -941,14 +935,12 @@ class SuggestionService:
                     continue
 
                 kept_ids.add(abs_id)
-                existing = existing_actionable.get(abs_id)
                 suggestion = PendingSuggestion(
                     source_id=abs_id,
                     title=title,
                     author=author,
                     cover_url=self._cover_url_for("abs", abs_id),
                     matches_json=json.dumps(matches),
-                    status="hidden" if existing and getattr(existing, "status", None) == "hidden" else "pending",
                 )
                 if abs_id in existing_actionable:
                     updated += 1
@@ -966,7 +958,7 @@ class SuggestionService:
                     time.sleep(0.01)
 
         deleted = 0
-        if kept_ids:
+        if all_abs_books:
             self._update_rescan_status(phase="cleanup", message="Cleaning stale suggestions...")
             for source_id in list(existing_actionable.keys()):
                 if source_id not in kept_ids:

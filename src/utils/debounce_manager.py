@@ -41,29 +41,32 @@ class DebounceManager:
     def _poll_loop(self) -> None:
         """Check periodically for books that stopped receiving PUTs."""
         while True:
-            time.sleep(self._poll_interval)
-            debounce_seconds = int(os.environ.get("ABS_SOCKET_DEBOUNCE_SECONDS", "30"))
-            now = time.time()
-            to_sync = []
+            try:
+                time.sleep(self._poll_interval)
+                debounce_seconds = int(os.environ.get("ABS_SOCKET_DEBOUNCE_SECONDS", "30"))
+                now = time.time()
+                to_sync = []
 
-            with self._lock:
-                for book_id, info in self._entries.items():
-                    if not info["synced"] and (now - info["last_event"]) > debounce_seconds:
-                        info["synced"] = True
-                        to_sync.append((book_id, info["title"]))
+                with self._lock:
+                    for book_id, info in self._entries.items():
+                        if not info["synced"] and (now - info["last_event"]) > debounce_seconds:
+                            info["synced"] = True
+                            to_sync.append((book_id, info["title"]))
 
-            for book_id, title in to_sync:
-                self._trigger_sync(book_id, title)
+                for book_id, title in to_sync:
+                    self._trigger_sync(book_id, title)
 
-            # Clean up stale entries
-            with self._lock:
-                stale = [k for k, v in self._entries.items() if now - v["last_event"] > self._stale_seconds]
-                for k in stale:
-                    del self._entries[k]
+                # Clean up stale entries
+                with self._lock:
+                    stale = [k for k, v in self._entries.items() if now - v["last_event"] > self._stale_seconds]
+                    for k in stale:
+                        del self._entries[k]
 
-            # Prune stale rate-limit buckets
-            if self._rate_limiter:
-                self._rate_limiter.prune()
+                # Prune stale rate-limit buckets
+                if self._rate_limiter:
+                    self._rate_limiter.prune()
+            except Exception as e:
+                logger.error(f"Debounce poll loop error: {e}")
 
     def _trigger_sync(self, book_id: int, title: str) -> None:
         """Trigger sync for a debounced book."""
