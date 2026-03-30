@@ -101,9 +101,7 @@ class HardcoverClient:
             attempt = 0
             while r.status_code == 429 and attempt < max_retries:
                 attempt += 1
-                logger.warning(
-                    f"Hardcover rate limit hit (429), retry {attempt}/{max_retries} after {backoff}s"
-                )
+                logger.warning(f"Hardcover rate limit hit (429), retry {attempt}/{max_retries} after {backoff}s")
                 time.sleep(backoff)
                 with self._rate_lock:
                     self._last_request_time = time.monotonic()
@@ -116,9 +114,7 @@ class HardcoverClient:
                 backoff *= 2
 
             if r.status_code == 429:
-                logger.error(
-                    f"Hardcover rate limit persisted after {max_retries} retries, giving up"
-                )
+                logger.error(f"Hardcover rate limit persisted after {max_retries} retries, giving up")
                 return None
 
             if r.status_code == 200:
@@ -163,9 +159,7 @@ class HardcoverClient:
         }
         """
         try:
-            response = self.query(
-                query, {"book_id": int(book_id), "user_id": int(user_id)}
-            )
+            response = self.query(query, {"book_id": int(book_id), "user_id": int(user_id)})
 
             if response and "user_books" in response:
                 books = response["user_books"]
@@ -368,14 +362,11 @@ class HardcoverClient:
             if clean_input_author:
                 # Get all authors for this book from cached_contributors
                 authors = [
-                    a.lower().strip()
-                    for a in self._extract_authors_from_cached(book.get("cached_contributors"))
+                    a.lower().strip() for a in self._extract_authors_from_cached(book.get("cached_contributors"))
                 ]
                 if authors:
                     # Find best similarity among all authors
-                    author_score = max(
-                        calculate_similarity(clean_input_author, a) for a in authors
-                    )
+                    author_score = max(calculate_similarity(clean_input_author, a) for a in authors)
                 else:
                     # If book has no authors and we provided one, penalize?
                     # For now, let's keep it 0.0
@@ -409,9 +400,7 @@ class HardcoverClient:
 
         # Threshold check
         if best_match and best_score > 0.5:
-            logger.info(
-                f"Selected best match: '{best_match['title']}' (Score: {best_score:.2f})"
-            )
+            logger.info(f"Selected best match: '{best_match['title']}' (Score: {best_score:.2f})")
 
             edition = self.get_default_edition(best_match["id"])
 
@@ -515,11 +504,7 @@ class HardcoverClient:
                         format_label = format_label.capitalize()
                 # Extract year from release_date (format: "YYYY-MM-DD")
                 release_date = ed.get("release_date")
-                year = (
-                    int(release_date[:4])
-                    if release_date and len(release_date) >= 4
-                    else None
-                )
+                year = int(release_date[:4]) if release_date and len(release_date) >= 4 else None
 
                 editions.append(
                     {
@@ -666,9 +651,7 @@ class HardcoverClient:
             return result["user_books"][0]
         return None
 
-    def update_status(
-        self, book_id: int, status_id: int, edition_id: int | None = None
-    ) -> dict | None:
+    def update_status(self, book_id: int, status_id: int, edition_id: int | None = None) -> dict | None:
         """
         Create/update user_book status.
 
@@ -762,8 +745,9 @@ class HardcoverClient:
             return True
         return False
 
-    def create_read_with_dates(self, user_book_id: int, started_at: str = None,
-                               finished_at: str = None, edition_id: int = None) -> int | None:
+    def create_read_with_dates(
+        self, user_book_id: int, started_at: str = None, finished_at: str = None, edition_id: int = None
+    ) -> int | None:
         """Create a new user_book_read with dates only (no progress).
         Returns the new read ID, or None on failure."""
         query = """
@@ -836,11 +820,7 @@ class HardcoverClient:
             }
             """
             read_result = self.query(read_query, {"userBookId": user_book_id})
-            if (
-                read_result
-                and read_result.get("user_book_reads")
-                and len(read_result["user_book_reads"]) > 0
-            ):
+            if read_result and read_result.get("user_book_reads") and len(read_result["user_book_reads"]) > 0:
                 existing_read = read_result["user_book_reads"][0]
 
         if existing_read:
@@ -853,9 +833,7 @@ class HardcoverClient:
             # If no start date exists, and we passed 2%, fill it in
             if not started_at_val and should_start:
                 started_at_val = started_at or today
-                logger.info(
-                    f"Hardcover: Setting started_at to '{started_at_val}' (Progress: {current_percentage:.1%})"
-                )
+                logger.info(f"Hardcover: Setting started_at to '{started_at_val}' (Progress: {current_percentage:.1%})")
 
             if is_finished and not finished_at_val:
                 finished_at_val = finished_at or today
@@ -1021,10 +999,10 @@ class HardcoverClient:
         def _normalize_category_label(value):
             normalized = _normalize_tag_name(value).lower()
             singular_map = {
-                'genres': 'genre',
-                'moods': 'mood',
-                'content warnings': 'content warning',
-                'tags': 'tag',
+                "genres": "genre",
+                "moods": "mood",
+                "content warnings": "content warning",
+                "tags": "tag",
             }
             return singular_map.get(normalized, normalized)
 
@@ -1035,10 +1013,7 @@ class HardcoverClient:
             category = raw_tag.get("tag_category")
             if isinstance(category, dict):
                 return _normalize_category_label(
-                    category.get("slug")
-                    or category.get("category")
-                    or category.get("name")
-                    or ""
+                    category.get("slug") or category.get("category") or category.get("name") or ""
                 )
 
             if isinstance(category, str):
@@ -1074,20 +1049,14 @@ class HardcoverClient:
                     for value in values:
                         if isinstance(value, dict):
                             _append_tag(
-                                value.get("tag")
-                                or value.get("name")
-                                or value.get("label")
-                                or value.get("value"),
+                                value.get("tag") or value.get("name") or value.get("label") or value.get("value"),
                                 category,
                             )
                         else:
                             _append_tag(value, category)
                 elif isinstance(values, dict):
                     _append_tag(
-                        values.get("tag")
-                        or values.get("name")
-                        or values.get("label")
-                        or values.get("value"),
+                        values.get("tag") or values.get("name") or values.get("label") or values.get("value"),
                         category,
                     )
                 else:
@@ -1095,12 +1064,7 @@ class HardcoverClient:
         else:
             for t in source_tags:
                 if isinstance(t, dict):
-                    name = _normalize_tag_name(
-                        t.get("tag")
-                        or t.get("name")
-                        or t.get("label")
-                        or t.get("value")
-                    )
+                    name = _normalize_tag_name(t.get("tag") or t.get("name") or t.get("label") or t.get("value"))
                     category = _normalize_category(t)
                     if not name:
                         continue
@@ -1181,11 +1145,7 @@ class HardcoverClient:
         # Create lookup for quick access
         books_by_id = {book["id"]: book for book in book_result["books"]}
 
-        return [
-            self._normalize_book(books_by_id[bid])
-            for bid in book_ids
-            if bid in books_by_id
-        ]
+        return [self._normalize_book(books_by_id[bid]) for bid in book_ids if bid in books_by_id]
 
     def get_all_editions(self, book_id: int) -> dict:
         """Fetch all default editions for a book, keyed by format type.
@@ -1215,11 +1175,11 @@ class HardcoverClient:
         if result and result.get("books_by_pk"):
             book = result["books_by_pk"]
             if book.get("default_ebook_edition"):
-                editions['ebook'] = book["default_ebook_edition"]
+                editions["ebook"] = book["default_ebook_edition"]
             if book.get("default_physical_edition"):
-                editions['physical'] = book["default_physical_edition"]
+                editions["physical"] = book["default_physical_edition"]
             if book.get("default_audio_edition"):
-                editions['audio'] = book["default_audio_edition"]
+                editions["audio"] = book["default_audio_edition"]
         return editions
 
     def get_book_series(self, book_id: int) -> list[dict]:

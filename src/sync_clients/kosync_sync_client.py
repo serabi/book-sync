@@ -9,6 +9,7 @@ from src.utils.ebook_utils import EbookParser
 
 logger = logging.getLogger(__name__)
 
+
 class KoSyncSyncClient(SyncClient):
     _FRAGILE_INLINE_SEGMENT_RE = re.compile(
         r"/(?:span|em|strong|b|i|u|small|sub|sup|font|mark|abbr|cite|code|q|time|s|del|ins)(?:\[\d+\])?(?=/|$)",
@@ -29,9 +30,11 @@ class KoSyncSyncClient(SyncClient):
 
     def get_supported_sync_types(self) -> set:
         """KoSync participates in both audiobook and ebook sync modes."""
-        return {'audiobook', 'ebook'}
+        return {"audiobook", "ebook"}
 
-    def get_service_state(self, book: Book, prev_state: State | None, title_snip: str = "", bulk_context: dict = None) -> ServiceState | None:
+    def get_service_state(
+        self, book: Book, prev_state: State | None, title_snip: str = "", bulk_context: dict = None
+    ) -> ServiceState | None:
         ko_id = book.kosync_doc_id
         if ko_id is None:
             logger.debug(f"'{title_snip}' KoSync skipped — no kosync_doc_id (audio-only book)")
@@ -55,12 +58,12 @@ class KoSyncSyncClient(SyncClient):
             threshold=self.delta_kosync_thresh,
             is_configured=self.kosync_client.is_configured(),
             display=("KoSync", "{prev:.4%} -> {curr:.4%}"),
-            value_formatter=lambda v: f"{v*100:.4f}%"
+            value_formatter=lambda v: f"{v * 100:.4f}%",
         )
 
     def get_text_from_current_state(self, book: Book, state: ServiceState) -> str | None:
-        ko_xpath = state.current.get('xpath')
-        ko_pct = state.current.get('pct')
+        ko_xpath = state.current.get("xpath")
+        ko_pct = state.current.get("pct")
         epub = book.ebook_filename
         if ko_xpath and epub:
             txt = self.ebook_parser.resolve_xpath(epub, ko_xpath)
@@ -118,19 +121,19 @@ class KoSyncSyncClient(SyncClient):
 
         if safe_xpath is None:
             if pct is not None:
-                logger.info(f"Pushing percentage-only KoSync update for "
-                            f"'{book.title if book else 'unknown'}' (no valid XPath available)")
+                logger.info(
+                    f"Pushing percentage-only KoSync update for "
+                    f"'{book.title if book else 'unknown'}' (no valid XPath available)"
+                )
                 safe_xpath = ""
             else:
-                logger.warning(f"Skipping KoSync update — no percentage or XPath for "
-                               f"'{book.title if book else 'unknown'}'")
-                return SyncResult(location=pct, success=False,
-                                  updated_state={'pct': pct, 'xpath': None, 'skipped': True})
+                logger.warning(
+                    f"Skipping KoSync update — no percentage or XPath for '{book.title if book else 'unknown'}'"
+                )
+                return SyncResult(
+                    location=pct, success=False, updated_state={"pct": pct, "xpath": None, "skipped": True}
+                )
 
         success = self.kosync_client.update_progress(ko_id, pct, safe_xpath)
-        updated_state = {
-            'pct': pct,
-            'xpath': safe_xpath
-        }
+        updated_state = {"pct": pct, "xpath": safe_xpath}
         return SyncResult(pct, success, updated_state)
-

@@ -61,18 +61,20 @@ class OpenLibraryClient:
             except (TypeError, ValueError):
                 rating = None
 
-            results.append({
-                "title": doc.get("title", ""),
-                "author": author,
-                "cover_url": cover_url,
-                "isbn": isbn,
-                "first_publish_year": doc.get("first_publish_year"),
-                "ol_work_key": doc.get("key"),  # e.g. "/works/OL45883W"
-                "page_count": doc.get("number_of_pages_median"),
-                "rating": rating,
-                "ratings_count": doc.get("ratings_count"),
-                "genres": genres,
-            })
+            results.append(
+                {
+                    "title": doc.get("title", ""),
+                    "author": author,
+                    "cover_url": cover_url,
+                    "isbn": isbn,
+                    "first_publish_year": doc.get("first_publish_year"),
+                    "ol_work_key": doc.get("key"),  # e.g. "/works/OL45883W"
+                    "page_count": doc.get("number_of_pages_median"),
+                    "rating": rating,
+                    "ratings_count": doc.get("ratings_count"),
+                    "genres": genres,
+                }
+            )
 
         return results
 

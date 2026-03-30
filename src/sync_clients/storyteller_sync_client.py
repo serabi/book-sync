@@ -14,6 +14,7 @@ from src.utils.ebook_utils import EbookParser
 
 logger = logging.getLogger(__name__)
 
+
 class StorytellerSyncClient(SyncClient):
     def __init__(self, storyteller_client: StorytellerAPIClient, ebook_parser: EbookParser, database_service=None):
         super().__init__(ebook_parser)
@@ -34,9 +35,11 @@ class StorytellerSyncClient(SyncClient):
 
     def get_supported_sync_types(self) -> set:
         """Storyteller participates in both audiobook and ebook sync modes."""
-        return {'audiobook', 'ebook'}
+        return {"audiobook", "ebook"}
 
-    def get_service_state(self, book: Book, prev_state: State | None, title_snip: str = "", bulk_context: dict = None) -> ServiceState | None:
+    def get_service_state(
+        self, book: Book, prev_state: State | None, title_snip: str = "", bulk_context: dict = None
+    ) -> ServiceState | None:
         # [Tri-Link Fix] Strict UUID Sync Only
         uuid = book.storyteller_uuid
 
@@ -60,11 +63,11 @@ class StorytellerSyncClient(SyncClient):
         # We treat it as 0% for calculation if it returned valid None, or bail if it crashed.
         # But get_position_details usually returns None tuple on failure, so we check st_pct.
         if st_pct is None:
-             st_pct = 0.0
-             st_ts = 0
-             delta = 0 # No movement
+            st_pct = 0.0
+            st_ts = 0
+            delta = 0  # No movement
         else:
-             delta = abs(st_pct - prev_storyteller_pct)
+            delta = abs(st_pct - prev_storyteller_pct)
 
         return ServiceState(
             current={"pct": st_pct, "ts": st_ts, "href": st_href, "frag": st_frag},
@@ -73,13 +76,13 @@ class StorytellerSyncClient(SyncClient):
             threshold=self.delta_kosync_thresh,
             is_configured=self.storyteller_client.is_configured(),
             display=("Storyteller", "{prev:.4%} -> {curr:.4%}"),
-            value_formatter=lambda v: f"{v*100:.4f}%"
+            value_formatter=lambda v: f"{v * 100:.4f}%",
         )
 
     def get_text_from_current_state(self, book: Book, state: ServiceState) -> str | None:
         # This needs to be updated to work with the new interface
         epub = book.ebook_filename
-        st_pct, href, frag = state.current.get('pct'), state.current.get('href'), state.current.get('frag')
+        st_pct, href, frag = state.current.get("pct"), state.current.get("href"), state.current.get("frag")
         txt = self.ebook_parser.resolve_locator_id(epub, href, frag)
         if not txt:
             txt = self.ebook_parser.get_text_at_percentage(epub, st_pct)
@@ -93,9 +96,7 @@ class StorytellerSyncClient(SyncClient):
         if not locator.href:
             # Try to enrich using the matched text if available
             if request.txt:
-                enriched = self.ebook_parser.find_text_location(
-                    epub, request.txt, hint_percentage=pct
-                )
+                enriched = self.ebook_parser.find_text_location(epub, request.txt, hint_percentage=pct)
                 if enriched and enriched.href:
                     logger.debug(f"Enriched Storyteller locator with href={enriched.href}")
                     locator = enriched
@@ -113,7 +114,7 @@ class StorytellerSyncClient(SyncClient):
                         match_index=locator.match_index,
                         cfi=locator.cfi,
                         fragment=locator.fragment,
-                        perfect_ko_xpath=locator.perfect_ko_xpath
+                        perfect_ko_xpath=locator.perfect_ko_xpath,
                     )
                     logger.debug(f"Resolved Storyteller href from percentage: {locator.href}")
 
@@ -122,7 +123,8 @@ class StorytellerSyncClient(SyncClient):
             if success:
                 try:
                     from src.services.write_tracker import record_write
-                    record_write('Storyteller', book.id)
+
+                    record_write("Storyteller", book.id)
                 except ImportError as e:
                     logger.debug(f"Write tracker not available for Storyteller: {e}")
         else:
@@ -141,12 +143,8 @@ class StorytellerSyncClient(SyncClient):
                 return None
             target_index = int(len(full_text) * pct)
             for item in spine_map:
-                if item['start'] <= target_index < item['end']:
-                    return item['href']
+                if item["start"] <= target_index < item["end"]:
+                    return item["href"]
         except Exception as e:
             logger.debug(f"Failed to resolve href from percentage {pct:.4f} for '{epub}': {e}")
         return None
-
-
-
-

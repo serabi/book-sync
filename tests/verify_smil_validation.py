@@ -7,6 +7,7 @@ from pathlib import Path
 # Add src to path
 sys.path.append(str(Path(__file__).parent.parent))
 
+
 # Mocking Transcriber for isolated test
 class MockTranscriber:
     def validate_transcript(self, segments: list, max_overlap_ratio: float = 0.05) -> tuple[bool, float]:
@@ -21,13 +22,14 @@ class MockTranscriber:
 
         overlap_count = 0
         for i in range(1, len(segments)):
-            if segments[i]['start'] < segments[i-1]['end']:
+            if segments[i]["start"] < segments[i - 1]["end"]:
                 overlap_count += 1
 
         overlap_ratio = overlap_count / len(segments)
         is_valid = overlap_ratio <= max_overlap_ratio
 
         return is_valid, overlap_ratio
+
 
 class TestSMILValidation(unittest.TestCase):
     def setUp(self):
@@ -36,10 +38,10 @@ class TestSMILValidation(unittest.TestCase):
     def test_valid_transcript(self):
         # Create a valid transcript (sequential)
         segments = [
-            {'start': 0.0, 'end': 10.0, 'text': 'Segment 1'},
-            {'start': 10.0, 'end': 20.0, 'text': 'Segment 2'},
-            {'start': 20.0, 'end': 30.0, 'text': 'Segment 3'},
-            {'start': 30.0, 'end': 40.0, 'text': 'Segment 4'},
+            {"start": 0.0, "end": 10.0, "text": "Segment 1"},
+            {"start": 10.0, "end": 20.0, "text": "Segment 2"},
+            {"start": 20.0, "end": 30.0, "text": "Segment 3"},
+            {"start": 30.0, "end": 40.0, "text": "Segment 4"},
         ]
         is_valid, ratio = self.transcriber.validate_transcript(segments)
         print(f"\n[Test Valid] Ratio: {ratio:.1%}, Valid: {is_valid}")
@@ -57,9 +59,9 @@ class TestSMILValidation(unittest.TestCase):
             end = start + 10
             # Force overlap on 2nd segment
             if i == 1:
-                start = 5 # Overlaps with 0-10
+                start = 5  # Overlaps with 0-10
 
-            segments.append({'start': start, 'end': end, 'text': f'Segment {i}'})
+            segments.append({"start": start, "end": end, "text": f"Segment {i}"})
 
         is_valid, ratio = self.transcriber.validate_transcript(segments)
         print(f"[Test Minor Overlap] Ratio: {ratio:.1%}, Valid: {is_valid}")
@@ -69,10 +71,10 @@ class TestSMILValidation(unittest.TestCase):
         # Create a corrupt transcript (high overlap)
         # Scenario: All segments start at 0 (common corruption)
         segments = [
-            {'start': 0.0, 'end': 10.0, 'text': 'Segment 1'},
-            {'start': 0.0, 'end': 10.0, 'text': 'Segment 2'},
-            {'start': 0.0, 'end': 10.0, 'text': 'Segment 3'},
-            {'start': 0.0, 'end': 10.0, 'text': 'Segment 4'},
+            {"start": 0.0, "end": 10.0, "text": "Segment 1"},
+            {"start": 0.0, "end": 10.0, "text": "Segment 2"},
+            {"start": 0.0, "end": 10.0, "text": "Segment 3"},
+            {"start": 0.0, "end": 10.0, "text": "Segment 4"},
         ]
         is_valid, ratio = self.transcriber.validate_transcript(segments)
         print(f"[Test Corrupt] Ratio: {ratio:.1%}, Valid: {is_valid}")
@@ -86,15 +88,16 @@ class TestSMILValidation(unittest.TestCase):
         # Seg 3: 10-20 (Overlap with 2)
         # Seg 4: 15-25 (Overlap with 3)
         segments = [
-            {'start': 0.0, 'end': 10.0},
-            {'start': 5.0, 'end': 15.0},
-            {'start': 10.0, 'end': 20.0},
-            {'start': 15.0, 'end': 25.0},
+            {"start": 0.0, "end": 10.0},
+            {"start": 5.0, "end": 15.0},
+            {"start": 10.0, "end": 20.0},
+            {"start": 15.0, "end": 25.0},
         ]
         is_valid, ratio = self.transcriber.validate_transcript(segments)
         print(f"[Test Interleaved] Ratio: {ratio:.1%}, Valid: {is_valid}")
         # 3 overlaps out of 4 segments = 75%
         self.assertFalse(is_valid, "Interleaved transcript should fail validation")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

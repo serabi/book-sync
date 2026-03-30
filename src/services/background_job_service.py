@@ -21,7 +21,7 @@ class BackgroundJobService:
         self,
         database_service,
         abs_client,
-        booklore_client,
+        grimmory_client,
         ebook_parser,
         transcriber,
         alignment_service,
@@ -34,7 +34,7 @@ class BackgroundJobService:
     ):
         self.database_service = database_service
         self.abs_client = abs_client
-        self.booklore_client = booklore_client
+        self.grimmory_client = grimmory_client
         self.ebook_parser = ebook_parser
         self.transcriber = transcriber
         self.alignment_service = alignment_service
@@ -192,16 +192,31 @@ class BackgroundJobService:
             raw_transcript, transcript_source, book_text, chapters = self._phase_transcription(
                 book, abs_id, book_title, epub_path, item_details, update_progress
             )
-            self._phase_alignment(book, abs_id, book_title, epub_path, raw_transcript, transcript_source, book_text, chapters, update_progress)
+            self._phase_alignment(
+                book,
+                abs_id,
+                book_title,
+                epub_path,
+                raw_transcript,
+                transcript_source,
+                book_text,
+                chapters,
+                update_progress,
+            )
 
         except StorytellerDeferral as e:
             logger.info(f"{sanitize_log_data(book_title)}: {e}")
             job = self.database_service.get_latest_job(book.id)
-            self.database_service.save_job(Job(
-                abs_id=abs_id, book_id=book.id, last_attempt=time.time(),
-                retry_count=job.retry_count if job else 0,
-                last_error=str(e), progress=job.progress if job else 0.0,
-            ))
+            self.database_service.save_job(
+                Job(
+                    abs_id=abs_id,
+                    book_id=book.id,
+                    last_attempt=time.time(),
+                    retry_count=job.retry_count if job else 0,
+                    last_error=str(e),
+                    progress=job.progress if job else 0.0,
+                )
+            )
             book.status = "failed_retry_later"
             self.database_service.save_book(book)
 
@@ -209,16 +224,22 @@ class BackgroundJobService:
             logger.error(f"{sanitize_log_data(book_title)}: {e}")
             job = self.database_service.get_latest_job(book.id)
             new_retry_count = (job.retry_count if job else 0) + 1
-            self.database_service.save_job(Job(
-                abs_id=abs_id, book_id=book.id, last_attempt=time.time(),
-                retry_count=new_retry_count, last_error=str(e),
-                progress=job.progress if job else 0.0,
-            ))
+            self.database_service.save_job(
+                Job(
+                    abs_id=abs_id,
+                    book_id=book.id,
+                    last_attempt=time.time(),
+                    retry_count=new_retry_count,
+                    last_error=str(e),
+                    progress=job.progress if job else 0.0,
+                )
+            )
             if new_retry_count >= max_retries:
                 book.status = "failed_permanent"
                 logger.warning(f"{sanitize_log_data(book_title)}: Max retries exceeded")
                 if self.data_dir:
                     import shutil
+
                     audio_cache_dir = Path(self.data_dir) / "audio_cache" / abs_id
                     if audio_cache_dir.exists():
                         try:
@@ -248,7 +269,7 @@ class BackgroundJobService:
                 )
 
         if not epub_path:
-            epub_path = get_local_epub(ebook_filename, self.books_dir, self.epub_cache_dir, self.booklore_client)
+            epub_path = get_local_epub(ebook_filename, self.books_dir, self.epub_cache_dir, self.grimmory_client)
 
         update_progress(1.0, 1)
         if not epub_path:
@@ -267,6 +288,7 @@ class BackgroundJobService:
                         book.original_ebook_filename = book.ebook_filename
                     self.database_service.save_book(book)
                     from src.services.kosync_service import ensure_kosync_document
+
                     ensure_kosync_document(book, self.database_service)
                     logger.info(f"Locked KOSync ID: {computed_hash}")
         except Exception as e:
@@ -311,7 +333,9 @@ class BackgroundJobService:
             if not transcript_source and hasattr(self.transcriber, "transcribe_from_smil"):
                 try:
                     raw_transcript = self.transcriber.transcribe_from_smil(
-                        abs_id, epub_path, chapters,
+                        abs_id,
+                        epub_path,
+                        chapters,
                         full_book_text=book_text,
                         progress_callback=lambda p: update_progress(p, 2),
                     )
@@ -327,7 +351,9 @@ class BackgroundJobService:
                 logger.info("SMIL extraction skipped/failed, falling back to Whisper transcription")
                 audio_files = self.abs_client.get_audio_files(abs_id)
                 raw_transcript = self.transcriber.process_audio(
-                    abs_id, audio_files, full_book_text=book_text,
+                    abs_id,
+                    audio_files,
+                    full_book_text=book_text,
                     progress_callback=lambda p: update_progress(p, 2),
                 )
                 if raw_transcript:
@@ -337,7 +363,18 @@ class BackgroundJobService:
 
         return raw_transcript, transcript_source, book_text, chapters
 
-    def _phase_alignment(self, book, abs_id, book_title, epub_path, raw_transcript, transcript_source, book_text, chapters, update_progress):
+    def _phase_alignment(
+        self,
+        book,
+        abs_id,
+        book_title,
+        epub_path,
+        raw_transcript,
+        transcript_source,
+        book_text,
+        chapters,
+        update_progress,
+    ):
         """Phase 3 (90-100%): Align transcript to book text and finalize."""
         if transcript_source == "STORYTELLER_NATIVE":
             update_progress(0.5, 3)

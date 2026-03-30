@@ -13,22 +13,22 @@ def _setup_matching_db_defaults(mock_db):
     mock_db.get_bookfusion_books.return_value = []
 
 
-# ── _create_book_mapping: Booklore lookup fails ──────────────────
+# ── _create_book_mapping: Grimmory lookup fails ──────────────────
 
 
-def test_create_book_mapping_booklore_raises(flask_app, mock_container):
-    """_create_book_mapping proceeds when find_in_booklore raises internally.
+def test_create_book_mapping_grimmory_raises(flask_app, mock_container):
+    """_create_book_mapping proceeds when find_in_grimmory raises internally.
 
-    find_in_booklore catches its own errors, so _create_book_mapping only sees
+    find_in_grimmory catches its own errors, so _create_book_mapping only sees
     (None, None). The mapping should still succeed if KOSync ID can be computed.
     """
     _setup_matching_db_defaults(mock_container.mock_database_service)
 
-    mock_container.mock_booklore_client.is_configured.return_value = True
-    mock_container.mock_booklore_client.find_book_by_filename.return_value = None
+    mock_container.mock_grimmory_client.is_configured.return_value = True
+    mock_container.mock_grimmory_client.find_book_by_filename.return_value = None
 
     with flask_app.app_context():
-        with patch("src.blueprints.matching_bp.find_in_booklore", return_value=(None, None)):
+        with patch("src.blueprints.matching_bp.find_in_grimmory", return_value=(None, None)):
             with patch("src.blueprints.matching_bp.get_kosync_id_for_ebook", return_value="hash123"):
                 from src.blueprints.matching_bp import _create_book_mapping
 
@@ -49,7 +49,7 @@ def test_create_book_mapping_kosync_id_fails(flask_app, mock_container):
     """_create_book_mapping returns error when KOSync ID cannot be computed."""
     _setup_matching_db_defaults(mock_container.mock_database_service)
 
-    mock_container.mock_booklore_client.is_configured.return_value = False
+    mock_container.mock_grimmory_client.is_configured.return_value = False
 
     with flask_app.app_context():
         with patch("src.blueprints.matching_bp.get_kosync_id_for_ebook", return_value=None):
@@ -71,12 +71,12 @@ def test_create_book_mapping_hardcover_automatch_fails(flask_app, mock_container
     """_create_book_mapping still returns the book when Hardcover automatch throws."""
     _setup_matching_db_defaults(mock_container.mock_database_service)
 
-    mock_container.mock_booklore_client.is_configured.return_value = False
+    mock_container.mock_grimmory_client.is_configured.return_value = False
     mock_container.mock_hardcover_service.is_configured.return_value = True
     mock_container.mock_hardcover_service.automatch_hardcover.side_effect = Exception("HC timeout")
 
     with flask_app.app_context():
-        with patch("src.blueprints.matching_bp.find_in_booklore", return_value=(None, None)):
+        with patch("src.blueprints.matching_bp.find_in_grimmory", return_value=(None, None)):
             with patch("src.blueprints.matching_bp.get_kosync_id_for_ebook", return_value="hash456"):
                 from src.blueprints.matching_bp import _create_book_mapping
 
@@ -93,23 +93,23 @@ def test_create_book_mapping_hardcover_automatch_fails(flask_app, mock_container
     assert error is None
 
 
-def test_create_book_mapping_booklore_add_to_shelf_fails(flask_app, mock_container):
-    """_create_book_mapping logs but succeeds when Booklore add_to_shelf throws."""
+def test_create_book_mapping_grimmory_add_to_shelf_fails(flask_app, mock_container):
+    """_create_book_mapping logs but succeeds when Grimmory add_to_shelf throws."""
     _setup_matching_db_defaults(mock_container.mock_database_service)
 
     bl_client = Mock()
     bl_client.is_configured.return_value = True
     bl_client.add_to_shelf.side_effect = Exception("Shelf error")
 
-    mock_container.mock_booklore_client.is_configured.return_value = True
-    mock_container.mock_booklore_client.find_book_by_filename.return_value = {"id": 99, "_instance_id": "default"}
+    mock_container.mock_grimmory_client.is_configured.return_value = True
+    mock_container.mock_grimmory_client.find_book_by_filename.return_value = {"id": 99, "_instance_id": "default"}
     mock_container.mock_ebook_parser.get_kosync_id_from_bytes.return_value = "hash789"
     bl_client.download_book.return_value = b"fake epub"
     mock_container.mock_ebook_parser.get_kosync_id_from_bytes.return_value = "hash789"
 
-    # Patch find_in_booklore to return our bl_client
+    # Patch find_in_grimmory to return our bl_client
     with flask_app.app_context():
-        with patch("src.blueprints.matching_bp.find_in_booklore", return_value=({"id": 99}, bl_client)):
+        with patch("src.blueprints.matching_bp.find_in_grimmory", return_value=({"id": 99}, bl_client)):
             with patch("src.blueprints.matching_bp.get_kosync_id_for_ebook", return_value="hash789"):
                 from src.blueprints.matching_bp import _create_book_mapping
 
@@ -221,7 +221,7 @@ def test_batch_match_ebook_only_kosync_failure_adds_to_failed(flask_app, mock_co
                 },
             ]
 
-        with patch("src.blueprints.matching_bp.find_in_booklore", return_value=(None, None)):
+        with patch("src.blueprints.matching_bp.find_in_grimmory", return_value=(None, None)):
             with patch("src.blueprints.matching_bp.get_kosync_id_for_ebook", return_value=None):
                 response = test_client.post("/batch-match", data={"action": "process_queue"})
 

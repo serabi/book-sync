@@ -44,25 +44,25 @@ class TestSmilExtractorRobustness(unittest.TestCase):
         # Default namespace
         xml = '<smil xmlns="http://www.w3.org/ns/SMIL" version="3.0"><body><par>text</par></body></smil>'
         stripped = self.extractor._strip_namespaces(xml)
-        self.assertNotIn('xmlns=', stripped)
-        self.assertIn('<smil', stripped)
+        self.assertNotIn("xmlns=", stripped)
+        self.assertIn("<smil", stripped)
 
         # Named namespace
         xml = '<smil xmlns:epub="http://www.idpf.org/2007/ops"><epub:text>content</epub:text></smil>'
         stripped = self.extractor._strip_namespaces(xml)
-        self.assertNotIn('xmlns:epub=', stripped)
-        self.assertNotIn('epub:', stripped) # Check prefix removal in tag
-        self.assertIn('<text>', stripped) # Check tag preservation
-        self.assertIn('</text>', stripped)
+        self.assertNotIn("xmlns:epub=", stripped)
+        self.assertNotIn("epub:", stripped)  # Check prefix removal in tag
+        self.assertIn("<text>", stripped)  # Check tag preservation
+        self.assertIn("</text>", stripped)
 
         # Complex mixed
         xml = '<seq epub:textref="foo.html" xmlns:epub="ops">Content</seq>'
         stripped = self.extractor._strip_namespaces(xml)
-        self.assertIn('<seq', stripped)
-        self.assertNotIn('xmlns:epub=', stripped)
+        self.assertIn("<seq", stripped)
+        self.assertNotIn("xmlns:epub=", stripped)
         # Attribute prefixes SHOULD be stripped now to prevent unbound prefix errors
-        self.assertNotIn('epub:textref', stripped)
-        self.assertIn(' textref=', stripped)
+        self.assertNotIn("epub:textref", stripped)
+        self.assertIn(" textref=", stripped)
         # That strips the TAG prefix. It does NOT strip attribute prefixes.
         # This is expected behavior for _strip_namespaces as implemented.
         # But we should verification that it handles the TAGS correctly.
@@ -85,13 +85,13 @@ class TestSmilExtractorRobustness(unittest.TestCase):
 
         # Mock read behavior
         def side_effect(path):
-            str_path = str(path).replace('\\', '/')
-            if str_path.endswith('.smil'):
-                return smil_content.encode('utf-8')
-            if str_path == 'OEBPS/Chapter 1.html': # Decoded path
-                 return b'<html><body id="p1">Hello World</body></html>'
-            if 'Chapter%201.html' in str_path: # Encoded path (Should NOT happen if fix works)
-                 return b'<html><body id="p1">FAIL_ENCODED</body></html>'
+            str_path = str(path).replace("\\", "/")
+            if str_path.endswith(".smil"):
+                return smil_content.encode("utf-8")
+            if str_path == "OEBPS/Chapter 1.html":  # Decoded path
+                return b'<html><body id="p1">Hello World</body></html>'
+            if "Chapter%201.html" in str_path:  # Encoded path (Should NOT happen if fix works)
+                return b'<html><body id="p1">FAIL_ENCODED</body></html>'
             raise KeyError(f"File not found: {str_path}")
 
         mock_zf.read.side_effect = side_effect
@@ -103,8 +103,8 @@ class TestSmilExtractorRobustness(unittest.TestCase):
         segments = self.extractor._process_smil_absolute(mock_zf, "OEBPS/chapter1.smil")
 
         self.assertEqual(len(segments), 1)
-        self.assertEqual(segments[0]['text'], 'Hello World')
-        self.assertNotEqual(segments[0]['text'], 'FAIL_ENCODED')
+        self.assertEqual(segments[0]["text"], "Hello World")
+        self.assertNotEqual(segments[0]["text"], "FAIL_ENCODED")
 
     def test_xml_parsing_with_prefixes(self):
         """Verify stripped XML is valid and parseable by ElementTree."""
@@ -114,12 +114,13 @@ class TestSmilExtractorRobustness(unittest.TestCase):
 
         try:
             root = ET.fromstring(stripped)
-            self.assertEqual(root.tag, 'seq')
+            self.assertEqual(root.tag, "seq")
             # attribute name should be just 'textref' now
-            self.assertIn('textref', root.attrib)
-            self.assertEqual(root.attrib['textref'], 'foo.html')
+            self.assertIn("textref", root.attrib)
+            self.assertEqual(root.attrib["textref"], "foo.html")
         except ET.ParseError as e:
             self.fail(f"Stripped XML failed to parse: {e}")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

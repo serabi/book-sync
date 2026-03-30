@@ -9,7 +9,7 @@ from pathlib import Path
 import nh3
 import schedule
 from dependency_injector import providers
-from flask import Flask, request
+from flask import Flask, current_app, request
 from markupsafe import Markup
 
 from src.api.hardcover_routes import hardcover_bp, init_hardcover_routes
@@ -285,7 +285,7 @@ def inject_global_vars():
     Returns:
         dict: Mapping made available to templates containing:
             - abs_server (str): Value of ENV['ABS_SERVER'] or empty string.
-            - booklore_server (str): Value of ENV['BOOKLORE_SERVER'] or empty string.
+            - grimmory_server (str): Value of ENV['GRIMMORY_SERVER'] or empty string.
             - get_val (callable): get_val(key, default_val=None) returns, in order:
                 1) the environment variable value for `key` if present,
                 2) a built-in default for well-known keys,
@@ -307,7 +307,7 @@ def inject_global_vars():
             "DATA_DIR": "/data",
             "BOOKS_DIR": "/books",
             "ABS_COLLECTION_NAME": "Synced with KOReader",
-            "BOOKLORE_SHELF_NAME": "Kobo",
+            "GRIMMORY_SHELF_NAME": "Kobo",
             "SYNC_PERIOD_MINS": "5",
             "SYNC_DELTA_ABS_SECONDS": "60",
             "SYNC_DELTA_KOSYNC_PERCENT": "0.5",
@@ -326,7 +326,7 @@ def inject_global_vars():
             "ABS_ENABLED": "true",
             "KOSYNC_ENABLED": "false",
             "STORYTELLER_ENABLED": "false",
-            "BOOKLORE_ENABLED": "false",
+            "GRIMMORY_ENABLED": "false",
             "HARDCOVER_ENABLED": "false",
             "TELEGRAM_ENABLED": "false",
             "SUGGESTIONS_ENABLED": "false",
@@ -365,9 +365,18 @@ def inject_global_vars():
             return req_path == "/"
         return req_path == target_path or req_path.startswith(f"{target_path}/")
 
+    suggestion_count = 0
+    if get_bool("SUGGESTIONS_ENABLED"):
+        try:
+            db_svc = current_app.config.get("database_service")
+            if db_svc:
+                suggestion_count = db_svc.get_pending_suggestion_count()
+        except Exception:
+            pass
+
     return dict(
         abs_server=os.environ.get("ABS_SERVER", ""),
-        booklore_server=os.environ.get("BOOKLORE_SERVER", ""),
+        grimmory_server=os.environ.get("GRIMMORY_SERVER", ""),
         pagekeeper_env=pagekeeper_env,
         is_dev_container=is_dev_container,
         title_prefix=title_prefix,
@@ -375,6 +384,7 @@ def inject_global_vars():
         get_bool=get_bool,
         get_header_service_url=get_header_service_url,
         is_active_path=is_active_path,
+        suggestion_count=suggestion_count,
     )
 
 
@@ -592,17 +602,17 @@ if __name__ == "__main__":
     poller_thread.start()
 
     # Check ebook source configuration
-    booklore_configured = container.booklore_client().is_configured()
+    grimmory_configured = container.grimmory_client().is_configured()
     books_volume_exists = container.books_dir().exists()
 
-    if booklore_configured:
-        logger.info("Booklore integration enabled - ebooks sourced from API")
+    if grimmory_configured:
+        logger.info("Grimmory integration enabled - ebooks sourced from API")
     elif books_volume_exists:
         logger.info(f"Ebooks directory mounted at {container.books_dir()}")
     else:
         logger.info(
-            "NO EBOOK SOURCE CONFIGURED: Neither Booklore integration nor /books volume is available. "
-            "New book matches will fail. Enable Booklore (BOOKLORE_SERVER, BOOKLORE_USER, BOOKLORE_PASSWORD) "
+            "NO EBOOK SOURCE CONFIGURED: Neither Grimmory integration nor /books volume is available. "
+            "New book matches will fail. Enable Grimmory (GRIMMORY_SERVER, GRIMMORY_USER, GRIMMORY_PASSWORD) "
             "or mount the ebooks directory to /books."
         )
 

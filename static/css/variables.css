@@ -47,12 +47,18 @@
   --color-abs: #7C3AED;
   --color-kosync: #A78BFA;
   --color-storyteller: #C084FC;
-  --color-booklore: #0D9488;
+  --color-grimmory: #0D9488;
   --color-hardcover: #F59E0B;
   --color-cwa: #FB923C;
   --color-bookfusion: #3B82F6;
   --color-telegram: #2AABEE;
   --color-localfile: #C084FC;
+
+  /* Confidence colors */
+  --color-confidence-high: #15803d;
+  --color-confidence-high-bg: rgba(34, 197, 94, 0.14);
+  --color-confidence-medium: #b45309;
+  --color-confidence-medium-bg: rgba(245, 158, 11, 0.14);
 
   /* Status colors */
   --color-status-active: #0D9488;

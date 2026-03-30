@@ -29,12 +29,16 @@ class TestTelegramLogging(unittest.TestCase):
         logging_utils.telegram_log_handler = None
 
     def test_reconcile_adds_handler_when_enabled_and_configured(self):
-        with patch.dict(os.environ, {
-            'TELEGRAM_ENABLED': 'true',
-            'TELEGRAM_BOT_TOKEN': '123:ABC',
-            'TELEGRAM_CHAT_ID': '456',
-            'TELEGRAM_LOG_LEVEL': 'WARNING',
-        }, clear=False):
+        with patch.dict(
+            os.environ,
+            {
+                "TELEGRAM_ENABLED": "true",
+                "TELEGRAM_BOT_TOKEN": "123:ABC",
+                "TELEGRAM_CHAT_ID": "456",
+                "TELEGRAM_LOG_LEVEL": "WARNING",
+            },
+            clear=False,
+        ):
             handler = logging_utils.reconcile_telegram_logging()
 
         assert isinstance(handler, logging_utils.TelegramHandler)
@@ -42,15 +46,19 @@ class TestTelegramLogging(unittest.TestCase):
         assert handler.level == logging.WARNING
 
     def test_reconcile_removes_existing_handler_when_disabled(self):
-        existing = logging_utils.TelegramHandler('123:ABC', '456')
+        existing = logging_utils.TelegramHandler("123:ABC", "456")
         self.root_logger.addHandler(existing)
         logging_utils.telegram_log_handler = existing
 
-        with patch.dict(os.environ, {
-            'TELEGRAM_ENABLED': 'false',
-            'TELEGRAM_BOT_TOKEN': '123:ABC',
-            'TELEGRAM_CHAT_ID': '456',
-        }, clear=False):
+        with patch.dict(
+            os.environ,
+            {
+                "TELEGRAM_ENABLED": "false",
+                "TELEGRAM_BOT_TOKEN": "123:ABC",
+                "TELEGRAM_CHAT_ID": "456",
+            },
+            clear=False,
+        ):
             handler = logging_utils.reconcile_telegram_logging()
 
         assert handler is None

@@ -70,6 +70,10 @@ class SuggestionRepository(BaseRepository):
             ["title", "author", "cover_url", "matches_json", "status"],
         )
 
+    def get_pending_suggestion_count(self):
+        with self.get_session() as session:
+            return session.query(PendingSuggestion).filter(PendingSuggestion.status == "pending").count()
+
     def get_all_pending_suggestions(self):
         return self._get_all(
             PendingSuggestion,
@@ -106,7 +110,9 @@ class SuggestionRepository(BaseRepository):
             PendingSuggestion.source == source,
         )
 
-    def hide_suggestion(self, source_id, source="abs"):
+    def _transition_status(self, source_id, source, to_status, allowed_from=None):
+        """Transition a suggestion's status. If allowed_from is set, only transitions
+        when the current status is in the allowed set. Returns True if applied."""
         with self.get_session() as session:
             suggestion = (
                 session.query(PendingSuggestion)
@@ -116,54 +122,75 @@ class SuggestionRepository(BaseRepository):
                 )
                 .first()
             )
-            if suggestion and suggestion.status != "ignored":
-                suggestion.status = "hidden"
-                return True
-            return False
+            if not suggestion:
+                return False
+            if allowed_from is not None and suggestion.status not in allowed_from:
+                return False
+            suggestion.status = to_status
+            return True
+
+    def hide_suggestion(self, source_id, source="abs"):
+        return self._transition_status(source_id, source, to_status="hidden", allowed_from=("pending", "hidden"))
 
     def unhide_suggestion(self, source_id, source="abs"):
-        with self.get_session() as session:
-            suggestion = (
-                session.query(PendingSuggestion)
-                .filter(
-                    PendingSuggestion.source_id == source_id,
-                    PendingSuggestion.source == source,
-                )
-                .first()
-            )
-            if suggestion and suggestion.status == "hidden":
-                suggestion.status = "pending"
-                return True
-            return False
+        return self._transition_status(source_id, source, to_status="pending", allowed_from=("hidden",))
 
     def ignore_suggestion(self, source_id, source="abs"):
-        with self.get_session() as session:
-            suggestion = (
-                session.query(PendingSuggestion)
-                .filter(
-                    PendingSuggestion.source_id == source_id,
-                    PendingSuggestion.source == source,
-                )
-                .first()
-            )
-            if suggestion:
-                suggestion.status = "ignored"
-                return True
-            return False
+        return self._transition_status(source_id, source, to_status="ignored")
 
     def clear_stale_suggestions(self):
-        """Delete suggestions whose source_id is not in the books table."""
+        """Delete suggestions whose source items no longer exist."""
         from sqlalchemy import not_
 
-        from .models import Book
+        from .models import Book, KosyncDocument
 
         with self.get_session() as session:
-            count = (
+            count = 0
+            # ABS: source_id not in any book's abs_id
+            count += (
                 session.query(PendingSuggestion)
                 .filter(
                     PendingSuggestion.source == "abs",
                     PendingSuggestion.status.in_(self.ACTIONABLE_STATUSES),
                     not_(PendingSuggestion.source_id.in_(session.query(Book.abs_id))),
+                )
+                .delete(synchronize_session=False)
+            )
+            # Storyteller: source_id not in any book's storyteller_uuid
+            count += (
+                session.query(PendingSuggestion)
+                .filter(
+                    PendingSuggestion.source == "storyteller",
+                    PendingSuggestion.status.in_(self.ACTIONABLE_STATUSES),
+                    not_(
+                        PendingSuggestion.source_id.in_(
+                            session.query(Book.storyteller_uuid).filter(Book.storyteller_uuid.isnot(None))
+                        )
+                    ),
+                )
+                .delete(synchronize_session=False)
+            )
+            # Grimmory: source_id not in any book's ebook_filename
+            count += (
+                session.query(PendingSuggestion)
+                .filter(
+                    PendingSuggestion.source == "grimmory",
+                    PendingSuggestion.status.in_(self.ACTIONABLE_STATUSES),
+                    not_(
+                        PendingSuggestion.source_id.in_(
+                            session.query(Book.ebook_filename).filter(Book.ebook_filename.isnot(None))
+                        )
+                    ),
+                )
+                .delete(synchronize_session=False)
+            )
+            # KoSync: source_id not in kosync_documents
+            count += (
+                session.query(PendingSuggestion)
+                .filter(
+                    PendingSuggestion.source == "kosync",
+                    PendingSuggestion.status.in_(self.ACTIONABLE_STATUSES),
+                    not_(PendingSuggestion.source_id.in_(session.query(KosyncDocument.document_hash))),
                 )
                 .delete(synchronize_session=False)
             )

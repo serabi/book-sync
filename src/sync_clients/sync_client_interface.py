@@ -16,6 +16,7 @@ class ServiceState:
     value_formatter: Callable[[float], str]
     value_seconds_formatter: Callable[[float], str] = None
 
+
 @dataclass
 class LocatorResult:
     percentage: float
@@ -29,6 +30,7 @@ class LocatorResult:
     chapter_progress: float | None = None
     fragments: list | None = None
 
+
 @dataclass
 class UpdateProgressRequest:
     locator_result: LocatorResult
@@ -36,12 +38,14 @@ class UpdateProgressRequest:
     # can be percentage or timestamp (ABS)
     previous_location: float | None = None
 
+
 @dataclass
 class SyncResult:
     # can be percentage or timestamp (ABS)
     location: float | None = None
     success: bool = False
     updated_state: dict = field(default_factory=dict)
+
 
 class SyncClient:
     """
@@ -56,8 +60,7 @@ class SyncClient:
     def __init__(self, ebook_parser):
         self.ebook_parser = ebook_parser
 
-    def is_configured(self) -> bool:
-        ...
+    def is_configured(self) -> bool: ...
 
     def check_connection(self):
         """
@@ -89,27 +92,30 @@ class SyncClient:
         Options: 'audiobook', 'ebook'
         Used for filtering which clients apply to which book sync modes.
         """
-        return {'audiobook', 'ebook'}  # Default: supports both
+        return {"audiobook", "ebook"}  # Default: supports both
 
-    def get_service_state(self, book: Book, prev_state: State | None, title_snip: str = "", bulk_context: dict = None) -> ServiceState | None:
+    def get_service_state(
+        self, book: Book, prev_state: State | None, title_snip: str = "", bulk_context: dict = None
+    ) -> ServiceState | None:
         """
         Args:
             bulk_context: Optional pre-fetched data to avoid redundant API calls
         """
         ...
-    def get_text_from_current_state(self, book: Book, state: ServiceState) -> str | None:
-        ...
+
+    def get_text_from_current_state(self, book: Book, state: ServiceState) -> str | None: ...
     def get_fallback_text(self, book: Book, state: ServiceState) -> str | None:
         """Optional method to return fallback text (e.g. previous segment) if primary match fails."""
         return None
 
-    def update_progress(self, book: Book, request: UpdateProgressRequest) -> SyncResult:
-        ...
+    def update_progress(self, book: Book, request: UpdateProgressRequest) -> SyncResult: ...
 
     def get_locator_from_text(self, txt: str, epub_file_name: str, hint_percentage: float) -> LocatorResult | None:
         if not txt or not epub_file_name:
             return None
-        locator_result: LocatorResult = self.ebook_parser.find_text_location(epub_file_name, txt, hint_percentage=hint_percentage)
+        locator_result: LocatorResult = self.ebook_parser.find_text_location(
+            epub_file_name, txt, hint_percentage=hint_percentage
+        )
         if not locator_result:
             return None
         # Add perfect_xpath if match_index is present, special case for KoSync
@@ -127,5 +133,5 @@ class SyncClient:
             perfect_ko_xpath=perfect_xpath,
             css_selector=locator_result.css_selector,
             chapter_progress=locator_result.chapter_progress,
-            fragments=locator_result.fragments
+            fragments=locator_result.fragments,
         )

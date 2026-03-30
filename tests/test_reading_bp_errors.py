@@ -39,7 +39,7 @@ def _setup_reading_db_defaults(mock_db, book=None):
     mock_db.get_all_states.return_value = []
     mock_db.get_states_by_book.return_value = {}
     mock_db.get_states_for_book.return_value = []
-    mock_db.get_booklore_by_filename.return_value = {}
+    mock_db.get_grimmory_by_filename.return_value = {}
     mock_db.get_all_hardcover_details.return_value = []
     mock_db.get_hardcover_details.return_value = None
     mock_db.get_reading_goal.return_value = None
@@ -54,6 +54,7 @@ def _setup_reading_db_defaults(mock_db, book=None):
 
 # ── Reading index: ABS metadata fetch fails ───────────────────────
 
+
 def test_reading_index_renders_when_abs_metadata_fails(flask_app, mock_container):
     """Reading page should render 200 even when ABS get_audiobooks raises."""
     book = _make_mock_book()
@@ -63,7 +64,7 @@ def test_reading_index_renders_when_abs_metadata_fails(flask_app, mock_container
     failing_abs.get_audiobooks.side_effect = Exception("ABS unavailable")
     failing_abs.is_available.return_value = False
     failing_abs.get_cover_proxy_url.return_value = None
-    flask_app.config['abs_service'] = failing_abs
+    flask_app.config["abs_service"] = failing_abs
 
     with flask_app.test_client() as client:
         response = client.get("/reading")
@@ -94,6 +95,7 @@ def test_reading_index_renders_when_tbr_items_fail(flask_app, mock_container):
 
 
 # ── Rating: Hardcover sync fails but local save succeeds ──────────
+
 
 def test_update_rating_hardcover_sync_fails_local_succeeds(flask_app, mock_container):
     """Rating update should succeed locally even when Hardcover push throws."""
@@ -175,6 +177,7 @@ def test_update_rating_out_of_range_returns_400(flask_app, mock_container):
 
 # ── Reading detail: alignment info failure ────────────────────────
 
+
 def test_reading_detail_alignment_failure_swallowed(flask_app, mock_container):
     """Reading detail page should render when alignment_service raises."""
     book = _make_mock_book(sync_mode="audiobook")
@@ -184,7 +187,7 @@ def test_reading_detail_alignment_failure_swallowed(flask_app, mock_container):
     mock_container.mock_database_service.get_bookfusion_highlights_for_book_by_book_id.return_value = []
     mock_container.mock_database_service.is_bookfusion_linked_by_book_id.return_value = False
     mock_container.mock_database_service.get_states_by_book.return_value = {}
-    mock_container.mock_database_service.get_booklore_by_filename.return_value = {}
+    mock_container.mock_database_service.get_grimmory_by_filename.return_value = {}
     mock_container.mock_database_service.find_tbr_by_book_id.return_value = None
 
     failing_alignment = Mock()
@@ -198,6 +201,7 @@ def test_reading_detail_alignment_failure_swallowed(flask_app, mock_container):
 
 
 # ── TBR detail: HC check failure ──────────────────────────────────
+
 
 def test_tbr_detail_hardcover_check_fails(flask_app, mock_container):
     """TBR detail page renders when Hardcover is_configured raises."""

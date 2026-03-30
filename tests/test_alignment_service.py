@@ -17,13 +17,15 @@ def mock_db():
     db.get_session.return_value = session
     return db
 
+
 @pytest.fixture
 def service(mock_db):
     return AlignmentService(mock_db, Polisher())
 
+
 def test_align_and_store_success(service, mock_db):
     ebook_text = "Alice in Wonderland"
-    segments = [{'start': 0.0, 'end': 1.0, 'text': "Alice"}]
+    segments = [{"start": 0.0, "end": 1.0, "text": "Alice"}]
 
     # Setup Session Context
     session = mock_db.get_session()
@@ -31,7 +33,7 @@ def test_align_and_store_success(service, mock_db):
 
     # Mock lower-level alignment logic (tested separately in test_generate_alignment_map)
     # We only want to verify the storage flow here
-    service._generate_alignment_map = MagicMock(return_value=[{'char': 0, 'ts': 0.0}, {'char': 5, 'ts': 1.0}])
+    service._generate_alignment_map = MagicMock(return_value=[{"char": 0, "ts": 0.0}, {"char": 5, "ts": 1.0}])
 
     # Ensure DB query returns None (Simulate no existing record)
     session.query.return_value.filter_by.return_value.first.return_value = None
@@ -41,12 +43,13 @@ def test_align_and_store_success(service, mock_db):
     assert result == True
     session.add.assert_called()
 
+
 def test_generate_alignment_map(service):
     ebook_text = "One two three four five."
     segments = [
-        {'start': 0.0, 'end': 1.0, 'text': "One two"},
-        {'start': 1.0, 'end': 2.0, 'text': "three four"},
-        {'start': 2.0, 'end': 3.0, 'text': "five"}
+        {"start": 0.0, "end": 1.0, "text": "One two"},
+        {"start": 1.0, "end": 2.0, "text": "three four"},
+        {"start": 2.0, "end": 3.0, "text": "five"},
     ]
 
     # N=12 in implementation is large, so with short text it might fail finding anchors?
@@ -64,21 +67,19 @@ def test_generate_alignment_map(service):
     # Create segments roughly matching
     segments = []
     for i in range(20):
-        segments.append({'start': float(i), 'end': float(i+1), 'text': tokens[i]})
+        segments.append({"start": float(i), "end": float(i + 1), "text": tokens[i]})
 
     alignment_map = service._generate_alignment_map(segments, ebook_text)
 
     assert len(alignment_map) > 0
     # Should contain start (0,0) and likely some anchors
-    assert alignment_map[0]['char'] == 0
-    assert alignment_map[0]['ts'] == 0.0
+    assert alignment_map[0]["char"] == 0
+    assert alignment_map[0]["ts"] == 0.0
+
 
 def test_get_time_for_text(service, mock_db):
     # Mock _get_alignment return
-    mock_map = [
-        {'char': 0, 'ts': 0.0},
-        {'char': 100, 'ts': 10.0}
-    ]
+    mock_map = [{"char": 0, "ts": 0.0}, {"char": 100, "ts": 10.0}]
 
     session = mock_db.get_session()
     session.__enter__.return_value = session

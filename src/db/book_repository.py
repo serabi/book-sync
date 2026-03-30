@@ -56,6 +56,9 @@ class BookRepository(BaseRepository):
     def get_book_by_kosync_id(self, kosync_id):
         return self._get_one(Book, Book.kosync_doc_id == kosync_id)
 
+    def get_book_by_storyteller_uuid(self, uuid):
+        return self._get_one(Book, Book.storyteller_uuid == uuid)
+
     def get_all_books(self):
         return self._get_all(Book)
 

@@ -253,13 +253,18 @@
 }
 
 .chip--confidence-high {
-  background: rgba(34, 197, 94, 0.14);
-  color: #15803d;
+  background: var(--color-confidence-high-bg);
+  color: var(--color-confidence-high);
 }
 
 .chip--confidence-medium {
-  background: rgba(245, 158, 11, 0.14);
-  color: #b45309;
+  background: var(--color-confidence-medium-bg);
+  color: var(--color-confidence-medium);
+}
+
+.chip--source-kosync {
+  background: rgba(167, 139, 250, 0.14);
+  color: var(--color-kosync);
 }
 
 .candidate-list {

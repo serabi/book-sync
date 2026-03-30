@@ -11,7 +11,6 @@ logger = logging.getLogger(__name__)
 
 
 class StorytellerRepository(BaseRepository):
-
     def save_storyteller_submission(self, submission):
         """Save a storyteller submission. Supersedes any existing active submission for the same book."""
         with self.get_session() as session:
@@ -45,8 +44,9 @@ class StorytellerRepository(BaseRepository):
                 session.expunge(sub)
             return sub
 
-    def update_storyteller_submission_status(self, submission_id, status, last_checked_at=None,
-                                               storyteller_uuid=None, submission_dir=None):
+    def update_storyteller_submission_status(
+        self, submission_id, status, last_checked_at=None, storyteller_uuid=None, submission_dir=None
+    ):
         """Update an existing submission's status without creating a new record."""
         with self.get_session() as session:
             sub = session.query(StorytellerSubmission).filter(StorytellerSubmission.id == submission_id).first()

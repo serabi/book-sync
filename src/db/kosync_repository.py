@@ -60,10 +60,10 @@ class KoSyncRepository(BaseRepository):
             return None
         return self._get_one(KosyncDocument, KosyncDocument.filename == filename)
 
-    def get_kosync_doc_by_booklore_id(self, booklore_id):
-        if booklore_id is None:
+    def get_kosync_doc_by_grimmory_id(self, grimmory_id):
+        if grimmory_id is None:
             return None
-        return self._get_one(KosyncDocument, KosyncDocument.booklore_id == str(booklore_id))
+        return self._get_one(KosyncDocument, KosyncDocument.grimmory_id == str(grimmory_id))
 
     def get_orphaned_kosync_books(self):
         """Get books with kosync_doc_id set but no matching KosyncDocument."""

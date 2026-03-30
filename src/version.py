@@ -24,7 +24,7 @@ def get_update_status():
         r = requests.get(
             "https://api.github.com/repos/serabi/pagekeeper/releases/latest",
             timeout=5,
-            headers={"Accept": "application/vnd.github+json"}
+            headers={"Accept": "application/vnd.github+json"},
         )
         if r.status_code == 200:
             latest = r.json().get("tag_name", "").lstrip("v")

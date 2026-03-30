@@ -9,12 +9,12 @@ from pathlib import Path
 from flask import Blueprint, abort, jsonify, render_template, request
 
 from src.blueprints.helpers import (
-    find_booklore_metadata,
+    find_grimmory_metadata,
     get_abs_service,
     get_book_or_404,
     get_container,
     get_database_service,
-    get_enabled_booklore_server_ids,
+    get_enabled_grimmory_server_ids,
     get_hardcover_book_url,
 )
 from src.services.book_metadata_service import build_book_metadata, build_service_info
@@ -55,7 +55,7 @@ def _build_book_reading_data(
     database_service,
     abs_service,
     states_by_book,
-    booklore_by_filename=None,
+    grimmory_by_filename=None,
     abs_metadata_by_id=None,
     hardcover_details=None,
 ):
@@ -72,10 +72,10 @@ def _build_book_reading_data(
     states = states_by_book.get(book.id, [])
     max_progress = ReadingService.max_progress(states, as_percent=True)
 
-    # Enrich title/author from Booklore or ABS metadata when available
+    # Enrich title/author from Grimmory or ABS metadata when available
     display_title = book.title or ""
     display_author = ""
-    bl_meta = find_booklore_metadata(book, booklore_by_filename) if booklore_by_filename else None
+    bl_meta = find_grimmory_metadata(book, grimmory_by_filename) if grimmory_by_filename else None
     if bl_meta and bl_meta.title:
         stems = set()
         for check_fn in (book.ebook_filename, book.original_ebook_filename):
@@ -98,7 +98,7 @@ def _build_book_reading_data(
         display_author = book.ebook_filename or ""
 
     covers = resolve_book_covers(
-        book, abs_service, database_service, book_type, booklore_meta=bl_meta, hardcover_details=hardcover_details
+        book, abs_service, database_service, book_type, grimmory_meta=bl_meta, hardcover_details=hardcover_details
     )
 
     return {
@@ -168,9 +168,9 @@ def reading_index():
     # Fetch all states at once to avoid N+1
     states_by_book = database_service.get_states_by_book()
 
-    # Fetch Booklore metadata for title enrichment
-    enabled_bl_ids = get_enabled_booklore_server_ids()
-    booklore_by_filename = database_service.get_booklore_by_filename(enabled_server_ids=enabled_bl_ids)
+    # Fetch Grimmory metadata for title enrichment
+    enabled_bl_ids = get_enabled_grimmory_server_ids()
+    grimmory_by_filename = database_service.get_grimmory_by_filename(enabled_server_ids=enabled_bl_ids)
 
     # Bulk-fetch Hardcover details to avoid N+1 in resolve_book_covers
     all_hardcover = database_service.get_all_hardcover_details()
@@ -182,7 +182,7 @@ def reading_index():
             database_service,
             abs_service,
             states_by_book,
-            booklore_by_filename,
+            grimmory_by_filename,
             abs_metadata_by_id,
             hardcover_details=hardcover_by_book.get(b.id),
         )
@@ -314,13 +314,13 @@ def reading_detail(book_ref):
 
     states_by_book = database_service.get_states_by_book()
 
-    # Booklore enrichment
-    enabled_bl_ids = get_enabled_booklore_server_ids()
-    booklore_by_filename = database_service.get_booklore_by_filename(enabled_server_ids=enabled_bl_ids)
+    # Grimmory enrichment
+    enabled_bl_ids = get_enabled_grimmory_server_ids()
+    grimmory_by_filename = database_service.get_grimmory_by_filename(enabled_server_ids=enabled_bl_ids)
 
     hc_details = database_service.get_hardcover_details(book.id)
     book_data = _build_book_reading_data(
-        book, database_service, abs_service, states_by_book, booklore_by_filename, hardcover_details=hc_details
+        book, database_service, abs_service, states_by_book, grimmory_by_filename, hardcover_details=hc_details
     )
     journals = database_service.get_reading_journals(book.id)
 

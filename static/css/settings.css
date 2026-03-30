@@ -307,9 +307,9 @@
   color: var(--color-storyteller);
 }
 
-.accent-dot-booklore {
-  background: var(--color-booklore);
-  color: var(--color-booklore);
+.accent-dot-grimmory {
+  background: var(--color-grimmory);
+  color: var(--color-grimmory);
 }
 
 .accent-dot-cwa {

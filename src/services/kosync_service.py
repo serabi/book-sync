@@ -10,7 +10,7 @@ import re
 import threading
 from pathlib import Path
 
-from src.db.models import Book, KosyncDocument, PendingSuggestion
+from src.db.models import Book, KosyncDocument
 from src.utils.logging_utils import sanitize_log_data
 from src.utils.path_utils import is_safe_path_within
 
@@ -137,7 +137,7 @@ class KosyncService:
     def find_epub_by_hash(self, doc_hash):
         """Try to find matching EPUB file for a KoSync document hash.
 
-        Searches in order: DB cache → filesystem → Booklore API.
+        Searches in order: DB cache → filesystem → Grimmory API.
         Returns the epub filename on match, or None.
         """
         try:
@@ -149,7 +149,7 @@ class KosyncService:
             if result:
                 return result
 
-            result = self._find_epub_in_booklore(doc_hash)
+            result = self._find_epub_in_grimmory(doc_hash)
             if result:
                 return result
 
@@ -233,22 +233,22 @@ class KosyncService:
         logger.info(f"Filesystem search finished. Checked {count} files. No match found")
         return None
 
-    def _find_epub_in_booklore(self, doc_hash):
-        """Search Booklore API for matching EPUB hash."""
-        bl_group = self._container.booklore_client_group()
+    def _find_epub_in_grimmory(self, doc_hash):
+        """Search Grimmory API for matching EPUB hash."""
+        bl_group = self._container.grimmory_client_group()
         if not bl_group.is_configured():
             return None
 
-        logger.info("Starting Booklore API search...")
+        logger.info("Starting Grimmory API search...")
 
         try:
-            books = self._db.get_all_booklore_books()
+            books = self._db.get_all_grimmory_books()
             if not books:
-                logger.info("Booklore cache in DB is empty. Syncing library...")
+                logger.info("Grimmory cache in DB is empty. Syncing library...")
                 bl_group.get_all_books()
-                books = self._db.get_all_booklore_books()
+                books = self._db.get_all_grimmory_books()
 
-            logger.info(f"Scanning {len(books)} books from Booklore DB cache...")
+            logger.info(f"Scanning {len(books)} books from Grimmory DB cache...")
 
             for book in books:
                 raw_id = book.raw_metadata_dict.get("id") if getattr(book, "raw_metadata_dict", None) else None
@@ -267,11 +267,11 @@ class KosyncService:
 
                 qualified_id = f"{book.server_id}:{book_id}"
 
-                # Check if we have a KosyncDocument for this Booklore ID
-                cached_doc = self._db.get_kosync_doc_by_booklore_id(qualified_id)
+                # Check if we have a KosyncDocument for this Grimmory ID
+                cached_doc = self._db.get_kosync_doc_by_grimmory_id(qualified_id)
                 if cached_doc:
                     if cached_doc.document_hash == doc_hash:
-                        logger.info(f"Matched EPUB via Booklore ID in DB: {cached_doc.filename}")
+                        logger.info(f"Matched EPUB via Grimmory ID in DB: {cached_doc.filename}")
                         return cached_doc.filename
 
                 try:
@@ -291,25 +291,25 @@ class KosyncService:
                             else:
                                 with open(cache_path, "wb") as f:
                                     f.write(book_content)
-                                logger.info(f"Persisted Booklore book to cache: {safe_title}")
+                                logger.info(f"Persisted Grimmory book to cache: {safe_title}")
 
                             self._upsert_kosync_metadata(
-                                computed_hash, safe_title, "booklore", booklore_id=qualified_id
+                                computed_hash, safe_title, "grimmory", grimmory_id=qualified_id
                             )
 
-                            logger.info(f"Matched EPUB via Booklore download: {safe_title}")
+                            logger.info(f"Matched EPUB via Grimmory download: {safe_title}")
                             return safe_title
                 except Exception as e:
-                    logger.warning(f"Failed to check Booklore book '{sanitize_log_data(book.title)}': {e}")
+                    logger.warning(f"Failed to check Grimmory book '{sanitize_log_data(book.title)}': {e}")
 
-            logger.info(f"Booklore search finished. Checked {len(books)} books. No match found")
+            logger.info(f"Grimmory search finished. Checked {len(books)} books. No match found")
 
         except Exception as e:
-            logger.debug(f"Error querying Booklore for EPUB matching: {e}")
+            logger.debug(f"Error querying Grimmory for EPUB matching: {e}")
 
         return None
 
-    def _upsert_kosync_metadata(self, document_hash, filename, source, mtime=None, booklore_id=None):
+    def _upsert_kosync_metadata(self, document_hash, filename, source, mtime=None, grimmory_id=None):
         """Cache hash metadata without overwriting any existing progress data."""
         existing = self._db.get_kosync_document(document_hash)
         if existing:
@@ -317,8 +317,8 @@ class KosyncService:
             existing.source = source
             if mtime is not None:
                 existing.mtime = mtime
-            if booklore_id is not None:
-                existing.booklore_id = booklore_id
+            if grimmory_id is not None:
+                existing.grimmory_id = grimmory_id
             self._db.save_kosync_document(existing)
         else:
             doc = KosyncDocument(
@@ -326,7 +326,7 @@ class KosyncService:
                 filename=filename,
                 source=source,
                 mtime=mtime,
-                booklore_id=booklore_id,
+                grimmory_id=grimmory_id,
             )
             self._db.save_kosync_document(doc)
 
@@ -386,9 +386,9 @@ class KosyncService:
                 logger.debug(f"Could not auto-match EPUB for KOSync document '{doc_hash[:8]}'")
                 return
 
-            # Derive title from filename — strip server_id prefix from Booklore-cached files
+            # Derive title from filename — strip server_id prefix from Grimmory-cached files
             stem = Path(epub_filename).stem
-            # Booklore cache files are named "{server_id}_{original}" — strip numeric prefix
+            # Grimmory cache files are named "{server_id}_{original}" — strip numeric prefix
             if "_" in stem:
                 prefix, candidate = stem.split("_", 1)
                 if prefix.isdigit() and candidate:
@@ -425,22 +425,12 @@ class KosyncService:
                         self._manager.sync_cycle(target_book_id=book.id)
                     return
 
-                # Multiple exact or only fuzzy matches — create suggestion for user review
-                if not self._db.suggestion_exists(doc_hash):
-                    suggestion = PendingSuggestion(
-                        source_id=doc_hash,
-                        title=title,
-                        author=None,
-                        cover_url=f"/api/cover-proxy/{audiobook_matches[0]['abs_id']}",
-                        matches_json=json.dumps(
-                            audiobook_matches + [{"source": "ebook", "filename": epub_filename, "confidence": "high"}]
-                        ),
-                        source="kosync",
-                    )
-                    self._db.save_pending_suggestion(suggestion)
-                    logger.info(
-                        f"Created suggestion for '{title}' - found {len(audiobook_matches)} match(es), {len(exact_matches)} exact"
-                    )
+                # Multiple exact or only fuzzy matches — delegate to suggestion service
+                try:
+                    suggestion_svc = self._container.suggestion_service()
+                    suggestion_svc.queue_kosync_suggestion(doc_hash, filename=epub_filename)
+                except Exception as e:
+                    logger.warning(f"KoSync auto-discovery: suggestion creation failed for {doc_hash[:8]}...: {e}")
                 return
 
             # Step 3: No audiobook found — create ebook-only book
@@ -640,11 +630,23 @@ class KosyncService:
             if linked_book:
                 self._db.link_kosync_document(doc_hash, linked_book.id, linked_book.abs_id)
 
-        # AUTO-DISCOVERY
+        # AUTO-DISCOVERY + SUGGESTION
         if not linked_book:
             auto_create = os.environ.get("AUTO_CREATE_EBOOK_MAPPING", "true").lower() == "true"
-            if auto_create and self.start_discovery_if_available(doc_hash):
+            discovery_started = auto_create and self.start_discovery_if_available(doc_hash)
+            if discovery_started:
                 threading.Thread(target=self.run_put_auto_discovery, args=(doc_hash,), daemon=True).start()
+            elif not auto_create or not discovery_started:
+                # Auto-discovery disabled or slots full — try suggestion via title matching
+                try:
+                    suggestion_svc = self._container.suggestion_service()
+                    suggestion_svc.queue_kosync_suggestion(
+                        doc_hash,
+                        filename=kosync_doc.filename,
+                        device=device,
+                    )
+                except Exception as e:
+                    logger.debug(f"KoSync suggestion attempt failed for {doc_hash[:8]}...: {e}")
 
         if linked_book:
             # Flag activity on paused/DNF books

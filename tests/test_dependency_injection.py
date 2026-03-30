@@ -15,18 +15,19 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
+
 def test_dependency_injection():
     """Test that our DI container can create the SyncManager properly."""
 
     # Set up environment for testing
-    os.environ['DATA_DIR'] = str(Path.cwd() / 'test_data')
-    os.environ['BOOKS_DIR'] = str(Path.cwd() / 'test_books')
-    os.environ['ABS_SERVER'] = 'http://localhost:13378'
-    os.environ['ABS_TOKEN'] = 'test-token'
+    os.environ["DATA_DIR"] = str(Path.cwd() / "test_data")
+    os.environ["BOOKS_DIR"] = str(Path.cwd() / "test_books")
+    os.environ["ABS_SERVER"] = "http://localhost:13378"
+    os.environ["ABS_TOKEN"] = "test-token"
 
     # Create test directories
-    Path('test_data').mkdir(exist_ok=True)
-    Path('test_books').mkdir(exist_ok=True)
+    Path("test_data").mkdir(exist_ok=True)
+    Path("test_books").mkdir(exist_ok=True)
 
     try:
         print("[TEST] Testing Dependency Injection")
@@ -35,6 +36,7 @@ def test_dependency_injection():
         # Test 1: Create DI container
         print("[INIT] Creating DI container...")
         from src.utils.di_container import create_container
+
         container = create_container()
         print("[OK] DI container created successfully")
 
@@ -42,7 +44,7 @@ def test_dependency_injection():
         print("\n[TEST] Testing individual components...")
 
         from src.api.api_clients import ABSClient, KoSyncClient
-        from src.api.booklore_client import BookloreClient
+        from src.api.grimmory_client import GrimmoryClient
         from src.api.hardcover_client import HardcoverClient
         from src.utils.ebook_utils import EbookParser
 
@@ -52,8 +54,8 @@ def test_dependency_injection():
         kosync_client = container.kosync_client()
         print(f"[OK] KoSyncClient: {type(kosync_client).__name__}")
 
-        booklore_client = container.booklore_client()
-        print(f"[OK] BookloreClient: {type(booklore_client).__name__}")
+        grimmory_client = container.grimmory_client()
+        print(f"[OK] GrimmoryClient: {type(grimmory_client).__name__}")
 
         ebook_parser = container.ebook_parser()
         print(f"[OK] EbookParser: {type(ebook_parser).__name__}")
@@ -74,7 +76,7 @@ def test_dependency_injection():
         print("\n[TEST] Testing sync clients...")
 
         from src.sync_clients.abs_sync_client import ABSSyncClient
-        from src.sync_clients.booklore_sync_client import BookloreSyncClient
+        from src.sync_clients.grimmory_sync_client import GrimmorySyncClient
         from src.sync_clients.kosync_sync_client import KoSyncSyncClient
         from src.sync_clients.storyteller_sync_client import StorytellerSyncClient
 
@@ -87,13 +89,14 @@ def test_dependency_injection():
         storyteller_sync_client = container.storyteller_sync_client()
         print(f"[OK] StorytellerSyncClient: {type(storyteller_sync_client).__name__}")
 
-        booklore_sync_client = container.booklore_sync_client()
-        print(f"[OK] BookloreSyncClient: {type(booklore_sync_client).__name__}")
+        grimmory_sync_client = container.grimmory_sync_client()
+        print(f"[OK] GrimmorySyncClient: {type(grimmory_sync_client).__name__}")
 
         # Test 5: Test SyncManager creation with DI
         print("\n[TEST] Testing SyncManager creation with DI...")
 
         from src.sync_manager import SyncManager
+
         sync_manager = container.sync_manager()
         print(f"[OK] SyncManager created: {type(sync_manager).__name__}")
 
@@ -101,10 +104,10 @@ def test_dependency_injection():
         print("\n[VERIFY] Verifying autowired dependencies...")
 
         # Check that SyncManager has all the right clients
-        assert hasattr(sync_manager, 'abs_client'), "SyncManager missing abs_client"
-        assert hasattr(sync_manager, 'booklore_client'), "SyncManager missing booklore_client"
-        assert hasattr(sync_manager, 'ebook_parser'), "SyncManager missing ebook_parser"
-        assert hasattr(sync_manager, 'sync_clients'), "SyncManager missing sync_clients"
+        assert hasattr(sync_manager, "abs_client"), "SyncManager missing abs_client"
+        assert hasattr(sync_manager, "grimmory_client"), "SyncManager missing grimmory_client"
+        assert hasattr(sync_manager, "ebook_parser"), "SyncManager missing ebook_parser"
+        assert hasattr(sync_manager, "sync_clients"), "SyncManager missing sync_clients"
 
         print("[OK] All dependencies properly autowired")
 
@@ -120,15 +123,16 @@ def test_dependency_injection():
     except Exception as e:
         print(f"\n[FAIL] Test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
     finally:
         # Close database connection to prevent file locks
-        if 'container' in locals():
+        if "container" in locals():
             try:
                 db_service = container.database_service()
-                if hasattr(db_service, 'db_manager'):
+                if hasattr(db_service, "db_manager"):
                     db_service.db_manager.close()
                     # print("[INFO] Database connection closed.")
             except Exception as e:
@@ -136,6 +140,7 @@ def test_dependency_injection():
 
         # Close logging handlers to prevent file locks on logs/unified_app.log
         import logging
+
         logging.shutdown()
         for handler in logging.root.handlers[:]:
             handler.close()
@@ -143,12 +148,13 @@ def test_dependency_injection():
 
         # Cleanup
         import shutil
-        if Path('test_data').exists():
-            shutil.rmtree('test_data')
-        if Path('test_books').exists():
-            shutil.rmtree('test_books')
+
+        if Path("test_data").exists():
+            shutil.rmtree("test_data")
+        if Path("test_books").exists():
+            shutil.rmtree("test_books")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     success = test_dependency_injection()
     exit(0 if success else 1)

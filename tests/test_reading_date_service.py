@@ -4,11 +4,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.services.reading_date_service import ReadingDateService, push_booklore_read_status
+from src.services.reading_date_service import ReadingDateService, push_grimmory_read_status
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def mock_db():
@@ -45,6 +46,7 @@ def _make_book(**overrides):
 # ===========================================================================
 # pull_reading_dates
 # ===========================================================================
+
 
 class TestPullReadingDates:
     """Tests for pull_reading_dates (ABS date retrieval)."""
@@ -114,6 +116,7 @@ class TestPullReadingDates:
 # push_dates_to_hardcover
 # ===========================================================================
 
+
 class TestPushDatesToHardcover:
     """Tests for push_dates_to_hardcover."""
 
@@ -158,7 +161,9 @@ class TestPushDatesToHardcover:
         book = _make_book(started_at="2025-01-01")
         mock_db.get_book_by_id.return_value = book
         mock_hc_client.find_user_book.return_value = {
-            "id": 10, "edition_id": 5, "user_book_reads": [],
+            "id": 10,
+            "edition_id": 5,
+            "user_book_reads": [],
         }
         mock_hc_client.create_read_with_dates.return_value = 99
 
@@ -176,7 +181,9 @@ class TestPushDatesToHardcover:
         mock_db.get_hardcover_details.return_value = hc_details
         mock_db.get_book_by_id.return_value = _make_book(started_at="2025-01-01")
         mock_hc_client.find_user_book.return_value = {
-            "id": 10, "edition_id": 5, "user_book_reads": [],
+            "id": 10,
+            "edition_id": 5,
+            "user_book_reads": [],
         }
         mock_hc_client.create_read_with_dates.return_value = None
         ok, msg = service.push_dates_to_hardcover(1)
@@ -189,13 +196,10 @@ class TestPushDatesToHardcover:
         hc_details = MagicMock()
         hc_details.hardcover_book_id = "42"
         mock_db.get_hardcover_details.return_value = hc_details
-        mock_db.get_book_by_id.return_value = _make_book(
-            started_at="2025-01-01", finished_at="2025-02-01"
-        )
+        mock_db.get_book_by_id.return_value = _make_book(started_at="2025-01-01", finished_at="2025-02-01")
         mock_hc_client.find_user_book.return_value = {
-            "id": 10, "user_book_reads": [
-                {"id": 7, "started_at": "2025-01-01", "finished_at": None}
-            ],
+            "id": 10,
+            "user_book_reads": [{"id": 7, "started_at": "2025-01-01", "finished_at": None}],
         }
         mock_hc_client.update_read_dates.return_value = True
 
@@ -214,9 +218,8 @@ class TestPushDatesToHardcover:
         mock_db.get_hardcover_details.return_value = hc_details
         mock_db.get_book_by_id.return_value = _make_book(started_at="2025-01-01")
         mock_hc_client.find_user_book.return_value = {
-            "id": 10, "user_book_reads": [
-                {"id": 7, "started_at": "2025-01-01", "finished_at": None}
-            ],
+            "id": 10,
+            "user_book_reads": [{"id": 7, "started_at": "2025-01-01", "finished_at": None}],
         }
         ok, msg = service.push_dates_to_hardcover(1)
         assert ok is False
@@ -227,13 +230,10 @@ class TestPushDatesToHardcover:
         hc_details = MagicMock()
         hc_details.hardcover_book_id = "42"
         mock_db.get_hardcover_details.return_value = hc_details
-        mock_db.get_book_by_id.return_value = _make_book(
-            started_at="2025-03-01", finished_at="2025-04-01"
-        )
+        mock_db.get_book_by_id.return_value = _make_book(started_at="2025-03-01", finished_at="2025-04-01")
         mock_hc_client.find_user_book.return_value = {
-            "id": 10, "user_book_reads": [
-                {"id": 7, "started_at": "2025-01-01", "finished_at": "2025-02-01"}
-            ],
+            "id": 10,
+            "user_book_reads": [{"id": 7, "started_at": "2025-01-01", "finished_at": "2025-02-01"}],
         }
         mock_hc_client.update_read_dates.return_value = True
 
@@ -252,9 +252,8 @@ class TestPushDatesToHardcover:
         mock_db.get_hardcover_details.return_value = hc_details
         mock_db.get_book_by_id.return_value = _make_book(started_at="2025-01-01")
         mock_hc_client.find_user_book.return_value = {
-            "id": 10, "user_book_reads": [
-                {"id": 7, "started_at": None, "finished_at": None}
-            ],
+            "id": 10,
+            "user_book_reads": [{"id": 7, "started_at": None, "finished_at": None}],
         }
         mock_hc_client.update_read_dates.return_value = False
         ok, msg = service.push_dates_to_hardcover(1)
@@ -283,6 +282,7 @@ class TestPushDatesToHardcover:
 # ===========================================================================
 # pull_dates_from_hardcover
 # ===========================================================================
+
 
 class TestPullDatesFromHardcover:
     """Tests for pull_dates_from_hardcover."""
@@ -313,9 +313,7 @@ class TestPullDatesFromHardcover:
         book = _make_book()
         mock_db.get_book_by_id.return_value = book
         mock_hc_client.find_user_book.return_value = {
-            "user_book_reads": [
-                {"started_at": "2025-03-15T14:30:00Z", "finished_at": "2025-04-20T09:00:00Z"}
-            ],
+            "user_book_reads": [{"started_at": "2025-03-15T14:30:00Z", "finished_at": "2025-04-20T09:00:00Z"}],
         }
         updated_book = _make_book(started_at="2025-03-15", finished_at="2025-04-20")
         mock_db.get_book_by_ref.return_value = updated_book
@@ -325,9 +323,7 @@ class TestPullDatesFromHardcover:
 
         assert ok is True
         # Verify DB was called with truncated dates
-        mock_db.update_book_reading_fields.assert_called_once_with(
-            1, started_at="2025-03-15", finished_at="2025-04-20"
-        )
+        mock_db.update_book_reading_fields.assert_called_once_with(1, started_at="2025-03-15", finished_at="2025-04-20")
 
     def test_no_dates_on_hardcover(self, service, mock_db, mock_hc_client):
         mock_hc_client.is_configured.return_value = True
@@ -366,6 +362,7 @@ class TestPullDatesFromHardcover:
 # ===========================================================================
 # auto_complete_finished_books
 # ===========================================================================
+
 
 class TestAutoCompleteFinishedBooks:
     """Tests for auto_complete_finished_books."""
@@ -424,12 +421,13 @@ class TestAutoCompleteFinishedBooks:
 # _push_completion_to_clients
 # ===========================================================================
 
+
 class TestPushCompletionToClients:
     """Tests for _push_completion_to_clients (internal helper)."""
 
     def test_individual_client_failure_continues(self, service, mock_db):
         """Failure pushing to one client should not prevent pushing to others."""
-        book = _make_book(ebook_filename=None)  # no Booklore push
+        book = _make_book(ebook_filename=None)  # no Grimmory push
         container = MagicMock()
 
         client_a = MagicMock()
@@ -451,27 +449,28 @@ class TestPushCompletionToClients:
 
 
 # ===========================================================================
-# push_booklore_read_status (module-level helper)
+# push_grimmory_read_status (module-level helper)
 # ===========================================================================
 
-class TestPushBookloreReadStatus:
+
+class TestPushGrimmoryReadStatus:
     def test_exception_is_swallowed(self):
         container = MagicMock()
         bl_client = MagicMock()
-        container.booklore_client.return_value = bl_client
+        container.grimmory_client.return_value = bl_client
         bl_client.is_configured.return_value = True
-        bl_client.update_read_status.side_effect = RuntimeError("Booklore down")
+        bl_client.update_read_status.side_effect = RuntimeError("Grimmory down")
 
         book = _make_book(ebook_filename="book.epub")
         # Should not raise
-        push_booklore_read_status(book, container, "READ")
+        push_grimmory_read_status(book, container, "READ")
 
     def test_skips_when_not_configured(self):
         container = MagicMock()
         bl_client = MagicMock()
-        container.booklore_client.return_value = bl_client
+        container.grimmory_client.return_value = bl_client
         bl_client.is_configured.return_value = False
 
         book = _make_book(ebook_filename="book.epub")
-        push_booklore_read_status(book, container, "READ")
+        push_grimmory_read_status(book, container, "READ")
         bl_client.update_read_status.assert_not_called()

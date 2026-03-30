@@ -11,6 +11,7 @@ from src.sync_clients.sync_client_interface import LocatorResult
 
 logger = logging.getLogger(__name__)
 
+
 class StorytellerAPIClient:
     def __init__(self):
         self._book_cache: dict[str, dict] = {}
@@ -23,8 +24,8 @@ class StorytellerAPIClient:
 
     @property
     def base_url(self) -> str:
-        raw_url = os.environ.get("STORYTELLER_API_URL", "http://localhost:8001").rstrip('/')
-        if raw_url and not raw_url.lower().startswith(('http://', 'https://')):
+        raw_url = os.environ.get("STORYTELLER_API_URL", "http://localhost:8001").rstrip("/")
+        if raw_url and not raw_url.lower().startswith(("http://", "https://")):
             raw_url = f"http://{raw_url}"
         return raw_url
 
@@ -42,7 +43,7 @@ class StorytellerAPIClient:
 
     def is_configured(self):
         enabled_val = os.environ.get("STORYTELLER_ENABLED", "").lower()
-        if enabled_val == 'false':
+        if enabled_val == "false":
             return False
         return bool(self.username and self.password)
 
@@ -56,7 +57,7 @@ class StorytellerAPIClient:
                 f"{self.base_url}/api/token",
                 data={"username": self.username, "password": self.password},
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
-                timeout=10
+                timeout=10,
             )
             if response.status_code == 200:
                 data = response.json()
@@ -96,12 +97,8 @@ class StorytellerAPIClient:
             books = response.json()
             self._book_cache = {}
             for book in books:
-                title = book.get('title', '').lower()
-                self._book_cache[title] = {
-                    'id': book.get('id'),
-                    'uuid': book.get('uuid'),
-                    'title': book.get('title')
-                }
+                title = book.get("title", "").lower()
+                self._book_cache[title] = {"id": book.get("id"), "uuid": book.get("uuid"), "title": book.get("title")}
             self._cache_timestamp = time.time()
             return True
         return False
@@ -113,17 +110,17 @@ class StorytellerAPIClient:
         response = self._make_request("GET", f"/api/v2/books/{book_uuid}/positions")
         if response and response.status_code == 200:
             data = response.json()
-            locator = data.get('locator', {})
-            locations = locator.get('locations', {})
+            locator = data.get("locator", {})
+            locations = locator.get("locations", {})
 
-            pct = float(locations.get('totalProgression', 0))
-            ts = int(data.get('timestamp', 0))
+            pct = float(locations.get("totalProgression", 0))
+            ts = int(data.get("timestamp", 0))
 
             # --- EXTRACT PRECISION DATA ---
-            href = locator.get('href') # e.g. "OEBPS/Text/part0000.html"
+            href = locator.get("href")  # e.g. "OEBPS/Text/part0000.html"
             fragment = None
-            if locations.get('fragments') and len(locations['fragments']) > 0:
-                fragment = locations['fragments'][0] # e.g. "id628-sentence94"
+            if locations.get("fragments") and len(locations["fragments"]) > 0:
+                fragment = locations["fragments"][0]  # e.g. "id628-sentence94"
 
             return pct, ts, href, fragment
 
@@ -136,14 +133,12 @@ class StorytellerAPIClient:
 
         positions = {}
         for title, book in self._book_cache.items():
-            uuid = book.get('uuid')
+            uuid = book.get("uuid")
             if not uuid:
                 continue
             pct, ts, href, frag = self.get_position_details(uuid)
             if pct is not None:
-                positions[title.lower()] = {
-                    'pct': pct, 'ts': ts, 'href': href, 'frag': frag, 'uuid': uuid
-                }
+                positions[title.lower()] = {"pct": pct, "ts": ts, "href": href, "frag": frag, "uuid": uuid}
         return positions
 
     def update_position(self, book_uuid: str, percentage: float, rich_locator: LocatorResult = None) -> bool:
@@ -156,53 +151,53 @@ class StorytellerAPIClient:
             "locator": {
                 "href": "",
                 "type": "application/xhtml+xml",
-                "locations": {
-                    "totalProgression": float(percentage)
-                }
-            }
+                "locations": {"totalProgression": float(percentage)},
+            },
         }
 
         if rich_locator:
             # 1. Href
             if rich_locator.href:
-                payload['locator']['href'] = rich_locator.href
+                payload["locator"]["href"] = rich_locator.href
 
             # 2. CSS Selector
             if rich_locator.css_selector:
-                payload['locator']['locations']['cssSelector'] = rich_locator.css_selector
+                payload["locator"]["locations"]["cssSelector"] = rich_locator.css_selector
 
             # 3. Fragments (List)
             if rich_locator.fragment:
-                payload['locator']['locations']['fragments'] = [rich_locator.fragment]
-            elif rich_locator.fragments: # Check if list already populated (future proof)
-                payload['locator']['locations']['fragments'] = rich_locator.fragments
+                payload["locator"]["locations"]["fragments"] = [rich_locator.fragment]
+            elif rich_locator.fragments:  # Check if list already populated (future proof)
+                payload["locator"]["locations"]["fragments"] = rich_locator.fragments
 
             # 4. Chapter Progress (Critical for Storyteller)
             if rich_locator.chapter_progress is not None:
-                payload['locator']['locations']['progression'] = rich_locator.chapter_progress
+                payload["locator"]["locations"]["progression"] = rich_locator.chapter_progress
             else:
-                 # Fallback: if we don't have chapter progress, maybe default to 0 or omit?
-                 # Storyteller logs show it as distinct.
-                 # If we omit, it might calculate it?
-                 # For now, let's leave it out if None to avoid sending null.
-                 pass
+                # Fallback: if we don't have chapter progress, maybe default to 0 or omit?
+                # Storyteller logs show it as distinct.
+                # If we omit, it might calculate it?
+                # For now, let's leave it out if None to avoid sending null.
+                pass
 
             # 5. Position (Global Integer)
             if rich_locator.match_index is not None:
-                payload['locator']['locations']['position'] = rich_locator.match_index
+                payload["locator"]["locations"]["position"] = rich_locator.match_index
 
             # 6. CFI
             if rich_locator.cfi:
-                payload['locator']['locations']['cfi'] = rich_locator.cfi
+                payload["locator"]["locations"]["cfi"] = rich_locator.cfi
 
         else:
             # Fallback for simple percentage update (legacy)
             try:
                 r = self._make_request("GET", f"/api/v2/books/{book_uuid}/positions")
                 if r and r.status_code == 200:
-                    old = r.json().get('locator', {})
-                    if old.get('href'): payload['locator']['href'] = old['href']
-                    if old.get('type'): payload['locator']['type'] = old['type']
+                    old = r.json().get("locator", {})
+                    if old.get("href"):
+                        payload["locator"]["href"] = old["href"]
+                    if old.get("type"):
+                        payload["locator"]["type"] = old["type"]
             except Exception as e:
                 logger.debug(f"Failed to fetch existing locator for fallback: {e}")
 
@@ -213,8 +208,10 @@ class StorytellerAPIClient:
                 logger.info(f"Storyteller API: {book_uuid[:8]}... -> {percentage:.1%} (TS: {new_ts})")
                 return True
             elif response.status_code == 409:
-                logger.warning(f"Storyteller rejected update for '{book_uuid[:8]}...': Timestamp older than server state (Ignored)")
-                return True # Treat as 'handled' to prevent retry loops
+                logger.warning(
+                    f"Storyteller rejected update for '{book_uuid[:8]}...': Timestamp older than server state (Ignored)"
+                )
+                return True  # Treat as 'handled' to prevent retry loops
             else:
                 logger.warning(f"Storyteller API error: {response.status_code} - {response.text[:100]}")
 
@@ -239,9 +236,9 @@ class StorytellerAPIClient:
         response = self._make_request("GET", "/api/v2/books", None)
         if response and response.status_code == 200:
             all_books = response.json()
-            stopwords = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'is'}
+            stopwords = {"the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", "is"}
             query_lower = query.lower()
-            query_tokens = [w for w in re.split(r'\W+', query_lower) if w and w not in stopwords]
+            query_tokens = [w for w in re.split(r"\W+", query_lower) if w and w not in stopwords]
 
             if not query_tokens:
                 return []
@@ -249,15 +246,15 @@ class StorytellerAPIClient:
             query_set = set(query_tokens)
             results = []
             for book in all_books:
-                title = book.get('title', '')
-                author_names = ' '.join(a.get('name', '') for a in book.get('authors', []))
+                title = book.get("title", "")
+                author_names = " ".join(a.get("name", "") for a in book.get("authors", []))
                 searchable = f"{title} {author_names}".lower()
 
                 if len(query_tokens) == 1:
                     matched = query_tokens[0] in searchable
                     overlap = 1 if matched else 0
                 else:
-                    searchable_tokens = set(w for w in re.split(r'\W+', searchable) if w and w not in stopwords)
+                    searchable_tokens = set(w for w in re.split(r"\W+", searchable) if w and w not in stopwords)
                     overlap = len(query_set & searchable_tokens)
                     min_size = min(len(query_set), len(searchable_tokens))
                     if min_size <= 1:
@@ -267,12 +264,17 @@ class StorytellerAPIClient:
 
                 if matched:
                     overlap_ratio = overlap / max(len(query_set), 1)
-                    results.append((overlap_ratio, {
-                        'uuid': book.get('uuid') or book.get('id'),
-                        'title': title,
-                        'authors': [a.get('name') for a in book.get('authors', [])],
-                        'cover_url': f"/api/v2/books/{book.get('uuid') or book.get('id')}/cover"
-                    }))
+                    results.append(
+                        (
+                            overlap_ratio,
+                            {
+                                "uuid": book.get("uuid") or book.get("id"),
+                                "title": title,
+                                "authors": [a.get("name") for a in book.get("authors", [])],
+                                "cover_url": f"/api/v2/books/{book.get('uuid') or book.get('id')}/cover",
+                            },
+                        )
+                    )
             results.sort(key=lambda x: x[0], reverse=True)
             return [book for _, book in results]
         return []
@@ -304,22 +306,22 @@ class StorytellerAPIClient:
         """
         import glob as glob_module
 
-        assets_dir = os.environ.get('STORYTELLER_ASSETS_DIR', '').strip()
+        assets_dir = os.environ.get("STORYTELLER_ASSETS_DIR", "").strip()
         if not assets_dir:
             return None
 
-        assets_root = (Path(assets_dir) / 'assets').resolve()
+        assets_root = (Path(assets_dir) / "assets").resolve()
 
         # Resolve book title via API to find the correct directory name
         book_details = self.get_book_details(book_uuid)
         if book_details:
-            title = book_details.get('title', '')
-            suffix = book_details.get('suffix', '')
+            title = book_details.get("title", "")
+            suffix = book_details.get("suffix", "")
             if not title:
                 return None
 
             dir_name = f"{title}{suffix}"
-            transcripts_dir = (assets_root / dir_name / 'transcriptions').resolve()
+            transcripts_dir = (assets_root / dir_name / "transcriptions").resolve()
             if assets_root not in transcripts_dir.parents:
                 logger.warning("Storyteller: Refusing out-of-root transcript path")
                 return None
@@ -330,19 +332,16 @@ class StorytellerAPIClient:
         if title_hint:
             escaped = glob_module.escape(title_hint)
             candidates = [
-                p for p in assets_root.glob(f"{escaped}*/transcriptions")
+                p
+                for p in assets_root.glob(f"{escaped}*/transcriptions")
                 if p.is_dir() and assets_root in p.resolve().parents
             ]
             if candidates:
                 if len(candidates) > 1:
-                    logger.warning(
-                        f"Storyteller: {len(candidates)} glob matches for '{title_hint}*', using first"
-                    )
+                    logger.warning(f"Storyteller: {len(candidates)} glob matches for '{title_hint}*', using first")
                 result = self._scan_transcription_dir(candidates[0].resolve(), assets_root)
                 if result:
-                    logger.info(
-                        f"Storyteller: filesystem fallback found transcriptions at {candidates[0].parent.name}"
-                    )
+                    logger.info(f"Storyteller: filesystem fallback found transcriptions at {candidates[0].parent.name}")
                     return result
 
         if not book_details:
@@ -358,23 +357,28 @@ class StorytellerAPIClient:
         Returns a list of chapter dicts with 'words' entries, or None if empty.
         """
         chapters = []
-        pattern = re.compile(r'^\d{5}-\d{5}\.json$')
+        pattern = re.compile(r"^\d{5}-\d{5}\.json$")
         for filename in sorted(os.listdir(transcripts_dir)):
             if not pattern.match(filename):
                 continue
             filepath = (transcripts_dir / filename).resolve()
-            if transcripts_dir.resolve() not in filepath.parents and filepath.parent.resolve() != transcripts_dir.resolve():
+            if (
+                transcripts_dir.resolve() not in filepath.parents
+                and filepath.parent.resolve() != transcripts_dir.resolve()
+            ):
                 logger.warning(f"Storyteller: Refusing out-of-root transcript file: {filename}")
                 continue
             try:
-                with filepath.open('r', encoding='utf-8') as f:
+                with filepath.open("r", encoding="utf-8") as f:
                     data = json.load(f)
-                timeline = data.get('wordTimeline') or data.get('timeline')
+                timeline = data.get("wordTimeline") or data.get("timeline")
                 if timeline and isinstance(timeline, list):
-                    chapters.append({
-                        'filename': filename,
-                        'words': timeline,
-                    })
+                    chapters.append(
+                        {
+                            "filename": filename,
+                            "words": timeline,
+                        }
+                    )
             except (json.JSONDecodeError, OSError) as e:
                 logger.warning(f"Storyteller: Failed to read transcript {filename}: {e}")
 

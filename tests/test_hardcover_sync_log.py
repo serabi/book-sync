@@ -24,42 +24,51 @@ class TestHardcoverSyncLogModel(unittest.TestCase):
 
     def setUp(self):
         self.temp_dir = tempfile.mkdtemp()
-        self.db = DatabaseService(str(Path(self.temp_dir) / 'test.db'))
+        self.db = DatabaseService(str(Path(self.temp_dir) / "test.db"))
 
     def tearDown(self):
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_create_log_entry(self):
         entry = HardcoverSyncLog(
-            abs_id=None, book_title='Test Book',
-            direction='push', action='status_update',
-            detail='{"status": 2}', success=True,
+            abs_id=None,
+            book_title="Test Book",
+            direction="push",
+            action="status_update",
+            detail='{"status": 2}',
+            success=True,
         )
         saved = self.db.add_hardcover_sync_log(entry)
         self.assertIsNotNone(saved.id)
-        self.assertEqual(saved.direction, 'push')
-        self.assertEqual(saved.action, 'status_update')
+        self.assertEqual(saved.direction, "push")
+        self.assertEqual(saved.action, "status_update")
         self.assertTrue(saved.success)
 
     def test_create_log_with_book_fk(self):
-        book = Book(abs_id='hc-log-test', title='FK Book', status='active')
+        book = Book(abs_id="hc-log-test", title="FK Book", status="active")
         book = self.db.save_book(book)
         entry = HardcoverSyncLog(
-            abs_id='hc-log-test', book_id=book.id, book_title='FK Book',
-            direction='pull', action='status_pull',
+            abs_id="hc-log-test",
+            book_id=book.id,
+            book_title="FK Book",
+            direction="pull",
+            action="status_pull",
         )
         saved = self.db.add_hardcover_sync_log(entry)
-        self.assertEqual(saved.abs_id, 'hc-log-test')
+        self.assertEqual(saved.abs_id, "hc-log-test")
 
     def test_create_failed_entry(self):
         entry = HardcoverSyncLog(
-            direction='push', action='rating',
-            success=False, error_message='API timeout',
+            direction="push",
+            action="rating",
+            success=False,
+            error_message="API timeout",
         )
         saved = self.db.add_hardcover_sync_log(entry)
         self.assertFalse(saved.success)
-        self.assertEqual(saved.error_message, 'API timeout')
+        self.assertEqual(saved.error_message, "API timeout")
 
 
 class TestHardcoverSyncLogRepository(unittest.TestCase):
@@ -67,18 +76,27 @@ class TestHardcoverSyncLogRepository(unittest.TestCase):
 
     def setUp(self):
         self.temp_dir = tempfile.mkdtemp()
-        self.db = DatabaseService(str(Path(self.temp_dir) / 'test.db'))
+        self.db = DatabaseService(str(Path(self.temp_dir) / "test.db"))
         for i in range(5):
-            self.db.add_hardcover_sync_log(HardcoverSyncLog(
-                book_title=f'Book {i}', direction='push', action='automatch',
-            ))
+            self.db.add_hardcover_sync_log(
+                HardcoverSyncLog(
+                    book_title=f"Book {i}",
+                    direction="push",
+                    action="automatch",
+                )
+            )
         for i in range(3):
-            self.db.add_hardcover_sync_log(HardcoverSyncLog(
-                book_title=f'Pull Book {i}', direction='pull', action='status_pull',
-            ))
+            self.db.add_hardcover_sync_log(
+                HardcoverSyncLog(
+                    book_title=f"Pull Book {i}",
+                    direction="pull",
+                    action="status_pull",
+                )
+            )
 
     def tearDown(self):
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_get_all(self):
@@ -87,17 +105,17 @@ class TestHardcoverSyncLogRepository(unittest.TestCase):
         self.assertEqual(len(items), 8)
 
     def test_filter_by_direction(self):
-        items, total = self.db.get_hardcover_sync_logs(direction='pull')
+        items, total = self.db.get_hardcover_sync_logs(direction="pull")
         self.assertEqual(total, 3)
         for item in items:
-            self.assertEqual(item.direction, 'pull')
+            self.assertEqual(item.direction, "pull")
 
     def test_filter_by_action(self):
-        items, total = self.db.get_hardcover_sync_logs(action='automatch')
+        items, total = self.db.get_hardcover_sync_logs(action="automatch")
         self.assertEqual(total, 5)
 
     def test_filter_by_search(self):
-        items, total = self.db.get_hardcover_sync_logs(search='Pull Book')
+        items, total = self.db.get_hardcover_sync_logs(search="Pull Book")
         self.assertEqual(total, 3)
 
     def test_pagination(self):
@@ -130,23 +148,27 @@ class TestHardcoverLogService(unittest.TestCase):
 
     def setUp(self):
         self.temp_dir = tempfile.mkdtemp()
-        self.db = DatabaseService(str(Path(self.temp_dir) / 'test.db'))
+        self.db = DatabaseService(str(Path(self.temp_dir) / "test.db"))
 
     def tearDown(self):
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_log_action_writes_entry(self):
         log_hardcover_action(
-            self.db, abs_id=None, book_title='Test',
-            direction='push', action='rating',
-            detail={'rating': 4.5},
+            self.db,
+            abs_id=None,
+            book_title="Test",
+            direction="push",
+            action="rating",
+            detail={"rating": 4.5},
         )
         items, total = self.db.get_hardcover_sync_logs()
         self.assertEqual(total, 1)
-        self.assertEqual(items[0].action, 'rating')
+        self.assertEqual(items[0].action, "rating")
         parsed = json.loads(items[0].detail)
-        self.assertEqual(parsed['rating'], 4.5)
+        self.assertEqual(parsed["rating"], 4.5)
 
     def test_log_action_never_raises(self):
         """Logging errors should be swallowed, not propagated."""
@@ -154,7 +176,9 @@ class TestHardcoverLogService(unittest.TestCase):
         mock_db.add_hardcover_sync_log.side_effect = Exception("DB error")
         # Should not raise
         log_hardcover_action(
-            mock_db, direction='push', action='test',
+            mock_db,
+            direction="push",
+            action="test",
         )
 
 
@@ -176,10 +200,10 @@ class _MockContainer:
     def sync_manager(self):
         return Mock()
 
-    def booklore_client(self):
+    def grimmory_client(self):
         return Mock()
 
-    def booklore_client_group(self):
+    def grimmory_client_group(self):
         return Mock()
 
     def storyteller_client(self):
@@ -194,13 +218,13 @@ class _MockContainer:
         return mock
 
     def data_dir(self):
-        return Path(tempfile.gettempdir()) / 'test_data'
+        return Path(tempfile.gettempdir()) / "test_data"
 
     def books_dir(self):
-        return Path(tempfile.gettempdir()) / 'test_books'
+        return Path(tempfile.gettempdir()) / "test_books"
 
     def epub_cache_dir(self):
-        return Path(tempfile.gettempdir()) / 'test_epub_cache'
+        return Path(tempfile.gettempdir()) / "test_epub_cache"
 
 
 class TestHardcoverSyncLogAPI(unittest.TestCase):
@@ -208,82 +232,94 @@ class TestHardcoverSyncLogAPI(unittest.TestCase):
 
     def setUp(self):
         self.temp_dir = tempfile.mkdtemp()
-        self._orig_data_dir = os.environ.get('DATA_DIR')
-        self._orig_books_dir = os.environ.get('BOOKS_DIR')
-        os.environ['DATA_DIR'] = self.temp_dir
-        os.environ['BOOKS_DIR'] = self.temp_dir
+        self._orig_data_dir = os.environ.get("DATA_DIR")
+        self._orig_books_dir = os.environ.get("BOOKS_DIR")
+        os.environ["DATA_DIR"] = self.temp_dir
+        os.environ["BOOKS_DIR"] = self.temp_dir
 
-        self.db = DatabaseService(str(Path(self.temp_dir) / 'test.db'))
+        self.db = DatabaseService(str(Path(self.temp_dir) / "test.db"))
         self.mock_container = _MockContainer(self.db)
 
         import src.db.migration_utils
+
         self.original_init_db = src.db.migration_utils.initialize_database
         src.db.migration_utils.initialize_database = lambda x: self.db
 
         from src.web_server import create_app
+
         self.app, _ = create_app(test_container=self.mock_container)
-        self.app.config['TESTING'] = True
+        self.app.config["TESTING"] = True
         self.client = self.app.test_client()
 
         # Seed data
-        self.db.add_hardcover_sync_log(HardcoverSyncLog(
-            book_title='API Test Book', direction='push', action='automatch',
-            detail='{"matched_by": "isbn"}',
-        ))
-        self.db.add_hardcover_sync_log(HardcoverSyncLog(
-            book_title='Pull Test', direction='pull', action='status_pull',
-            success=False, error_message='Timeout',
-        ))
+        self.db.add_hardcover_sync_log(
+            HardcoverSyncLog(
+                book_title="API Test Book",
+                direction="push",
+                action="automatch",
+                detail='{"matched_by": "isbn"}',
+            )
+        )
+        self.db.add_hardcover_sync_log(
+            HardcoverSyncLog(
+                book_title="Pull Test",
+                direction="pull",
+                action="status_pull",
+                success=False,
+                error_message="Timeout",
+            )
+        )
 
     def tearDown(self):
         import shutil
 
         import src.db.migration_utils
+
         src.db.migration_utils.initialize_database = self.original_init_db
         # Restore original env vars instead of removing them
         if self._orig_data_dir is not None:
-            os.environ['DATA_DIR'] = self._orig_data_dir
+            os.environ["DATA_DIR"] = self._orig_data_dir
         else:
-            os.environ.pop('DATA_DIR', None)
+            os.environ.pop("DATA_DIR", None)
         if self._orig_books_dir is not None:
-            os.environ['BOOKS_DIR'] = self._orig_books_dir
+            os.environ["BOOKS_DIR"] = self._orig_books_dir
         else:
-            os.environ.pop('BOOKS_DIR', None)
+            os.environ.pop("BOOKS_DIR", None)
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_get_all_logs(self):
-        resp = self.client.get('/api/logs/hardcover')
+        resp = self.client.get("/api/logs/hardcover")
         self.assertEqual(resp.status_code, 200)
         data = resp.get_json()
-        self.assertEqual(data['total'], 2)
-        self.assertEqual(len(data['logs']), 2)
-        self.assertIn('total_pages', data)
+        self.assertEqual(data["total"], 2)
+        self.assertEqual(len(data["logs"]), 2)
+        self.assertIn("total_pages", data)
 
     def test_filter_direction(self):
-        resp = self.client.get('/api/logs/hardcover?direction=pull')
+        resp = self.client.get("/api/logs/hardcover?direction=pull")
         data = resp.get_json()
-        self.assertEqual(data['total'], 1)
-        self.assertEqual(data['logs'][0]['direction'], 'pull')
+        self.assertEqual(data["total"], 1)
+        self.assertEqual(data["logs"][0]["direction"], "pull")
 
     def test_filter_action(self):
-        resp = self.client.get('/api/logs/hardcover?action=automatch')
+        resp = self.client.get("/api/logs/hardcover?action=automatch")
         data = resp.get_json()
-        self.assertEqual(data['total'], 1)
+        self.assertEqual(data["total"], 1)
 
     def test_filter_search(self):
-        resp = self.client.get('/api/logs/hardcover?search=Pull')
+        resp = self.client.get("/api/logs/hardcover?search=Pull")
         data = resp.get_json()
-        self.assertEqual(data['total'], 1)
+        self.assertEqual(data["total"], 1)
 
     def test_detail_parsed_as_json(self):
-        resp = self.client.get('/api/logs/hardcover?action=automatch')
+        resp = self.client.get("/api/logs/hardcover?action=automatch")
         data = resp.get_json()
-        detail = data['logs'][0]['detail']
+        detail = data["logs"][0]["detail"]
         self.assertIsInstance(detail, dict)
-        self.assertEqual(detail['matched_by'], 'isbn')
+        self.assertEqual(detail["matched_by"], "isbn")
 
     def test_per_page_clamped(self):
-        resp = self.client.get('/api/logs/hardcover?per_page=9999')
+        resp = self.client.get("/api/logs/hardcover?per_page=9999")
         self.assertEqual(resp.status_code, 200)
 
 
@@ -292,7 +328,7 @@ class TestHardcoverSyncLogInstrumentation(unittest.TestCase):
 
     def setUp(self):
         self.temp_dir = tempfile.mkdtemp()
-        self.db = DatabaseService(str(Path(self.temp_dir) / 'test.db'))
+        self.db = DatabaseService(str(Path(self.temp_dir) / "test.db"))
 
         self.mock_hc = Mock()
         self.mock_abs = Mock()
@@ -312,61 +348,70 @@ class TestHardcoverSyncLogInstrumentation(unittest.TestCase):
             abs_client=self.mock_abs,
         )
 
-        self.book = Book(abs_id='instr-test', title='Instrumentation Book', status='active')
+        self.book = Book(abs_id="instr-test", title="Instrumentation Book", status="active")
         self.book = self.db.save_book(self.book)
 
     def tearDown(self):
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
-    @patch('src.services.hardcover_service.record_write')
+    @patch("src.services.hardcover_service.record_write")
     def test_push_local_status_logs_success(self, mock_rw):
         details = HardcoverDetails(
-            abs_id='instr-test', book_id=self.book.id, hardcover_book_id='999',
-            hardcover_edition_id='111', hardcover_pages=300,
+            abs_id="instr-test",
+            book_id=self.book.id,
+            hardcover_book_id="999",
+            hardcover_edition_id="111",
+            hardcover_pages=300,
         )
         self.db.save_hardcover_details(details)
 
-        self.mock_hc.update_status.return_value = {'id': 1, 'status_id': 2}
-        self.hardcover_service.push_local_status(self.book, 'active')
+        self.mock_hc.update_status.return_value = {"id": 1, "status_id": 2}
+        self.hardcover_service.push_local_status(self.book, "active")
 
-        items, total = self.db.get_hardcover_sync_logs(action='status_update')
+        items, total = self.db.get_hardcover_sync_logs(action="status_update")
         self.assertGreaterEqual(total, 1)
-        self.assertEqual(items[0].direction, 'push')
+        self.assertEqual(items[0].direction, "push")
         self.assertTrue(items[0].success)
 
-    @patch('src.services.hardcover_service.record_write')
+    @patch("src.services.hardcover_service.record_write")
     def test_push_local_status_logs_error(self, mock_rw):
         details = HardcoverDetails(
-            abs_id='instr-test', book_id=self.book.id, hardcover_book_id='999',
-            hardcover_edition_id='111',
+            abs_id="instr-test",
+            book_id=self.book.id,
+            hardcover_book_id="999",
+            hardcover_edition_id="111",
         )
         self.db.save_hardcover_details(details)
 
         self.mock_hc.update_status.side_effect = Exception("API down")
-        self.hardcover_service.push_local_status(self.book, 'active')
+        self.hardcover_service.push_local_status(self.book, "active")
 
-        items, total = self.db.get_hardcover_sync_logs(action='status_update')
+        items, total = self.db.get_hardcover_sync_logs(action="status_update")
         self.assertGreaterEqual(total, 1)
         self.assertFalse(items[0].success)
         self.assertIn("API down", items[0].error_message)
 
-    @patch('src.services.hardcover_service.record_write')
+    @patch("src.services.hardcover_service.record_write")
     def test_push_rating_logs(self, mock_rw):
         details = HardcoverDetails(
-            abs_id='instr-test', book_id=self.book.id, hardcover_book_id='999',
-            hardcover_edition_id='111',
-            hardcover_user_book_id=42, hardcover_status_id=2,
+            abs_id="instr-test",
+            book_id=self.book.id,
+            hardcover_book_id="999",
+            hardcover_edition_id="111",
+            hardcover_user_book_id=42,
+            hardcover_status_id=2,
         )
         self.db.save_hardcover_details(details)
 
         self.mock_hc.update_user_book.return_value = True
         result = self.hardcover_service.push_local_rating(self.book, 4.0)
 
-        self.assertTrue(result['hardcover_synced'])
-        items, total = self.db.get_hardcover_sync_logs(action='rating')
+        self.assertTrue(result["hardcover_synced"])
+        items, total = self.db.get_hardcover_sync_logs(action="rating")
         self.assertGreaterEqual(total, 1)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()

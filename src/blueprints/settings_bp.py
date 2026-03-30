@@ -16,14 +16,14 @@ settings_bp = Blueprint("settings_page", __name__)
 
 URL_SETTING_KEYS = {
     "ABS_SERVER",
-    "BOOKLORE_SERVER",
-    "BOOKLORE_2_SERVER",
+    "GRIMMORY_SERVER",
+    "GRIMMORY_2_SERVER",
     "STORYTELLER_API_URL",
     "CWA_SERVER",
     "KOSYNC_SERVER",
     "ABS_WEB_URL",
-    "BOOKLORE_WEB_URL",
-    "BOOKLORE_2_WEB_URL",
+    "GRIMMORY_WEB_URL",
+    "GRIMMORY_2_WEB_URL",
     "STORYTELLER_WEB_URL",
     "CWA_WEB_URL",
     "HARDCOVER_WEB_URL",
@@ -31,10 +31,10 @@ URL_SETTING_KEYS = {
     "ABS_WEB_URL_EXTERNAL",
     "STORYTELLER_WEB_URL_INTERNAL",
     "STORYTELLER_WEB_URL_EXTERNAL",
-    "BOOKLORE_WEB_URL_INTERNAL",
-    "BOOKLORE_WEB_URL_EXTERNAL",
-    "BOOKLORE_2_WEB_URL_INTERNAL",
-    "BOOKLORE_2_WEB_URL_EXTERNAL",
+    "GRIMMORY_WEB_URL_INTERNAL",
+    "GRIMMORY_WEB_URL_EXTERNAL",
+    "GRIMMORY_2_WEB_URL_INTERNAL",
+    "GRIMMORY_2_WEB_URL_EXTERNAL",
     "CWA_WEB_URL_INTERNAL",
     "CWA_WEB_URL_EXTERNAL",
     "HARDCOVER_WEB_URL_EXTERNAL",
@@ -44,8 +44,8 @@ URL_SETTING_KEYS = {
 SECRET_SETTING_KEYS = {
     "ABS_KEY",
     "STORYTELLER_PASSWORD",
-    "BOOKLORE_PASSWORD",
-    "BOOKLORE_2_PASSWORD",
+    "GRIMMORY_PASSWORD",
+    "GRIMMORY_2_PASSWORD",
     "CWA_PASSWORD",
     "KOSYNC_KEY",
     "KOSYNC_SERVER_KEY",
@@ -150,8 +150,8 @@ def settings():
             "KOSYNC_ENABLED",
             "STORYTELLER_ENABLED",
             "STORYTELLER_FORCE_MODE",
-            "BOOKLORE_ENABLED",
-            "BOOKLORE_2_ENABLED",
+            "GRIMMORY_ENABLED",
+            "GRIMMORY_2_ENABLED",
             "CWA_ENABLED",
             "HARDCOVER_ENABLED",
             "TELEGRAM_ENABLED",
@@ -250,8 +250,8 @@ def test_connection(service):
         "abs": _test_abs,
         "kosync": _test_kosync,
         "storyteller": _test_storyteller,
-        "booklore": _test_booklore,
-        "booklore2": _test_booklore2,
+        "grimmory": _test_grimmory,
+        "grimmory2": _test_grimmory2,
         "cwa": _test_cwa,
         "hardcover": _test_hardcover,
         "telegram": _test_telegram,
@@ -375,15 +375,15 @@ def _test_storyteller() -> tuple[bool, str]:
     return False, _http_error(resp.status_code)
 
 
-def _test_booklore() -> tuple[bool, str]:
-    return _test_booklore_instance("BOOKLORE")
+def _test_grimmory() -> tuple[bool, str]:
+    return _test_grimmory_instance("GRIMMORY")
 
 
-def _test_booklore2() -> tuple[bool, str]:
-    return _test_booklore_instance("BOOKLORE_2")
+def _test_grimmory2() -> tuple[bool, str]:
+    return _test_grimmory_instance("GRIMMORY_2")
 
 
-def _test_booklore_instance(prefix: str) -> tuple[bool, str]:
+def _test_grimmory_instance(prefix: str) -> tuple[bool, str]:
     url = _request_value("server", f"{prefix}_SERVER", normalize_url=True).rstrip("/")
     user = _request_value("user", f"{prefix}_USER")
     pw = _request_value("password", f"{prefix}_PASSWORD", secret=True)

@@ -96,7 +96,7 @@ For users who exclusively use Storyteller for alignment (with `STORYTELLER_FORCE
 - **No Celery/Redis** - lightweight Python threading
 - `BackgroundJobService`: 1 daemon thread for transcription jobs
 - `SyncManager`: ThreadPoolExecutor with workers = number of active sync clients
-- `BookloreClient`: ThreadPoolExecutor with max 10 workers for batch fetches
+- `GrimmoryClient`: ThreadPoolExecutor with max 10 workers for batch fetches
 - `ABSSocketListener`: 1 worker thread for suggestion queue
 
 ### Database

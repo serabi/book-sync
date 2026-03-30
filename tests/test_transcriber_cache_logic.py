@@ -40,9 +40,9 @@ class TestTranscriberCacheLogic(unittest.TestCase):
         # Setup
         abs_id = "test-book-id"
         audio_urls = [
-            {'stream_url': 'http://example.com/1.mp3', 'ext': 'mp3'},
-            {'stream_url': 'http://example.com/2.mp3', 'ext': 'mp3'},
-            {'stream_url': 'http://example.com/3.mp3', 'ext': 'mp3'}
+            {"stream_url": "http://example.com/1.mp3", "ext": "mp3"},
+            {"stream_url": "http://example.com/2.mp3", "ext": "mp3"},
+            {"stream_url": "http://example.com/3.mp3", "ext": "mp3"},
         ]
 
         # Setup real filesystem in mock_data_dir (which was set up in setUp)
@@ -71,15 +71,17 @@ class TestTranscriberCacheLogic(unittest.TestCase):
 
             # Mock normalize: return a path that exists (we can just return the input path if we say it's wav)
             def mock_normalize(p):
-                 # Return a path that "exists"
-                 out = p.with_suffix('.wav')
-                 out.touch()
-                 return out
+                # Return a path that "exists"
+                out = p.with_suffix(".wav")
+                out.touch()
+                return out
+
             self.transcriber.normalize_audio_to_wav.side_effect = mock_normalize
 
             def mock_split(path, duration):
                 # Return the file itself as if it didn't need splitting
                 return [path]
+
             self.transcriber.split_audio_file.side_effect = mock_split
 
             # Execute
@@ -97,7 +99,8 @@ class TestTranscriberCacheLogic(unittest.TestCase):
 
             self.assertEqual(mock_requests_get.call_count, 3, "Should download all 3 parts")
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     # unittest.main() # Avoid args issue in some environments?
     # Just standard main is fine for pytest discovery
     pass

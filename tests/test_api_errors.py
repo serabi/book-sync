@@ -6,6 +6,7 @@ import pytest
 
 # ── Suggestion resolve/ignore/hide: DB raises ─────────────────────
 
+
 def test_hide_suggestion_returns_404_when_not_found(client, mock_container):
     """hide_suggestion returns 404 when DB returns False (not found)."""
     mock_container.mock_database_service.hide_suggestion.return_value = False
@@ -68,58 +69,60 @@ def test_hide_suggestion_with_source_param(client, mock_container):
     mock_container.mock_database_service.hide_suggestion.assert_called_once_with("abc", source="kosync")
 
 
-# ── Booklore search: client raises ────────────────────────────────
+# ── Grimmory search: client raises ────────────────────────────────
 
-def test_booklore_search_returns_empty_when_not_configured(flask_app, mock_container):
-    """Booklore search returns empty list when client is not configured."""
-    mock_container.mock_booklore_client.is_configured.return_value = False
+
+def test_grimmory_search_returns_empty_when_not_configured(flask_app, mock_container):
+    """Grimmory search returns empty list when client is not configured."""
+    mock_container.mock_grimmory_client.is_configured.return_value = False
 
     with flask_app.test_client() as client:
-        response = client.get("/api/booklore/search?q=test")
+        response = client.get("/api/grimmory/search?q=test")
 
     assert response.status_code == 200
     assert response.get_json() == []
 
 
-def test_booklore_search_returns_empty_when_client_raises(flask_app, mock_container):
-    """Booklore search returns empty list when search_books throws."""
-    mock_container.mock_booklore_client.is_configured.return_value = True
-    mock_container.mock_booklore_client.search_books.side_effect = Exception("Booklore down")
+def test_grimmory_search_returns_empty_when_client_raises(flask_app, mock_container):
+    """Grimmory search returns empty list when search_books throws."""
+    mock_container.mock_grimmory_client.is_configured.return_value = True
+    mock_container.mock_grimmory_client.search_books.side_effect = Exception("Grimmory down")
 
     with flask_app.test_client() as client:
-        response = client.get("/api/booklore/search?q=test")
+        response = client.get("/api/grimmory/search?q=test")
 
     assert response.status_code == 200
     assert response.get_json() == []
 
 
-def test_booklore_search_returns_empty_for_empty_query(flask_app, mock_container):
-    """Booklore search returns empty list for empty query."""
+def test_grimmory_search_returns_empty_for_empty_query(flask_app, mock_container):
+    """Grimmory search returns empty list for empty query."""
     with flask_app.test_client() as client:
-        response = client.get("/api/booklore/search?q=")
+        response = client.get("/api/grimmory/search?q=")
 
     assert response.status_code == 200
     assert response.get_json() == []
 
 
-def test_booklore_search_returns_results(flask_app, mock_container):
-    """Booklore search returns formatted results on success."""
-    mock_container.mock_booklore_client.is_configured.return_value = True
-    mock_container.mock_booklore_client.search_books.return_value = [
+def test_grimmory_search_returns_results(flask_app, mock_container):
+    """Grimmory search returns formatted results on success."""
+    mock_container.mock_grimmory_client.is_configured.return_value = True
+    mock_container.mock_grimmory_client.search_books.return_value = [
         {"id": 1, "title": "Dune", "authors": "Frank Herbert", "fileName": "dune.epub"},
     ]
 
     with flask_app.test_client() as client:
-        response = client.get("/api/booklore/search?q=dune")
+        response = client.get("/api/grimmory/search?q=dune")
 
     assert response.status_code == 200
     data = response.get_json()
     assert len(data) == 1
     assert data[0]["title"] == "Dune"
-    assert data[0]["source"] == "Booklore"
+    assert data[0]["source"] == "Grimmory"
 
 
 # ── Storyteller search: client raises ─────────────────────────────
+
 
 def test_storyteller_search_raises(flask_app, mock_container):
     """Storyteller search returns 500 when search_books throws (no try/except in route)."""
@@ -127,8 +130,8 @@ def test_storyteller_search_raises(flask_app, mock_container):
     mock_container.mock_storyteller_client.search_books.side_effect = Exception("Storyteller down")
 
     # Disable exception propagation so Flask returns a 500 response
-    flask_app.config['TESTING'] = False
-    flask_app.config['PROPAGATE_EXCEPTIONS'] = False
+    flask_app.config["TESTING"] = False
+    flask_app.config["PROPAGATE_EXCEPTIONS"] = False
 
     with flask_app.test_client() as client:
         response = client.get("/api/storyteller/search?q=test")
@@ -147,6 +150,7 @@ def test_storyteller_search_missing_query(flask_app, mock_container):
 
 
 # ── Suggestion link-bookfusion: edge cases ────────────────────────
+
 
 def test_link_bookfusion_suggestion_not_found(client, mock_container):
     """link-bookfusion returns 404 when suggestion doesn't exist."""
@@ -179,7 +183,7 @@ def test_link_bookfusion_invalid_match_index(client, mock_container):
 def test_link_bookfusion_non_bookfusion_match(client, mock_container):
     """link-bookfusion returns 400 when selected match is not a BookFusion candidate."""
     suggestion = Mock()
-    suggestion.matches = [{"ebook_filename": "test.epub", "source_family": "booklore", "bookfusion_ids": []}]
+    suggestion.matches = [{"ebook_filename": "test.epub", "source_family": "grimmory", "bookfusion_ids": []}]
     mock_container.mock_database_service.get_pending_suggestion.return_value = suggestion
 
     response = client.post(
@@ -190,22 +194,24 @@ def test_link_bookfusion_non_bookfusion_match(client, mock_container):
     assert response.status_code == 400
 
 
-def test_link_bookfusion_non_abs_source(client, mock_container):
-    """link-bookfusion returns 400 for non-abs source."""
+def test_link_bookfusion_non_abs_source_not_found(client, mock_container):
+    """link-bookfusion returns 404 when suggestion not found for non-abs source."""
+    mock_container.database_service().get_pending_suggestion.return_value = None
     response = client.post(
         "/api/suggestions/abc/link-bookfusion",
         json={"source": "kosync"},
     )
 
-    assert response.status_code == 400
+    assert response.status_code == 404
     data = response.get_json()
-    assert "ABS" in data["error"]
+    assert "not found" in data["error"].lower()
 
 
-# ── Booklore link: recompute KOSync ──────────────────────────────
+# ── Grimmory link: recompute KOSync ──────────────────────────────
 
-def test_booklore_link_unlink(flask_app, mock_container):
-    """Booklore link with null filename unlinks the book."""
+
+def test_grimmory_link_unlink(flask_app, mock_container):
+    """Grimmory link with null filename unlinks the book."""
     book = Mock()
     book.title = "Test"
     book.ebook_filename = "old.epub"
@@ -215,7 +221,7 @@ def test_booklore_link_unlink(flask_app, mock_container):
 
     with flask_app.test_client() as client:
         response = client.post(
-            "/api/booklore/link/test-abs",
+            "/api/grimmory/link/test-abs",
             json={"filename": None},
         )
 
@@ -225,14 +231,15 @@ def test_booklore_link_unlink(flask_app, mock_container):
     assert "unlinked" in data["message"].lower()
 
 
-# ── Booklore libraries: not configured ────────────────────────────
+# ── Grimmory libraries: not configured ────────────────────────────
 
-def test_booklore_libraries_not_configured(flask_app, mock_container):
-    """Booklore libraries returns 400 when not configured."""
-    mock_container.mock_booklore_client.is_configured.return_value = False
+
+def test_grimmory_libraries_not_configured(flask_app, mock_container):
+    """Grimmory libraries returns 400 when not configured."""
+    mock_container.mock_grimmory_client.is_configured.return_value = False
 
     with flask_app.test_client() as client:
-        response = client.get("/api/booklore/libraries")
+        response = client.get("/api/grimmory/libraries")
 
     assert response.status_code == 400
     data = response.get_json()
@@ -240,6 +247,7 @@ def test_booklore_libraries_not_configured(flask_app, mock_container):
 
 
 # ── Clear stale suggestions ───────────────────────────────────────
+
 
 def test_clear_stale_suggestions(client, mock_container):
     """clear_stale_suggestions returns count of cleared items."""

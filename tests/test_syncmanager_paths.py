@@ -13,8 +13,9 @@ import sys
 import tempfile
 
 # Add project root to path
-project_root = os.path.join(os.path.dirname(__file__), '..')
+project_root = os.path.join(os.path.dirname(__file__), "..")
 sys.path.insert(0, project_root)
+
 
 def test_syncmanager_di_paths():
     print("[TEST] Testing SyncManager paths from DI container...")
@@ -32,13 +33,14 @@ def test_syncmanager_di_paths():
     print(f"[INIT] Created temp books dir: {temp_books_dir}")
 
     # Set test environment variables to use temp directories
-    os.environ['DATA_DIR'] = temp_data_dir
-    os.environ['BOOKS_DIR'] = temp_books_dir
+    os.environ["DATA_DIR"] = temp_data_dir
+    os.environ["BOOKS_DIR"] = temp_books_dir
 
     try:
         # Test container creation
         print("\n[INIT] Creating DI container...")
         from src.utils.di_container import create_container
+
         container = create_container()
         print("[OK] Container created successfully")
 
@@ -55,6 +57,7 @@ def test_syncmanager_di_paths():
 
         # Verify they match our environment variables (normalize paths for comparison)
         from pathlib import Path
+
         expected_data_dir = Path(temp_data_dir).resolve()
         expected_books_dir = Path(temp_books_dir).resolve()
         actual_data_dir = Path(sync_manager.data_dir).resolve()
@@ -87,22 +90,24 @@ def test_syncmanager_di_paths():
     except Exception as e:
         print(f"\n[FAIL] Test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
     finally:
         # Close logging handlers to release file locks on Windows
         import logging
+
         logging.shutdown()
         for handler in logging.root.handlers[:]:
             handler.close()
             logging.root.removeHandler(handler)
 
-        if 'container' in locals():
+        if "container" in locals():
             try:
                 # Retrieve the database service singleton (if initialized)
                 db_service = container.database_service()
-                if hasattr(db_service, 'db_manager'):
+                if hasattr(db_service, "db_manager"):
                     print("[CLEAN] Closing database connection...")
                     db_service.db_manager.close()
             except Exception as e:
@@ -114,7 +119,8 @@ def test_syncmanager_di_paths():
                 shutil.rmtree(temp_base_dir)
                 print(f"[CLEAN] Cleaned up temp directory: {temp_base_dir}")
             except Exception as e:
-                 print(f"[WARN] Failed to cleanup temp dir: {e}")
+                print(f"[WARN] Failed to cleanup temp dir: {e}")
+
 
 if __name__ == "__main__":
     success = test_syncmanager_di_paths()

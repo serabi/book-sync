@@ -69,10 +69,15 @@
                 if (match.bookfusion_ids && match.bookfusion_ids.length) {
                     actions.push('<button type="button" class="btn btn-sm btn-purple" onclick=\'PK_Suggestions.addBookFusionToDashboard(' + JSON.stringify(match.bookfusion_ids) + ')\'>Add BF Book</button>');
                 }
+            } else if (match.action_kind === 'create_ebook_mapping') {
+                var ebookMappingUrl = '/match?search=' + encodeURIComponent(match.title || suggestion.title || '');
+                actions.push('<a class="btn btn-sm" href="' + ebookMappingUrl + '">Create Ebook Mapping</a>');
             } else {
                 var mappingUrl = '/match?search=' + encodeURIComponent(suggestion.title || '');
                 if (sgSource === 'abs') {
                     mappingUrl = '/match?abs_id=' + encodeURIComponent(suggestion.source_id) + '&search=' + encodeURIComponent(suggestion.title || '');
+                } else if (match.abs_id) {
+                    mappingUrl = '/match?abs_id=' + encodeURIComponent(match.abs_id) + '&search=' + encodeURIComponent(match.title || suggestion.title || '');
                 }
                 actions.push('<a class="btn btn-sm" href="' + mappingUrl + '">Create Mapping</a>');
             }
@@ -91,7 +96,7 @@
                     '</div>' +
                 '</div>' +
                 '<div class="badge-row">' +
-                    '<span class="chip">' + escapeHtml(match.source_family || 'unknown') + '</span>' +
+                    '<span class="chip">' + escapeHtml(match.source_family || match.source || 'unknown') + '</span>' +
                     formatEvidence(match.evidence) +
                 '</div>' +
                 (match.highlight_count ? '<div class="help-note" style="margin-top:8px;">BookFusion highlights: ' + escapeHtml(match.highlight_count) + '</div>' : '') +
@@ -119,6 +124,7 @@
                         '<h3>' + escapeHtml(suggestion.title) + '</h3>' +
                         '<p>' + escapeHtml(suggestion.author || 'Unknown author') + '</p>' +
                         '<div class="badge-row">' +
+                            (suggestion.source && suggestion.source !== 'abs' ? '<span class="chip chip--source-' + escapeHtml(suggestion.source) + '">' + escapeHtml(suggestion.source) + '</span>' : '') +
                             '<span class="chip">' + escapeHtml((suggestion.matches || []).length) + ' candidates</span>' +
                             (suggestion.hidden ? '<span class="chip">Hidden</span>' : '') +
                             (suggestion.has_bookfusion_evidence ? '<span class="chip chip--bookfusion">BookFusion evidence</span>' : '') +

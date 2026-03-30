@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-PageKeeper is a self-hosted, Docker-based reading companion that tracks what you read and keeps your position in sync across multiple platforms (Audiobookshelf, KOReader via KoSync, Storyteller, Booklore, and Hardcover). It works by transcribing audiobook audio and fuzzy-matching the transcript against EPUB text to build an alignment map, then converting positions between formats and pushing updates to all connected clients.
+PageKeeper is a self-hosted, Docker-based reading companion that tracks what you read and keeps your position in sync across multiple platforms (Audiobookshelf, KOReader via KoSync, Storyteller, Grimmory, and Hardcover). It works by transcribing audiobook audio and fuzzy-matching the transcript against EPUB text to build an alignment map, then converting positions between formats and pushing updates to all connected clients.
 
 The application is a Python/Flask web server with a web dashboard on port 4477, a background sync engine, and an optional split KoSync API port.
 
@@ -14,7 +14,7 @@ src/
   blueprints/     # Flask route handlers (web UI, KoSync protocol)
   db/             # Database models and service layer (SQLAlchemy + SQLite via Alembic)
   services/       # Core business logic (alignment, transcription, sync management)
-  sync_clients/   # Per-platform client wrappers (ABS, Storyteller, Booklore, Hardcover, CWA)
+  sync_clients/   # Per-platform client wrappers (ABS, Storyteller, Grimmory, Hardcover, CWA)
   sync_manager.py # Central orchestrator: listens for events, drives sync cycles
   web_server.py   # Flask app factory and startup
 tests/            # Pytest test suite

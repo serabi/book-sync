@@ -15,13 +15,14 @@ from src.services.reading_stats_service import ReadingStatsService
 # ReadingStatsService.get_year_stats
 # ---------------------------------------------------------------------------
 
+
 def _make_mock_book(**overrides):
     book = Mock()
-    book.id = overrides.get('id', 1)
-    book.status = overrides.get('status', 'active')
-    book.finished_at = overrides.get('finished_at', None)
-    book.rating = overrides.get('rating', None)
-    book.title = overrides.get('title', 'Test Book')
+    book.id = overrides.get("id", 1)
+    book.status = overrides.get("status", "active")
+    book.finished_at = overrides.get("finished_at", None)
+    book.rating = overrides.get("rating", None)
+    book.title = overrides.get("title", "Test Book")
     return book
 
 
@@ -44,17 +45,17 @@ class TestGetYearStatsNoStates:
         svc = ReadingStatsService(database_service=db)
         result = svc.get_year_stats(2026)
 
-        assert result['books_finished'] == 0
-        assert result['currently_reading'] == 0
-        assert result['total_tracked'] == 0
-        assert result['average_rating'] is None
-        assert result['monthly_finished'] == [0] * 12
-        assert result['goal_target'] is None
-        assert result['goal_percent'] is None
+        assert result["books_finished"] == 0
+        assert result["currently_reading"] == 0
+        assert result["total_tracked"] == 0
+        assert result["average_rating"] is None
+        assert result["monthly_finished"] == [0] * 12
+        assert result["goal_target"] is None
+        assert result["goal_percent"] is None
 
     def test_active_books_with_no_states_not_counted_as_reading(self):
         """A book with 'active' status but zero progress is not 'genuinely reading'."""
-        book = _make_mock_book(id=1, status='active')
+        book = _make_mock_book(id=1, status="active")
         db = Mock()
         db.get_all_books.return_value = [book]
         db.get_all_states.return_value = []  # No states at all
@@ -63,12 +64,12 @@ class TestGetYearStatsNoStates:
         svc = ReadingStatsService(database_service=db)
         result = svc.get_year_stats(2026)
 
-        assert result['currently_reading'] == 0
-        assert result['total_tracked'] == 1
+        assert result["currently_reading"] == 0
+        assert result["total_tracked"] == 1
 
     def test_active_book_with_low_progress_not_counted(self):
         """Progress <= 1% means not genuinely reading."""
-        book = _make_mock_book(id=1, status='active')
+        book = _make_mock_book(id=1, status="active")
         state = _make_state(1, percentage=0.005)  # 0.5%
         db = Mock()
         db.get_all_books.return_value = [book]
@@ -78,10 +79,10 @@ class TestGetYearStatsNoStates:
         svc = ReadingStatsService(database_service=db)
         result = svc.get_year_stats(2026)
 
-        assert result['currently_reading'] == 0
+        assert result["currently_reading"] == 0
 
     def test_completed_book_counted_for_correct_year(self):
-        book = _make_mock_book(id=1, status='completed', finished_at='2026-06-15', rating=4.5)
+        book = _make_mock_book(id=1, status="completed", finished_at="2026-06-15", rating=4.5)
         db = Mock()
         db.get_all_books.return_value = [book]
         db.get_all_states.return_value = []
@@ -90,12 +91,12 @@ class TestGetYearStatsNoStates:
         svc = ReadingStatsService(database_service=db)
         result = svc.get_year_stats(2026)
 
-        assert result['books_finished'] == 1
-        assert result['monthly_finished'][5] == 1  # June = index 5
-        assert result['average_rating'] == 4.5
+        assert result["books_finished"] == 1
+        assert result["monthly_finished"][5] == 1  # June = index 5
+        assert result["average_rating"] == 4.5
 
     def test_completed_book_wrong_year_not_counted(self):
-        book = _make_mock_book(id=1, status='completed', finished_at='2025-12-31')
+        book = _make_mock_book(id=1, status="completed", finished_at="2025-12-31")
         db = Mock()
         db.get_all_books.return_value = [book]
         db.get_all_states.return_value = []
@@ -104,7 +105,7 @@ class TestGetYearStatsNoStates:
         svc = ReadingStatsService(database_service=db)
         result = svc.get_year_stats(2026)
 
-        assert result['books_finished'] == 0
+        assert result["books_finished"] == 0
 
 
 class TestGetYearStatsWhenComputationRaises:
@@ -146,6 +147,7 @@ class TestGetYearStatsWhenComputationRaises:
 # ReadingService — error paths
 # ---------------------------------------------------------------------------
 
+
 class TestReadingServiceMaxProgress:
     def test_max_progress_empty_states(self):
         assert ReadingService.max_progress([]) == 0.0
@@ -167,15 +169,15 @@ class TestReadingServiceSetProgress:
         svc = ReadingService(db)
         result = svc.set_progress(999, 0.5, Mock())
 
-        assert result['success'] is False
-        assert 'not found' in result['error'].lower()
+        assert result["success"] is False
+        assert "not found" in result["error"].lower()
 
-    @patch('src.services.reading_service.StatusMachine')
+    @patch("src.services.reading_service.StatusMachine")
     def test_set_progress_sync_propagation_failure_still_succeeds(self, _mock_sm):
         """If sync propagation to clients fails, set_progress still returns success."""
-        book = _make_mock_book(id=1, status='active')
-        book.abs_id = 'abs-1'
-        book.started_at = '2026-01-01'
+        book = _make_mock_book(id=1, status="active")
+        book.abs_id = "abs-1"
+        book.started_at = "2026-01-01"
         db = Mock()
         db.get_book_by_id.return_value = book
 
@@ -183,23 +185,23 @@ class TestReadingServiceSetProgress:
         failing_client = Mock()
         failing_client.is_configured.return_value = True
         failing_client.update_progress.side_effect = ConnectionError("unreachable")
-        container.sync_clients.return_value = {'Storyteller': failing_client}
+        container.sync_clients.return_value = {"Storyteller": failing_client}
 
         svc = ReadingService(db)
         result = svc.set_progress(1, 0.5, container)
 
-        assert result['success'] is True
-        assert result['percentage'] == 0.5
+        assert result["success"] is True
+        assert result["percentage"] == 0.5
 
 
 class TestReadingServiceUpdateStatus:
-    @patch('src.services.reading_service.StatusMachine')
+    @patch("src.services.reading_service.StatusMachine")
     def test_update_status_book_not_found(self, _mock_sm):
         db = Mock()
         db.get_book_by_id.return_value = None
 
         svc = ReadingService(db)
-        result = svc.update_status(999, 'active', Mock())
+        result = svc.update_status(999, "active", Mock())
 
-        assert result['success'] is False
-        assert 'not found' in result['error'].lower()
+        assert result["success"] is False
+        assert "not found" in result["error"].lower()

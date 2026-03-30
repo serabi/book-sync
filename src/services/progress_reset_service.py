@@ -17,13 +17,15 @@ logger = logging.getLogger(__name__)
 class ProgressResetService:
     """Handles clearing progress and resetting sync clients to 0%."""
 
-    def __init__(self,
-                 database_service,
-                 alignment_service,
-                 sync_clients: dict,
-                 sync_lock: threading.Lock,
-                 pending_clears: set,
-                 pending_clears_lock: threading.Lock):
+    def __init__(
+        self,
+        database_service,
+        alignment_service,
+        sync_clients: dict,
+        sync_lock: threading.Lock,
+        pending_clears: set,
+        pending_clears_lock: threading.Lock,
+    ):
         self.database_service = database_service
         self.alignment_service = alignment_service
         self.sync_clients = sync_clients
@@ -74,7 +76,7 @@ class ProgressResetService:
             # "already up to date" and won't pull stale progress from external services
             now = time.time()
             for client_name in self.sync_clients:
-                if client_name == 'ABS' and book.sync_mode == 'ebook_only':
+                if client_name == "ABS" and book.sync_mode == "ebook_only":
                     continue
                 state = State(
                     abs_id=book.abs_id,
@@ -82,7 +84,7 @@ class ProgressResetService:
                     client_name=client_name.lower(),
                     percentage=0.0,
                     timestamp=now,
-                    last_updated=now
+                    last_updated=now,
                 )
                 self.database_service.save_state(state)
 
@@ -90,8 +92,8 @@ class ProgressResetService:
             self.database_service.update_book_reading_fields(book.id, started_at=None, finished_at=None)
 
             # Set not_started immediately so the sync daemon won't pick this book up
-            if book.status not in ('pending', 'processing'):
-                book.status = 'not_started'
+            if book.status not in ("pending", "processing"):
+                book.status = "not_started"
                 self.database_service.save_book(book)
 
             logger.info("Phase 1 complete: local states cleared, 0% states saved")
@@ -99,28 +101,30 @@ class ProgressResetService:
             # ── Phase 2: Reset external clients (needs sync lock) ──
             acquired = self._sync_lock.acquire(timeout=30)
             if not acquired:
-                logger.warning(f"Sync lock busy — external clients will be reset on next clear attempt. "
-                               f"Local progress already cleared for '{sanitize_log_data(str(book_id))}'")
+                logger.warning(
+                    f"Sync lock busy — external clients will be reset on next clear attempt. "
+                    f"Local progress already cleared for '{sanitize_log_data(str(book_id))}'"
+                )
                 # Keep book_id in _pending_clears so _process_deferred_clears picks it up
                 return {
-                    'book_id': book_id,
-                    'book_title': book.title,
-                    'database_states_cleared': cleared_count,
-                    'client_reset_results': {},
-                    'successful_resets': 0,
-                    'total_clients': 0,
-                    'note': 'Local DB cleared; external client reset deferred (sync cycle running)',
+                    "book_id": book_id,
+                    "book_title": book.title,
+                    "database_states_cleared": cleared_count,
+                    "client_reset_results": {},
+                    "successful_resets": 0,
+                    "total_clients": 0,
+                    "note": "Local DB cleared; external client reset deferred (sync cycle running)",
                 }
             try:
                 reset_results = self._reset_external_clients(book_id)
 
                 summary = {
-                    'book_id': book_id,
-                    'book_title': book.title,
-                    'database_states_cleared': cleared_count,
-                    'client_reset_results': reset_results,
-                    'successful_resets': sum(1 for r in reset_results.values() if r['success']),
-                    'total_clients': len(reset_results)
+                    "book_id": book_id,
+                    "book_title": book.title,
+                    "database_states_cleared": cleared_count,
+                    "client_reset_results": reset_results,
+                    "successful_resets": sum(1 for r in reset_results.values() if r["success"]),
+                    "total_clients": len(reset_results),
                 }
 
                 # Handle alignment-based re-processing (status already set to not_started in Phase 1)
@@ -145,7 +149,7 @@ class ProgressResetService:
 
     def _finalize_clear_status(self, book_id):
         """Handle smart-reset status finalization after clearing progress."""
-        smart_reset = os.getenv('REPROCESS_ON_CLEAR_IF_NO_ALIGNMENT', 'true').lower() == 'true'
+        smart_reset = os.getenv("REPROCESS_ON_CLEAR_IF_NO_ALIGNMENT", "true").lower() == "true"
         if not smart_reset:
             logger.info("   Reset progress to 0% (Smart re-process disabled)")
             return
@@ -156,7 +160,7 @@ class ProgressResetService:
             logger.info(f"   Alignment map exists for '{sanitize_log_data(str(book_id))}' — no re-transcription needed")
         else:
             if book:
-                book.status = 'pending'
+                book.status = "pending"
                 self.database_service.save_book(book)
                 logger.info(f"   Book '{sanitize_log_data(str(book_id))}' marked 'pending' for alignment check")
 
@@ -176,14 +180,14 @@ class ProgressResetService:
         locator = LocatorResult(percentage=0.0)
         request = UpdateProgressRequest(locator_result=locator, txt="", previous_location=None)
         for client_name, client in self.sync_clients.items():
-            if client_name == 'ABS' and book.sync_mode == 'ebook_only':
+            if client_name == "ABS" and book.sync_mode == "ebook_only":
                 logger.debug(f"'{book.title}' Ebook-only mode - skipping ABS progress reset")
                 continue
             try:
                 result = client.update_progress(book, request)
                 reset_results[client_name] = {
-                    'success': result.success,
-                    'message': 'Reset to 0%' if result.success else 'Failed to reset'
+                    "success": result.success,
+                    "message": "Reset to 0%" if result.success else "Failed to reset",
                 }
                 if result.success:
                     record_write(client_name, book.id)
@@ -191,9 +195,6 @@ class ProgressResetService:
                 else:
                     logger.warning(f"Failed to reset '{client_name}'")
             except Exception as e:
-                reset_results[client_name] = {
-                    'success': False,
-                    'message': str(e)
-                }
+                reset_results[client_name] = {"success": False, "message": str(e)}
                 logger.warning(f"Error resetting '{client_name}': {e}")
         return reset_results

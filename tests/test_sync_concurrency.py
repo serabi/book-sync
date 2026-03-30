@@ -23,7 +23,7 @@ def _make_sync_manager(**overrides):
 
     defaults = dict(
         abs_client=Mock(),
-        booklore_client=Mock(),
+        grimmory_client=Mock(),
         hardcover_client=Mock(),
         transcriber=Mock(),
         ebook_parser=Mock(),

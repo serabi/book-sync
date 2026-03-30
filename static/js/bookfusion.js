@@ -122,13 +122,13 @@ function searchBooks() {
         list.textContent = '';
         var emptyEl = document.createElement('div');
         emptyEl.className = 'bf-empty';
-        var h = document.createElement('div'); h.className = 'bf-empty-heading'; h.textContent = 'Search your Booklore library';
+        var h = document.createElement('div'); h.className = 'bf-empty-heading'; h.textContent = 'Search your Grimmory library';
         var d = document.createElement('div'); d.className = 'bf-empty-desc'; d.textContent = 'Type above to find books to upload';
         emptyEl.appendChild(h); emptyEl.appendChild(d);
         list.appendChild(emptyEl);
         return;
     }
-    fetch('/api/bookfusion/booklore-books?q=' + encodeURIComponent(q))
+    fetch('/api/bookfusion/grimmory-books?q=' + encodeURIComponent(q))
         .then(function (r) {
             if (!r.ok) throw new Error('Search failed');
             return r.json();
