@@ -750,7 +750,7 @@ class KosyncService:
             return {"message": "Document not found on server"}, 502
 
         kosync_state = next((s for s in states if s.client_name.lower() == "kosync"), None)
-        latest_state = kosync_state or max(states, key=lambda s: s.last_updated if s.last_updated else 0)
+        latest_state = kosync_state or max(states, key=lambda s: s.last_updated or datetime.min)
 
         return {
             "device": "pagekeeper",
