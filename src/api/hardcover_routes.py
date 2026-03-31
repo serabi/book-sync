@@ -30,9 +30,7 @@ def _get_dependencies():
             None,
             None,
             (
-                jsonify(
-                    {"found": False, "message": "Hardcover routes not initialized"}
-                ),
+                jsonify({"found": False, "message": "Hardcover routes not initialized"}),
                 500,
             ),
         )
@@ -41,13 +39,13 @@ def _get_dependencies():
 
 def _validate_custom_cover_url(raw_url):
     parsed = urlparse(raw_url)
-    if parsed.scheme not in {'http', 'https'}:
+    if parsed.scheme not in {"http", "https"}:
         return "Custom cover URL must start with http:// or https://"
     if not parsed.netloc or not parsed.hostname:
         return "Custom cover URL must include a valid host"
 
     hostname = parsed.hostname.strip().lower()
-    if hostname == 'localhost':
+    if hostname == "localhost":
         return "Custom cover URL cannot use a local address"
 
     try:
@@ -56,7 +54,7 @@ def _validate_custom_cover_url(raw_url):
             return "Custom cover URL cannot use a local or private address"
         return None
     except ValueError:
-        if '.' not in hostname:
+        if "." not in hostname:
             return "Custom cover URL must use a fully qualified public hostname"
 
     try:
@@ -110,9 +108,7 @@ def api_hardcover_resolve():
         # Check if there's an existing Hardcover link for this ABS book
         if existing_details and existing_details.hardcover_book_id:
             # Use the existing linked book instead of auto-matching
-            book_data = hardcover_client.resolve_book_from_input(
-                existing_details.hardcover_book_id
-            )
+            book_data = hardcover_client.resolve_book_from_input(existing_details.hardcover_book_id)
 
         if not book_data:
             # No existing link (or fetch failed) - fall back to auto-match from ABS metadata
@@ -209,9 +205,7 @@ def link_hardcover(abs_id):
 
         try:
             # Use pages if available, otherwise use -1 for audiobooks (indicates no page count)
-            hardcover_pages = (
-                pages if pages is not None else (-1 if audio_seconds else None)
-            )
+            hardcover_pages = pages if pages is not None else (-1 if audio_seconds else None)
 
             # Determine cover URL: use provided cached_image, or preserve existing
             cover_url = cached_image

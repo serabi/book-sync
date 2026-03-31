@@ -15,11 +15,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Override environment variables for testing
-os.environ['DATA_DIR'] = 'test_data'
-os.environ['BOOKS_DIR'] = 'test_data'
+os.environ["DATA_DIR"] = "test_data"
+os.environ["BOOKS_DIR"] = "test_data"
 
 # Setup basic logging
-logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format="%(levelname)s - %(message)s")
 
 
 class TestDatabaseServiceIntegration(unittest.TestCase):
@@ -29,7 +29,7 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
         """Set up test environment before each test."""
         # Create temporary directory for test database
         self.temp_dir = tempfile.mkdtemp()
-        self.test_db_path = str(Path(self.temp_dir) / 'test_database.db')
+        self.test_db_path = str(Path(self.temp_dir) / "test_database.db")
 
         # Import here to avoid circular imports
         from src.db.database_service import DatabaseMigrator, DatabaseService
@@ -48,10 +48,11 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
     def tearDown(self):
         """Clean up after each test."""
         # Close database connection to release file lock on Windows
-        if hasattr(self, 'db_service') and hasattr(self.db_service, 'db_manager'):
+        if hasattr(self, "db_service") and hasattr(self.db_service, "db_manager"):
             self.db_service.db_manager.close()
 
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_database_service_initialization(self):
@@ -61,22 +62,22 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
 
     def test_create_book(self):
         """Test creating a book record."""
-        test_abs_id = 'test-book-create'
+        test_abs_id = "test-book-create"
 
         book = self.Book(
             abs_id=test_abs_id,
-            title='Test Book Creation',
-            ebook_filename='test-create.epub',
-            kosync_doc_id='test-create-doc',
-            status='active',
-            duration=3600.0  # 1 hour test duration
+            title="Test Book Creation",
+            ebook_filename="test-create.epub",
+            kosync_doc_id="test-create-doc",
+            status="active",
+            duration=3600.0,  # 1 hour test duration
         )
 
         saved_book = self.db_service.save_book(book)
 
         self.assertEqual(saved_book.abs_id, test_abs_id)
-        self.assertEqual(saved_book.title, 'Test Book Creation')
-        self.assertEqual(saved_book.status, 'active')
+        self.assertEqual(saved_book.title, "Test Book Creation")
+        self.assertEqual(saved_book.status, "active")
 
         # Verify book can be retrieved
         retrieved_book = self.db_service.get_book_by_abs_id(test_abs_id)
@@ -85,26 +86,26 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
 
     def test_delete_book(self):
         """Test deleting a book record with cascading deletes for states and hardcover details."""
-        test_abs_id = 'test-book-delete'
+        test_abs_id = "test-book-delete"
 
         # Create book
         book = self.Book(
             abs_id=test_abs_id,
-            title='Test Book Deletion',
-            ebook_filename='test-delete.epub',
-            kosync_doc_id='test-delete-doc',
-            status='active',
-            duration=7200.0  # 2 hour test duration
+            title="Test Book Deletion",
+            ebook_filename="test-delete.epub",
+            kosync_doc_id="test-delete-doc",
+            status="active",
+            duration=7200.0,  # 2 hour test duration
         )
 
         book = self.db_service.save_book(book)
 
         # Create multiple states for the book
         states_data = [
-            ('kosync', 0.45, {'xpath': '/delete/test/xpath'}),
-            ('abs', 0.42, {'timestamp': 1500.0}),
-            ('storyteller', 0.40, {'xpath': '/html/body/section[1]/p[3]'}),
-            ('booklore', 0.38, {'cfi': 'epubcfi(/6/6[chapter3]!/4/2/8/1:25)'})
+            ("kosync", 0.45, {"xpath": "/delete/test/xpath"}),
+            ("abs", 0.42, {"timestamp": 1500.0}),
+            ("storyteller", 0.40, {"xpath": "/html/body/section[1]/p[3]"}),
+            ("grimmory", 0.38, {"cfi": "epubcfi(/6/6[chapter3]!/4/2/8/1:25)"}),
         ]
 
         created_states = []
@@ -115,7 +116,7 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
                 client_name=client_name,
                 last_updated=time.time(),
                 percentage=percentage,
-                **extra_data
+                **extra_data,
             )
             saved_state = self.db_service.save_state(state)
             created_states.append(saved_state)
@@ -124,23 +125,19 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
         hardcover = self.HardcoverDetails(
             abs_id=test_abs_id,
             book_id=book.id,
-            hardcover_book_id='hc-delete-test-123',
-            hardcover_edition_id='hc-edition-delete-456',
+            hardcover_book_id="hc-delete-test-123",
+            hardcover_edition_id="hc-edition-delete-456",
             hardcover_pages=280,
-            isbn='978-9876543210',
-            asin='B08DELETETEST',
-            matched_by='title'
+            isbn="978-9876543210",
+            asin="B08DELETETEST",
+            matched_by="title",
         )
 
         self.db_service.save_hardcover_details(hardcover)
 
         # Create a job for the book
         job = self.Job(
-            abs_id=test_abs_id,
-            book_id=book.id,
-            last_attempt=time.time(),
-            retry_count=3,
-            last_error='Delete test error'
+            abs_id=test_abs_id, book_id=book.id, last_attempt=time.time(), retry_count=3, last_error="Delete test error"
         )
 
         self.db_service.save_job(job)
@@ -180,24 +177,24 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
 
     def test_create_states(self):
         """Test creating state records for multiple clients."""
-        test_abs_id = 'test-book-states'
+        test_abs_id = "test-book-states"
 
         # Create book first
         book = self.Book(
             abs_id=test_abs_id,
-            title='Test Book States',
-            ebook_filename='test-states.epub',
-            kosync_doc_id='test-states-doc',
-            status='active'
+            title="Test Book States",
+            ebook_filename="test-states.epub",
+            kosync_doc_id="test-states-doc",
+            status="active",
         )
         book = self.db_service.save_book(book)
 
         # Create states for different clients
         states_data = [
-            ('kosync', 0.35, {'xpath': '/test/xpath'}),
-            ('abs', 0.32, {'timestamp': 1200.5}),
-            ('storyteller', 0.30, {'xpath': '/html/body/section[2]/p[5]'}),
-            ('booklore', 0.28, {'cfi': 'epubcfi(/6/4[chapter2]!/4/2/6/1:15)'})
+            ("kosync", 0.35, {"xpath": "/test/xpath"}),
+            ("abs", 0.32, {"timestamp": 1200.5}),
+            ("storyteller", 0.30, {"xpath": "/html/body/section[2]/p[5]"}),
+            ("grimmory", 0.28, {"cfi": "epubcfi(/6/4[chapter2]!/4/2/6/1:15)"}),
         ]
 
         for client_name, percentage, extra_data in states_data:
@@ -207,7 +204,7 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
                 client_name=client_name,
                 last_updated=time.time(),
                 percentage=percentage,
-                **extra_data
+                **extra_data,
             )
             saved_state = self.db_service.save_state(state)
             self.assertEqual(saved_state.client_name, client_name)
@@ -220,83 +217,79 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
         # Verify each client has correct data
         state_by_client = {s.client_name: s for s in states}
 
-        self.assertIn('kosync', state_by_client)
-        self.assertEqual(state_by_client['kosync'].xpath, '/test/xpath')
+        self.assertIn("kosync", state_by_client)
+        self.assertEqual(state_by_client["kosync"].xpath, "/test/xpath")
 
-        self.assertIn('abs', state_by_client)
-        self.assertEqual(state_by_client['abs'].timestamp, 1200.5)
+        self.assertIn("abs", state_by_client)
+        self.assertEqual(state_by_client["abs"].timestamp, 1200.5)
 
-        self.assertIn('storyteller', state_by_client)
-        self.assertEqual(state_by_client['storyteller'].xpath, '/html/body/section[2]/p[5]')
+        self.assertIn("storyteller", state_by_client)
+        self.assertEqual(state_by_client["storyteller"].xpath, "/html/body/section[2]/p[5]")
 
-        self.assertIn('booklore', state_by_client)
-        self.assertEqual(state_by_client['booklore'].cfi, 'epubcfi(/6/4[chapter2]!/4/2/6/1:15)')
+        self.assertIn("grimmory", state_by_client)
+        self.assertEqual(state_by_client["grimmory"].cfi, "epubcfi(/6/4[chapter2]!/4/2/6/1:15)")
 
     def test_get_books_by_status(self):
         """Test querying books by status."""
         # Create books with different statuses
         active_book = self.Book(
-            abs_id='active-book',
-            title='Active Book',
-            ebook_filename='active.epub',
-            kosync_doc_id='active-doc',
-            status='active'
+            abs_id="active-book",
+            title="Active Book",
+            ebook_filename="active.epub",
+            kosync_doc_id="active-doc",
+            status="active",
         )
 
         paused_book = self.Book(
-            abs_id='paused-book',
-            title='Paused Book',
-            ebook_filename='paused.epub',
-            kosync_doc_id='paused-doc',
-            status='paused'
+            abs_id="paused-book",
+            title="Paused Book",
+            ebook_filename="paused.epub",
+            kosync_doc_id="paused-doc",
+            status="paused",
         )
 
         self.db_service.save_book(active_book)
         self.db_service.save_book(paused_book)
 
         # Test active books query
-        active_books = self.db_service.get_books_by_status('active')
+        active_books = self.db_service.get_books_by_status("active")
         active_ids = [book.abs_id for book in active_books]
-        self.assertIn('active-book', active_ids)
-        self.assertNotIn('paused-book', active_ids)
+        self.assertIn("active-book", active_ids)
+        self.assertNotIn("paused-book", active_ids)
 
         # Test paused books query
-        paused_books = self.db_service.get_books_by_status('paused')
+        paused_books = self.db_service.get_books_by_status("paused")
         paused_ids = [book.abs_id for book in paused_books]
-        self.assertIn('paused-book', paused_ids)
-        self.assertNotIn('active-book', paused_ids)
+        self.assertIn("paused-book", paused_ids)
+        self.assertNotIn("active-book", paused_ids)
 
     def test_statistics(self):
         """Test database statistics functionality."""
         initial_stats = self.db_service.get_statistics()
-        initial_books = initial_stats['total_books']
-        initial_states = initial_stats['total_states']
+        initial_books = initial_stats["total_books"]
+        initial_states = initial_stats["total_states"]
 
         # Add test data
-        test_abs_id = 'test-stats-book'
+        test_abs_id = "test-stats-book"
         book = self.Book(
             abs_id=test_abs_id,
-            title='Statistics Test Book',
-            ebook_filename='stats.epub',
-            kosync_doc_id='stats-doc',
-            status='active'
+            title="Statistics Test Book",
+            ebook_filename="stats.epub",
+            kosync_doc_id="stats-doc",
+            status="active",
         )
         book = self.db_service.save_book(book)
 
         # Add states
         state = self.State(
-            abs_id=test_abs_id,
-            book_id=book.id,
-            client_name='kosync',
-            last_updated=time.time(),
-            percentage=0.5
+            abs_id=test_abs_id, book_id=book.id, client_name="kosync", last_updated=time.time(), percentage=0.5
         )
         self.db_service.save_state(state)
 
         # Check updated statistics
         updated_stats = self.db_service.get_statistics()
-        self.assertEqual(updated_stats['total_books'], initial_books + 1)
-        self.assertEqual(updated_stats['total_states'], initial_states + 1)
+        self.assertEqual(updated_stats["total_books"], initial_books + 1)
+        self.assertEqual(updated_stats["total_states"], initial_states + 1)
 
     def test_migration_should_migrate(self):
         """Test migration detection logic."""
@@ -309,24 +302,20 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
 
             # Create empty JSON files
             mapping_json.write_text('{"mappings": []}')
-            state_json.write_text('{}')
+            state_json.write_text("{}")
 
             # Create fresh database for migration test
             migration_db_path = temp_path / "migration.db"
             migration_db_service = self.DatabaseService(str(migration_db_path))
 
             try:
-                migrator = self.DatabaseMigrator(
-                    migration_db_service,
-                    str(mapping_json),
-                    str(state_json)
-                )
+                migrator = self.DatabaseMigrator(migration_db_service, str(mapping_json), str(state_json))
 
                 # Should migrate when database is empty and JSON files exist
                 self.assertTrue(migrator.should_migrate())
 
                 # Add a book to database
-                book = self.Book(abs_id='existing-book', title='Existing Book')
+                book = self.Book(abs_id="existing-book", title="Existing Book")
                 migration_db_service.save_book(book)
 
                 # Should not migrate when database has data
@@ -354,17 +343,17 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
                         "hardcover_pages": 350,
                         "isbn": "978-1234567890",
                         "retry_count": 2,
-                        "last_error": "Migration test error"
+                        "last_error": "Migration test error",
                     }
                 ]
             }
 
-            with open(mapping_json_path, 'w') as f:
+            with open(mapping_json_path, "w") as f:
                 json.dump(mapping_data, f)
 
             # Create empty state JSON
             state_json_path = temp_path / "state.json"
-            with open(state_json_path, 'w') as f:
+            with open(state_json_path, "w") as f:
                 json.dump({}, f)
 
             # Create database for migration
@@ -373,11 +362,7 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
 
             try:
                 # Perform migration
-                migrator = self.DatabaseMigrator(
-                    migration_db_service,
-                    str(mapping_json_path),
-                    str(state_json_path)
-                )
+                migrator = self.DatabaseMigrator(migration_db_service, str(mapping_json_path), str(state_json_path))
 
                 migrator.migrate()
 
@@ -410,16 +395,10 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
             # Create test mapping JSON (minimal)
             mapping_json_path = temp_path / "mapping.json"
             mapping_data = {
-                "mappings": [
-                    {
-                        "abs_id": "state-migration-book",
-                        "title": "State Migration Test",
-                        "status": "active"
-                    }
-                ]
+                "mappings": [{"abs_id": "state-migration-book", "title": "State Migration Test", "status": "active"}]
             }
 
-            with open(mapping_json_path, 'w') as f:
+            with open(mapping_json_path, "w") as f:
                 json.dump(mapping_data, f)
 
             # Create test state JSON
@@ -435,12 +414,12 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
                     "absebook_cfi": "epubcfi(/6/10[chapter5]!/4/2/8/1:45)",
                     "storyteller_pct": 0.44,
                     "storyteller_xpath": "/html/body/section[3]/p[8]",
-                    "booklore_pct": 0.43,
-                    "booklore_xpath": "/html/body/article[2]/div[1]/p[15]"
+                    "grimmory_pct": 0.43,
+                    "grimmory_xpath": "/html/body/article[2]/div[1]/p[15]",
                 }
             }
 
-            with open(state_json_path, 'w') as f:
+            with open(state_json_path, "w") as f:
                 json.dump(state_data, f)
 
             # Create database for migration
@@ -449,45 +428,41 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
 
             try:
                 # Perform migration
-                migrator = self.DatabaseMigrator(
-                    migration_db_service,
-                    str(mapping_json_path),
-                    str(state_json_path)
-                )
+                migrator = self.DatabaseMigrator(migration_db_service, str(mapping_json_path), str(state_json_path))
 
                 migrator.migrate()
 
                 # Verify states were migrated
                 migrated_book = migration_db_service.get_book_by_abs_id("state-migration-book")
                 states = migration_db_service.get_states_for_book(migrated_book.id)
-                self.assertEqual(len(states), 5)  # kosync, abs, absebook, storyteller, booklore
+                self.assertEqual(len(states), 5)  # kosync, abs, absebook, storyteller, grimmory
 
                 state_by_client = {s.client_name: s for s in states}
 
                 # Check kosync state
-                kosync_state = state_by_client['kosync']
+                kosync_state = state_by_client["kosync"]
                 self.assertEqual(kosync_state.percentage, 0.45)
                 self.assertEqual(kosync_state.xpath, "/html/body/div[1]/p[12]")
 
                 # Check ABS state
-                abs_state = state_by_client['abs']
+                abs_state = state_by_client["abs"]
                 self.assertEqual(abs_state.percentage, 0.42)
                 self.assertEqual(abs_state.timestamp, 1250.5)
 
                 # Check ABS eBook state
-                absebook_state = state_by_client['absebook']
+                absebook_state = state_by_client["absebook"]
                 self.assertEqual(absebook_state.percentage, 0.46)
                 self.assertEqual(absebook_state.cfi, "epubcfi(/6/10[chapter5]!/4/2/8/1:45)")
 
                 # Check Storyteller state
-                storyteller_state = state_by_client['storyteller']
+                storyteller_state = state_by_client["storyteller"]
                 self.assertEqual(storyteller_state.percentage, 0.44)
                 self.assertEqual(storyteller_state.xpath, "/html/body/section[3]/p[8]")
 
-                # Check BookLore state
-                booklore_state = state_by_client['booklore']
-                self.assertEqual(booklore_state.percentage, 0.43)
-                self.assertEqual(booklore_state.xpath, "/html/body/article[2]/div[1]/p[15]")
+                # Check Grimmory state
+                grimmory_state = state_by_client["grimmory"]
+                self.assertEqual(grimmory_state.percentage, 0.43)
+                self.assertEqual(grimmory_state.xpath, "/html/body/article[2]/div[1]/p[15]")
             finally:
                 migration_db_service.db_manager.close()
 
@@ -499,27 +474,16 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
             # Create test JSON files
             mapping_json_path = temp_path / "mapping.json"
             mapping_data = {
-                "mappings": [
-                    {
-                        "abs_id": "idempotency-test",
-                        "title": "Idempotency Test Book",
-                        "status": "active"
-                    }
-                ]
+                "mappings": [{"abs_id": "idempotency-test", "title": "Idempotency Test Book", "status": "active"}]
             }
 
-            with open(mapping_json_path, 'w') as f:
+            with open(mapping_json_path, "w") as f:
                 json.dump(mapping_data, f)
 
             state_json_path = temp_path / "state.json"
-            state_data = {
-                "idempotency-test": {
-                    "kosync_pct": 0.5,
-                    "abs_pct": 0.5
-                }
-            }
+            state_data = {"idempotency-test": {"kosync_pct": 0.5, "abs_pct": 0.5}}
 
-            with open(state_json_path, 'w') as f:
+            with open(state_json_path, "w") as f:
                 json.dump(state_data, f)
 
             # Create database for migration
@@ -527,11 +491,7 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
             migration_db_service = self.DatabaseService(str(migration_db_path))
 
             try:
-                migrator = self.DatabaseMigrator(
-                    migration_db_service,
-                    str(mapping_json_path),
-                    str(state_json_path)
-                )
+                migrator = self.DatabaseMigrator(migration_db_service, str(mapping_json_path), str(state_json_path))
 
                 # First migration
                 self.assertTrue(migrator.should_migrate())
@@ -539,8 +499,8 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
 
                 # Check initial counts
                 stats_after_first = migration_db_service.get_statistics()
-                books_after_first = stats_after_first['total_books']
-                states_after_first = stats_after_first['total_states']
+                books_after_first = stats_after_first["total_books"]
+                states_after_first = stats_after_first["total_states"]
 
                 # Second migration should not be needed
                 self.assertFalse(migrator.should_migrate())
@@ -550,8 +510,8 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
 
                 # Check counts haven't changed (no duplicates)
                 stats_after_second = migration_db_service.get_statistics()
-                self.assertEqual(stats_after_second['total_books'], books_after_first)
-                self.assertEqual(stats_after_second['total_states'], states_after_first)
+                self.assertEqual(stats_after_second["total_books"], books_after_first)
+                self.assertEqual(stats_after_second["total_states"], states_after_first)
             finally:
                 migration_db_service.db_manager.close()
 
@@ -560,28 +520,18 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
         from src.db.models import PendingSuggestion
 
         # 1. Setup Active Books
-        active_id = 'active-book-id'
-        book = self.Book(abs_id=active_id, title='Active Book', status='active')
+        active_id = "active-book-id"
+        book = self.Book(abs_id=active_id, title="Active Book", status="active")
         self.db_service.save_book(book)
 
         # 2. Setup Suggestions
         # Suggestion for the active book (should be preserved)
-        s1 = PendingSuggestion(
-            source_id=active_id,
-            title='Active Book Title',
-            author='Author A',
-            matches_json='[]'
-        )
+        s1 = PendingSuggestion(source_id=active_id, title="Active Book Title", author="Author A", matches_json="[]")
         self.db_service.save_pending_suggestion(s1)
 
         # Suggestion for a non-existent book (should be cleared)
-        stale_id = 'stale-book-id'
-        s2 = PendingSuggestion(
-            source_id=stale_id,
-            title='Stale Book Title',
-            author='Author B',
-            matches_json='[]'
-        )
+        stale_id = "stale-book-id"
+        s2 = PendingSuggestion(source_id=stale_id, title="Stale Book Title", author="Author B", matches_json="[]")
         self.db_service.save_pending_suggestion(s2)
 
         # Verify initial state
@@ -602,28 +552,25 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
         from src.db.models import PendingSuggestion
 
         suggestion = PendingSuggestion(
-            source_id='suggestion-123',
-            title='Test Suggestion',
-            author='Author',
-            matches_json='[]'
+            source_id="suggestion-123", title="Test Suggestion", author="Author", matches_json="[]"
         )
         self.db_service.save_pending_suggestion(suggestion)
 
         actionable = self.db_service.get_all_actionable_suggestions()
         self.assertEqual(len(actionable), 1)
-        self.assertEqual(actionable[0].status, 'pending')
+        self.assertEqual(actionable[0].status, "pending")
 
-        self.assertTrue(self.db_service.hide_suggestion('suggestion-123'))
+        self.assertTrue(self.db_service.hide_suggestion("suggestion-123"))
         hidden = self.db_service.get_hidden_suggestions()
         self.assertEqual(len(hidden), 1)
-        self.assertEqual(hidden[0].status, 'hidden')
+        self.assertEqual(hidden[0].status, "hidden")
 
-        self.assertTrue(self.db_service.unhide_suggestion('suggestion-123'))
+        self.assertTrue(self.db_service.unhide_suggestion("suggestion-123"))
         pending = self.db_service.get_all_pending_suggestions()
         self.assertEqual(len(pending), 1)
-        self.assertEqual(pending[0].status, 'pending')
+        self.assertEqual(pending[0].status, "pending")
 
-        self.assertTrue(self.db_service.resolve_suggestion('suggestion-123'))
+        self.assertTrue(self.db_service.resolve_suggestion("suggestion-123"))
         self.assertEqual(self.db_service.get_all_actionable_suggestions(), [])
 
     def test_migration_partial_data(self):
@@ -635,20 +582,12 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
             mapping_json_path = temp_path / "mapping.json"
             mapping_data = {
                 "mappings": [
-                    {
-                        "abs_id": "no-states-book",
-                        "title": "Book Without States",
-                        "status": "active"
-                    },
-                    {
-                        "abs_id": "partial-states-book",
-                        "title": "Book With Partial States",
-                        "status": "active"
-                    }
+                    {"abs_id": "no-states-book", "title": "Book Without States", "status": "active"},
+                    {"abs_id": "partial-states-book", "title": "Book With Partial States", "status": "active"},
                 ]
             }
 
-            with open(mapping_json_path, 'w') as f:
+            with open(mapping_json_path, "w") as f:
                 json.dump(mapping_data, f)
 
             # State JSON only has data for one book, and only some clients
@@ -656,13 +595,13 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
             state_data = {
                 "partial-states-book": {
                     "kosync_pct": 0.3,
-                    "abs_pct": 0.25
-                    # Missing storyteller, booklore, absebook
+                    "abs_pct": 0.25,
+                    # Missing storyteller, grimmory, absebook
                 }
                 # Missing no-states-book entirely
             }
 
-            with open(state_json_path, 'w') as f:
+            with open(state_json_path, "w") as f:
                 json.dump(state_data, f)
 
             # Perform migration
@@ -670,11 +609,7 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
             migration_db_service = self.DatabaseService(str(migration_db_path))
 
             try:
-                migrator = self.DatabaseMigrator(
-                    migration_db_service,
-                    str(mapping_json_path),
-                    str(state_json_path)
-                )
+                migrator = self.DatabaseMigrator(migration_db_service, str(mapping_json_path), str(state_json_path))
 
                 migrator.migrate()
 
@@ -693,10 +628,10 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
                 self.assertEqual(len(states2), 2)  # Only kosync and abs
 
                 state_clients = [s.client_name for s in states2]
-                self.assertIn('kosync', state_clients)
-                self.assertIn('abs', state_clients)
-                self.assertNotIn('storyteller', state_clients)
-                self.assertNotIn('booklore', state_clients)
+                self.assertIn("kosync", state_clients)
+                self.assertIn("abs", state_clients)
+                self.assertNotIn("storyteller", state_clients)
+                self.assertNotIn("grimmory", state_clients)
             finally:
                 migration_db_service.db_manager.close()
 
@@ -708,7 +643,7 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
 
     def test_get_book_by_ref_integer_id(self):
         """get_book_by_ref with an integer returns the book by primary key."""
-        book = self.Book(abs_id='ref-int-test', title='Ref Int', status='active')
+        book = self.Book(abs_id="ref-int-test", title="Ref Int", status="active")
         saved = self.db_service.save_book(book)
         result = self.db_service.get_book_by_ref(saved.id)
         self.assertIsNotNone(result)
@@ -716,15 +651,15 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
 
     def test_get_book_by_ref_abs_id_string(self):
         """get_book_by_ref with a string abs_id returns the matching book."""
-        book = self.Book(abs_id='abs-ref-test', title='Ref Abs', status='active')
+        book = self.Book(abs_id="abs-ref-test", title="Ref Abs", status="active")
         self.db_service.save_book(book)
-        result = self.db_service.get_book_by_ref('abs-ref-test')
+        result = self.db_service.get_book_by_ref("abs-ref-test")
         self.assertIsNotNone(result)
-        self.assertEqual(result.abs_id, 'abs-ref-test')
+        self.assertEqual(result.abs_id, "abs-ref-test")
 
     def test_get_book_by_ref_numeric_string_fallthrough(self):
         """get_book_by_ref with a numeric string falls through to book_id lookup."""
-        book = self.Book(abs_id='numeric-fall', title='Numeric Fallthrough', status='active')
+        book = self.Book(abs_id="numeric-fall", title="Numeric Fallthrough", status="active")
         saved = self.db_service.save_book(book)
         # Use the numeric book ID as a string — should fall through abs_id miss to int lookup
         result = self.db_service.get_book_by_ref(str(saved.id))
@@ -733,26 +668,26 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
 
     def test_get_book_by_ref_nonexistent_string(self):
         """get_book_by_ref with a non-numeric string that doesn't match any abs_id returns None."""
-        result = self.db_service.get_book_by_ref('does-not-exist')
+        result = self.db_service.get_book_by_ref("does-not-exist")
         self.assertIsNone(result)
 
     # ── T2: Book without abs_id — full lifecycle ──
 
     def test_book_without_abs_id_lifecycle(self):
         """Create a Book with no abs_id, verify auto-id, retrieve, attach states."""
-        book = self.Book(title='Standalone Ebook', status='not_started', sync_mode='ebook_only')
+        book = self.Book(title="Standalone Ebook", status="not_started", sync_mode="ebook_only")
         saved = self.db_service.save_book(book, is_new=True)
         self.assertIsNotNone(saved.id)
         self.assertIsNone(saved.abs_id)
 
         retrieved = self.db_service.get_book_by_ref(saved.id)
         self.assertIsNotNone(retrieved)
-        self.assertEqual(retrieved.title, 'Standalone Ebook')
+        self.assertEqual(retrieved.title, "Standalone Ebook")
 
         # Attach a state
         state = self.State(
             book_id=saved.id,
-            client_name='KoSync',
+            client_name="KoSync",
             timestamp=100.0,
             percentage=0.25,
             last_updated=1000.0,
@@ -766,26 +701,26 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
 
     def test_save_book_with_id(self):
         """save_book with book.id set updates the existing record."""
-        book = self.Book(abs_id='upsert-by-id', title='Original', status='active')
+        book = self.Book(abs_id="upsert-by-id", title="Original", status="active")
         saved = self.db_service.save_book(book, is_new=True)
-        saved.title = 'Updated by ID'
+        saved.title = "Updated by ID"
         self.db_service.save_book(saved)
         result = self.db_service.get_book_by_ref(saved.id)
-        self.assertEqual(result.title, 'Updated by ID')
+        self.assertEqual(result.title, "Updated by ID")
 
     def test_save_book_with_abs_id(self):
         """save_book with book.abs_id set (no id) upserts by abs_id."""
-        book = self.Book(abs_id='upsert-by-abs', title='Upserted', status='active')
+        book = self.Book(abs_id="upsert-by-abs", title="Upserted", status="active")
         self.db_service.save_book(book, is_new=True)
-        book2 = self.Book(abs_id='upsert-by-abs', title='Re-upserted', status='active')
+        book2 = self.Book(abs_id="upsert-by-abs", title="Re-upserted", status="active")
         self.db_service.save_book(book2)
-        all_books = [b for b in self.db_service.get_all_books() if b.abs_id == 'upsert-by-abs']
+        all_books = [b for b in self.db_service.get_all_books() if b.abs_id == "upsert-by-abs"]
         self.assertEqual(len(all_books), 1)
-        self.assertEqual(all_books[0].title, 'Re-upserted')
+        self.assertEqual(all_books[0].title, "Re-upserted")
 
     def test_save_book_new_no_abs_id(self):
         """save_book with neither id nor abs_id creates a new book."""
-        book = self.Book(title='Brand New', status='not_started')
+        book = self.Book(title="Brand New", status="not_started")
         saved = self.db_service.save_book(book, is_new=True)
         self.assertIsNotNone(saved.id)
         self.assertIsNone(saved.abs_id)
@@ -798,14 +733,14 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
 
         from src.services.alignment_service import AlignmentService
 
-        book = self.Book(abs_id='align-test', title='Alignment Test', status='active')
+        book = self.Book(abs_id="align-test", title="Alignment Test", status="active")
         saved = self.db_service.save_book(book)
 
         polisher = MagicMock()
         svc = AlignmentService(self.db_service, polisher)
 
         # Save alignment
-        svc._save_alignment(saved.id, [{"char": 0, "ts": 0.0}, {"char": 1000, "ts": 60.0}], source='test')
+        svc._save_alignment(saved.id, [{"char": 0, "ts": 0.0}, {"char": 1000, "ts": 60.0}], source="test")
 
         # has_alignment
         self.assertTrue(svc.has_alignment(saved.id))
@@ -814,7 +749,7 @@ class TestDatabaseServiceIntegration(unittest.TestCase):
         # get_alignment_info
         info = svc.get_alignment_info(saved.id)
         self.assertIsNotNone(info)
-        self.assertEqual(info['num_points'], 2)
+        self.assertEqual(info["num_points"], 2)
 
         # get_time_for_text
         ts = svc.get_time_for_text(saved.id, char_offset_hint=500)
@@ -866,6 +801,7 @@ class TestLegacyDatabaseMigration(unittest.TestCase):
         migrations to fail with 'no such table: hardcover_details'.
         """
         import sqlite3
+
         conn = sqlite3.connect(db_path)
         conn.executescript("""
             CREATE TABLE books (
@@ -930,15 +866,15 @@ class TestLegacyDatabaseMigration(unittest.TestCase):
         from src.db.database_service import DatabaseService
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            db_path = str(Path(temp_dir) / 'legacy.db')
+            db_path = str(Path(temp_dir) / "legacy.db")
             self._make_legacy_db(db_path)
 
             # Verify precondition: books exists, alembic_version does not
             conn = sqlite3.connect(db_path)
             tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
             conn.close()
-            self.assertIn('books', tables)
-            self.assertNotIn('alembic_version', tables)
+            self.assertIn("books", tables)
+            self.assertNotIn("alembic_version", tables)
 
             # This must not raise — previously it would crash here
             try:
@@ -962,7 +898,7 @@ class TestLegacyDatabaseMigration(unittest.TestCase):
         from src.db.database_service import DatabaseService
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            db_path = str(Path(temp_dir) / 'legacy_stamp.db')
+            db_path = str(Path(temp_dir) / "legacy_stamp.db")
             self._make_legacy_db(db_path)
 
             db_service = DatabaseService(db_path)
@@ -971,15 +907,13 @@ class TestLegacyDatabaseMigration(unittest.TestCase):
             # alembic_version must now exist and hold a revision
             conn = sqlite3.connect(db_path)
             tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
-            self.assertIn('alembic_version', tables, "alembic_version table was not created after stamp")
+            self.assertIn("alembic_version", tables, "alembic_version table was not created after stamp")
 
             version = conn.execute("SELECT version_num FROM alembic_version").fetchone()
             self.assertIsNotNone(version, "alembic_version table is empty after startup")
             self.assertTrue(len(version[0]) > 0, f"Unexpected empty version_num: {version[0]!r}")
 
-            books_cols = {
-                row[1]: row for row in conn.execute("PRAGMA table_info(books)").fetchall()
-            }
+            books_cols = {row[1]: row for row in conn.execute("PRAGMA table_info(books)").fetchall()}
             self.assertIn("id", books_cols, "books.id was not added by later migrations")
             self.assertIn("sync_mode", books_cols, "books.sync_mode was not added by later migrations")
             self.assertIn("storyteller_uuid", books_cols, "books.storyteller_uuid was not added by later migrations")
@@ -1009,18 +943,18 @@ class TestLegacyDatabaseMigration(unittest.TestCase):
         from src.db.database_service import DatabaseService
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            db_path = str(Path(temp_dir) / 'legacy_data.db')
+            db_path = str(Path(temp_dir) / "legacy_data.db")
             self._make_legacy_db(db_path)  # inserts 'legacy-book-1'
 
             db_service = DatabaseService(db_path)
 
             # The pre-existing book row must still be readable via the service
-            book = db_service.get_book_by_abs_id('legacy-book-1')
+            book = db_service.get_book_by_abs_id("legacy-book-1")
             db_service.db_manager.close()
 
             self.assertIsNotNone(book, "Pre-existing legacy book was lost after migration")
-            self.assertEqual(book.title, 'My Legacy Book')
-            self.assertEqual(book.status, 'active')
+            self.assertEqual(book.title, "My Legacy Book")
+            self.assertEqual(book.status, "active")
 
     def test_intermediate_revision_upgrades_to_head(self):
         """
@@ -1117,38 +1051,26 @@ class TestLegacyDatabaseMigration(unittest.TestCase):
             conn = sqlite3.connect(db_path)
 
             # books.id should still exist (was already there)
-            books_cols = {
-                row[1] for row in conn.execute("PRAGMA table_info(books)").fetchall()
-            }
+            books_cols = {row[1] for row in conn.execute("PRAGMA table_info(books)").fetchall()}
             self.assertIn("id", books_cols)
             self.assertIn("sync_mode", books_cols, "Later migration columns not applied")
 
             # states.book_id must exist (added by Phase 2)
-            states_cols = {
-                row[1] for row in conn.execute("PRAGMA table_info(states)").fetchall()
-            }
+            states_cols = {row[1] for row in conn.execute("PRAGMA table_info(states)").fetchall()}
             self.assertIn("book_id", states_cols, "states.book_id not added by Phase 2")
 
             # reading_journals table must exist (created by later migration)
-            tables = {
-                r[0] for r in conn.execute(
-                    "SELECT name FROM sqlite_master WHERE type='table'"
-                ).fetchall()
-            }
+            tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
             self.assertIn("reading_journals", tables)
             self.assertIn("kosync_documents", tables)
 
             # Verify data survived
-            book = conn.execute(
-                "SELECT title FROM books WHERE abs_id = 'intermediate-book'"
-            ).fetchone()
+            book = conn.execute("SELECT title FROM books WHERE abs_id = 'intermediate-book'").fetchone()
             self.assertIsNotNone(book, "Test book was lost during migration")
             self.assertEqual(book[0], "Intermediate Test")
 
             # Verify states.book_id was populated correctly
-            state = conn.execute(
-                "SELECT book_id FROM states WHERE abs_id = 'intermediate-book'"
-            ).fetchone()
+            state = conn.execute("SELECT book_id FROM states WHERE abs_id = 'intermediate-book'").fetchone()
             self.assertIsNotNone(state, "Test state was lost during migration")
             self.assertIsNotNone(state[0], "states.book_id was not populated")
 
@@ -1162,7 +1084,7 @@ class TestLegacyDatabaseMigration(unittest.TestCase):
         from src.db.database_service import DatabaseService
 
         with tempfile.TemporaryDirectory() as temp_dir:
-            db_path = str(Path(temp_dir) / 'fresh.db')
+            db_path = str(Path(temp_dir) / "fresh.db")
 
             # File must not exist yet — genuine first run
             self.assertFalse(Path(db_path).exists())
@@ -1176,60 +1098,62 @@ class TestLegacyDatabaseMigration(unittest.TestCase):
             self.assertTrue(Path(db_path).exists(), "Database file was not created")
 
 
-
-
 class TestSuggestionSourceScoping(unittest.TestCase):
     """Tests that suggestion operations are scoped by (source_id, source)."""
 
     def setUp(self):
         self.temp_dir = tempfile.mkdtemp()
-        self.test_db_path = str(Path(self.temp_dir) / 'test_database.db')
+        self.test_db_path = str(Path(self.temp_dir) / "test_database.db")
         from src.db.database_service import DatabaseService
         from src.db.models import PendingSuggestion
+
         self.db_service = DatabaseService(self.test_db_path)
         self.PendingSuggestion = PendingSuggestion
 
     def tearDown(self):
-        if hasattr(self, 'db_service') and hasattr(self.db_service, 'db_manager'):
+        if hasattr(self, "db_service") and hasattr(self.db_service, "db_manager"):
             self.db_service.db_manager.close()
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_suggestion_exists_scoped_by_source(self):
         """suggestion_exists returns False when the source_id exists under a different source."""
         suggestion = self.PendingSuggestion(
-            source_id='id1', title='Test', source='kosync',
+            source_id="id1",
+            title="Test",
+            source="kosync",
         )
         self.db_service.save_pending_suggestion(suggestion)
-        self.assertTrue(self.db_service.suggestion_exists('id1', source='kosync'))
-        self.assertFalse(self.db_service.suggestion_exists('id1', source='abs'))
+        self.assertTrue(self.db_service.suggestion_exists("id1", source="kosync"))
+        self.assertFalse(self.db_service.suggestion_exists("id1", source="abs"))
 
     def test_upsert_different_source_creates_two_rows(self):
         """save_pending_suggestion with same source_id but different source creates distinct rows."""
-        s1 = self.PendingSuggestion(source_id='id1', title='ABS Title', source='abs')
-        s2 = self.PendingSuggestion(source_id='id1', title='KOSync Title', source='kosync')
+        s1 = self.PendingSuggestion(source_id="id1", title="ABS Title", source="abs")
+        s2 = self.PendingSuggestion(source_id="id1", title="KOSync Title", source="kosync")
         self.db_service.save_pending_suggestion(s1)
         self.db_service.save_pending_suggestion(s2)
 
-        abs_suggestion = self.db_service.get_suggestion('id1', source='abs')
-        kosync_suggestion = self.db_service.get_suggestion('id1', source='kosync')
+        abs_suggestion = self.db_service.get_suggestion("id1", source="abs")
+        kosync_suggestion = self.db_service.get_suggestion("id1", source="kosync")
         self.assertIsNotNone(abs_suggestion)
         self.assertIsNotNone(kosync_suggestion)
-        self.assertEqual(abs_suggestion.title, 'ABS Title')
-        self.assertEqual(kosync_suggestion.title, 'KOSync Title')
+        self.assertEqual(abs_suggestion.title, "ABS Title")
+        self.assertEqual(kosync_suggestion.title, "KOSync Title")
 
     def test_resolve_scoped_by_source(self):
         """resolve_suggestion only deletes the row matching the given source."""
-        s1 = self.PendingSuggestion(source_id='id1', title='ABS Title', source='abs')
-        s2 = self.PendingSuggestion(source_id='id1', title='KOSync Title', source='kosync')
+        s1 = self.PendingSuggestion(source_id="id1", title="ABS Title", source="abs")
+        s2 = self.PendingSuggestion(source_id="id1", title="KOSync Title", source="kosync")
         self.db_service.save_pending_suggestion(s1)
         self.db_service.save_pending_suggestion(s2)
 
-        self.db_service.resolve_suggestion('id1', source='abs')
+        self.db_service.resolve_suggestion("id1", source="abs")
 
-        self.assertFalse(self.db_service.suggestion_exists('id1', source='abs'))
-        self.assertTrue(self.db_service.suggestion_exists('id1', source='kosync'))
+        self.assertFalse(self.db_service.suggestion_exists("id1", source="abs"))
+        self.assertTrue(self.db_service.suggestion_exists("id1", source="kosync"))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main(verbosity=2)

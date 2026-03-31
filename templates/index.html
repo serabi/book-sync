@@ -74,7 +74,7 @@
         </div>
         <div class="book-grid" id="processing-grid">
             {% for mapping in processing_books %}
-            {{ render_book_card(mapping, integrations, booklore_label) }}
+            {{ render_book_card(mapping, integrations, grimmory_label) }}
             {% endfor %}
         </div>
         </div>
@@ -101,6 +101,43 @@
         </div>
         {% endif %}
 
+        {% if top_suggestions %}
+        <div class="book-section suggestion-banner" id="suggestion-banner">
+            <div class="section-header">
+                <h2>New Suggestions <span class="suggestion-banner-count" id="suggestion-banner-count">{{ top_suggestions|length }}</span></h2>
+                <a href="/suggestions" class="btn btn-secondary btn-sm">View All{% if suggestion_count > top_suggestions|length %} ({{ suggestion_count }}){% endif %}</a>
+            </div>
+            <p class="suggestion-banner-help">High-confidence matches found for books you're listening to.</p>
+            <div class="suggestion-banner-grid">
+                {% for sg in top_suggestions %}
+                <div class="suggestion-banner-card" id="suggestion-card-{{ sg.source_id }}" data-source-id="{{ sg.source_id }}">
+                    <img src="{{ sg.cover_url }}" class="suggestion-banner-cover" alt="" loading="lazy" onerror="this.style.display='none'">
+                    <div class="suggestion-banner-info">
+                        <div class="suggestion-banner-title">{{ sg.title }}</div>
+                        {% if sg.author %}<div class="suggestion-banner-author">{{ sg.author }}</div>{% endif %}
+                        {% if sg.top_match %}
+                        <div class="suggestion-banner-match">
+                            <span class="suggestion-banner-match-title">{{ sg.top_match.title }}</span>
+                            <span class="chip chip--confidence-{{ sg.top_match.confidence }}">{{ sg.top_match.confidence }}</span>
+                        </div>
+                        {% endif %}
+                        <div class="suggestion-banner-actions">
+                            {% if sg.source == 'abs' %}
+                            <a href="/match?abs_id={{ sg.source_id }}&search={{ sg.title|urlencode }}" class="btn btn-sm btn-primary">Map Now</a>
+                            {% elif sg.top_match and sg.top_match.abs_id %}
+                            <a href="/match?abs_id={{ sg.top_match.abs_id }}&search={{ sg.top_match.title|urlencode }}" class="btn btn-sm btn-primary">Map Now</a>
+                            {% else %}
+                            <a href="/suggestions" class="btn btn-sm btn-primary">Review</a>
+                            {% endif %}
+                            <button type="button" class="btn btn-sm btn-secondary" onclick="dismissSuggestion('{{ sg.source_id }}', '{{ sg.source }}', this)">Dismiss</button>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
         <div class="book-section">
         <div class="section-header">
             <h2>Currently Reading</h2>
@@ -109,7 +146,7 @@
         <div class="book-grid" id="currently-reading-grid">
             {% for mapping in mappings %}
             {% if mapping.unified_progress > 0 and mapping.unified_progress < 100 and mapping.status not in ['completed', 'paused', 'dnf', 'not_started', 'pending', 'processing', 'failed_retry_later'] %} {{ render_book_card(mapping,
-                integrations, booklore_label) }} {% endif %} {% endfor %} </div>
+                integrations, grimmory_label) }} {% endif %} {% endfor %} </div>
         </div>
 
                 {% set finished_books = mappings|selectattr('status', 'equalto', 'completed')|list + mappings|rejectattr('status', 'equalto', 'completed')|selectattr('unified_progress', 'ge', 100)|list %}
@@ -119,7 +156,7 @@
                 </div>
                 <div class="book-grid" id="finished-grid">
                     {% for mapping in finished_books %}
-                    {{ render_book_card(mapping, integrations, booklore_label) }}
+                    {{ render_book_card(mapping, integrations, grimmory_label) }}
                     {% endfor %}
                 </div>
                 </div>
@@ -131,7 +168,7 @@
                 </div>
                 <div class="book-grid" id="paused-grid">
                     {% for mapping in paused_books %}
-                    {{ render_book_card(mapping, integrations, booklore_label) }}
+                    {{ render_book_card(mapping, integrations, grimmory_label) }}
                     {% endfor %}
                 </div>
                 </div>
@@ -143,7 +180,7 @@
                 </div>
                 <div class="book-grid" id="dnf-grid">
                     {% for mapping in dnf_books %}
-                    {{ render_book_card(mapping, integrations, booklore_label) }}
+                    {{ render_book_card(mapping, integrations, grimmory_label) }}
                     {% endfor %}
                 </div>
                 </div>
@@ -155,7 +192,7 @@
 
                 <div class="book-grid" id="all-books-grid">
                     {% for mapping in mappings %}
-                    {{ render_book_card(mapping, integrations, booklore_label) }}
+                    {{ render_book_card(mapping, integrations, grimmory_label) }}
                     {% endfor %}
                 </div>
                 </div>
@@ -227,13 +264,13 @@
             </div>
         </div>
         <script src="/static/js/hardcover-modal.js" defer></script>
-        <!-- Booklore Link Modal -->
+        <!-- Grimmory Link Modal -->
         <div id="bl-modal" class="hc-modal" style="display:none;">
-            <div class="hc-modal-backdrop" onclick="closeBookloreModal()"></div>
+            <div class="hc-modal-backdrop" onclick="closeGrimmoryModal()"></div>
             <div class="hc-modal-content">
                 <div class="hc-modal-header">
-                    <h3 id="bl-modal-title">Link to Booklore</h3>
-                    <button class="hc-modal-close" onclick="closeBookloreModal()" aria-label="Close">
+                    <h3 id="bl-modal-title">Link to Grimmory</h3>
+                    <button class="hc-modal-close" onclick="closeGrimmoryModal()" aria-label="Close">
                         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor"
                             stroke-width="2" stroke-linecap="round">
                             <path d="M1 1l12 12M13 1L1 13" />
@@ -242,14 +279,14 @@
                 </div>
                 <div class="hc-modal-body">
                     <div class="st-search-bar">
-                        <input type="text" id="bl-search-input" placeholder="Search Booklore..." class="modal-search-input">
-                        <button onclick="searchBooklore()" class="btn btn-primary">Search</button>
+                        <input type="text" id="bl-search-input" placeholder="Search Grimmory..." class="modal-search-input">
+                        <button onclick="searchGrimmory()" class="btn btn-primary">Search</button>
                     </div>
                     <div id="bl-results" class="st-results"></div>
                 </div>
             </div>
         </div>
-        <script src="/static/js/booklore-link-modal.js" defer></script>
+        <script src="/static/js/grimmory-link-modal.js" defer></script>
         <!-- Storyteller Link Modal -->
         <div id="st-modal" class="hidden">
             <div class="st-modal-content">

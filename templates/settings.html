@@ -84,9 +84,9 @@
                     Storyteller
                         </button>
 
-                        <button type="button" class="sidebar-tab" role="tab" id="tab-booklore" aria-selected="false" aria-controls="panel-booklore" onclick="switchTab('booklore')" data-tab="booklore">
+                        <button type="button" class="sidebar-tab" role="tab" id="tab-grimmory" aria-selected="false" aria-controls="panel-grimmory" onclick="switchTab('grimmory')" data-tab="grimmory">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-                    Booklore
+                    Grimmory
                         </button>
 
                         <button type="button" class="sidebar-tab" role="tab" id="tab-kosync" aria-selected="false" aria-controls="panel-kosync" onclick="switchTab('kosync')" data-tab="kosync">
@@ -270,7 +270,7 @@
                                 <label>Import Directory</label>
                                 <input type="text" name="STORYTELLER_IMPORT_DIR" value="{{ get_val('STORYTELLER_IMPORT_DIR') }}"
                                     placeholder="/storyteller-import">
-                                <div class="help-text">Mount Storyteller's /import directory here. Books submitted for narrated EPUB3 creation will be copied from Audiobookshelf and Booklore to this path.</div>
+                                <div class="help-text">Mount Storyteller's /import directory here. Books submitted for narrated EPUB3 creation will be copied from Audiobookshelf and Grimmory to this path.</div>
                             </div>
                             <div class="form-group">
                                 <label for="STORYTELLER_FORCE_MODE">Force Storyteller (skip Whisper)</label>
@@ -287,83 +287,83 @@
                     </div>
                 </div>
 
-                <!-- ─── Booklore ─── -->
-                <div class="tab-panel" id="panel-booklore" role="tabpanel" aria-labelledby="tab-booklore" aria-hidden="true" hidden>
+                <!-- ─── Grimmory ─── -->
+                <div class="tab-panel" id="panel-grimmory" role="tabpanel" aria-labelledby="tab-grimmory" aria-hidden="true" hidden>
                     <div class="panel-header">
-                        <h2>Booklore</h2>
-                        <p>Booklore ebook library connections.</p>
+                        <h2>Grimmory</h2>
+                        <p>Grimmory ebook library connections.</p>
                     </div>
 
-                    <!-- Booklore -->
-                    {% set booklore_configured = get_val('BOOKLORE_SERVER') != '' %}
-                    {% set booklore_enabled = get_bool('BOOKLORE_ENABLED') or (booklore_configured and get_val('BOOKLORE_ENABLED') == '') %}
+                    <!-- Grimmory -->
+                    {% set grimmory_configured = get_val('GRIMMORY_SERVER') != '' %}
+                    {% set grimmory_enabled = get_bool('GRIMMORY_ENABLED') or (grimmory_configured and get_val('GRIMMORY_ENABLED') == '') %}
                     <div class="sub-section">
-                        {{ service_header('accent-dot-booklore', 'Booklore', 'BOOKLORE_ENABLED', booklore_enabled, 'booklore_body', 'booklore') }}
-                        <div id="booklore_body" class="sub-section-body {% if not booklore_enabled %}collapsed{% endif %}">
+                        {{ service_header('accent-dot-grimmory', 'Grimmory', 'GRIMMORY_ENABLED', grimmory_enabled, 'grimmory_body', 'grimmory') }}
+                        <div id="grimmory_body" class="sub-section-body {% if not grimmory_enabled %}collapsed{% endif %}">
                             <div class="form-group full-width">
                                 <label>Display Label</label>
-                                <input type="text" name="BOOKLORE_LABEL" value="{{ get_val('BOOKLORE_LABEL') }}"
-                                    placeholder="Booklore">
+                                <input type="text" name="GRIMMORY_LABEL" value="{{ get_val('GRIMMORY_LABEL') }}"
+                                    placeholder="Grimmory">
                                 <div class="help-text">Custom name shown on dashboard (e.g., "Bookz").</div>
                             </div>
                             <div class="form-group full-width">
                                 <label>Server URL</label>
-                                <input type="text" name="BOOKLORE_SERVER" value="{{ get_val('BOOKLORE_SERVER') }}">
+                                <input type="text" name="GRIMMORY_SERVER" value="{{ get_val('GRIMMORY_SERVER') }}">
                             </div>
-                            {{ service_urls('BOOKLORE', get_val('BOOKLORE_SERVER')) }}
+                            {{ service_urls('GRIMMORY', get_val('GRIMMORY_SERVER')) }}
                             <div class="form-group">
                                 <label>Username</label>
-                                <input type="text" name="BOOKLORE_USER" value="{{ get_val('BOOKLORE_USER') }}">
+                                <input type="text" name="GRIMMORY_USER" value="{{ get_val('GRIMMORY_USER') }}">
                             </div>
-                            {{ secret_field('Password', 'BOOKLORE_PASSWORD', get_val('BOOKLORE_PASSWORD')) }}
+                            {{ secret_field('Password', 'GRIMMORY_PASSWORD', get_val('GRIMMORY_PASSWORD')) }}
                             <div class="form-group">
                                 <label>Shelf Name</label>
-                                <input type="text" name="BOOKLORE_SHELF_NAME" value="{{ get_val('BOOKLORE_SHELF_NAME') }}">
+                                <input type="text" name="GRIMMORY_SHELF_NAME" value="{{ get_val('GRIMMORY_SHELF_NAME') }}">
                             </div>
                             <div class="form-group full-width">
-                                <label>Booklore Library ID (Optional)</label>
+                                <label>Grimmory Library ID (Optional)</label>
                                 <div class="input-row">
-                                    <input type="text" name="BOOKLORE_LIBRARY_ID" value="{{ get_val('BOOKLORE_LIBRARY_ID') }}"
+                                    <input type="text" name="GRIMMORY_LIBRARY_ID" value="{{ get_val('GRIMMORY_LIBRARY_ID') }}"
                                         placeholder="e.g. 1" class="input-flex">
-                                    <button class="btn" type="button" onclick="fetchBookloreLibs('/api/booklore/libraries', event)">Find IDs</button>
+                                    <button class="btn" type="button" onclick="fetchGrimmoryLibs('/api/grimmory/libraries', event)">Find IDs</button>
                                 </div>
                                 <div class="help-text">Restricts sync to a specific library (e.g., 1). Leave empty to sync all.</div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Booklore 2 -->
-                    {% set booklore2_configured = get_val('BOOKLORE_2_SERVER') != '' %}
-                    {% set booklore2_enabled = get_bool('BOOKLORE_2_ENABLED') or (booklore2_configured and get_val('BOOKLORE_2_ENABLED') == '') %}
+                    <!-- Grimmory 2 -->
+                    {% set grimmory2_configured = get_val('GRIMMORY_2_SERVER') != '' %}
+                    {% set grimmory2_enabled = get_bool('GRIMMORY_2_ENABLED') or (grimmory2_configured and get_val('GRIMMORY_2_ENABLED') == '') %}
                     <div class="sub-section">
-                        {{ service_header('accent-dot-booklore', 'Booklore 2', 'BOOKLORE_2_ENABLED', booklore2_enabled, 'booklore2_body', 'booklore2') }}
-                        <div id="booklore2_body" class="sub-section-body {% if not booklore2_enabled %}collapsed{% endif %}">
+                        {{ service_header('accent-dot-grimmory', 'Grimmory 2', 'GRIMMORY_2_ENABLED', grimmory2_enabled, 'grimmory2_body', 'grimmory2') }}
+                        <div id="grimmory2_body" class="sub-section-body {% if not grimmory2_enabled %}collapsed{% endif %}">
                             <div class="form-group full-width">
                                 <label>Display Label</label>
-                                <input type="text" name="BOOKLORE_2_LABEL" value="{{ get_val('BOOKLORE_2_LABEL') }}"
-                                    placeholder="Booklore 2">
+                                <input type="text" name="GRIMMORY_2_LABEL" value="{{ get_val('GRIMMORY_2_LABEL') }}"
+                                    placeholder="Grimmory 2">
                                 <div class="help-text">Custom name shown on dashboard for the second server.</div>
                             </div>
                             <div class="form-group full-width">
                                 <label>Server URL</label>
-                                <input type="text" name="BOOKLORE_2_SERVER" value="{{ get_val('BOOKLORE_2_SERVER') }}">
+                                <input type="text" name="GRIMMORY_2_SERVER" value="{{ get_val('GRIMMORY_2_SERVER') }}">
                             </div>
-                            {{ service_urls('BOOKLORE_2', get_val('BOOKLORE_2_SERVER')) }}
+                            {{ service_urls('GRIMMORY_2', get_val('GRIMMORY_2_SERVER')) }}
                             <div class="form-group">
                                 <label>Username</label>
-                                <input type="text" name="BOOKLORE_2_USER" value="{{ get_val('BOOKLORE_2_USER') }}">
+                                <input type="text" name="GRIMMORY_2_USER" value="{{ get_val('GRIMMORY_2_USER') }}">
                             </div>
-                            {{ secret_field('Password', 'BOOKLORE_2_PASSWORD', get_val('BOOKLORE_2_PASSWORD')) }}
+                            {{ secret_field('Password', 'GRIMMORY_2_PASSWORD', get_val('GRIMMORY_2_PASSWORD')) }}
                             <div class="form-group">
                                 <label>Shelf Name</label>
-                                <input type="text" name="BOOKLORE_2_SHELF_NAME" value="{{ get_val('BOOKLORE_2_SHELF_NAME') }}">
+                                <input type="text" name="GRIMMORY_2_SHELF_NAME" value="{{ get_val('GRIMMORY_2_SHELF_NAME') }}">
                             </div>
                             <div class="form-group full-width">
-                                <label>Booklore 2 Library ID (Optional)</label>
+                                <label>Grimmory 2 Library ID (Optional)</label>
                                 <div class="input-row">
-                                    <input type="text" name="BOOKLORE_2_LIBRARY_ID" value="{{ get_val('BOOKLORE_2_LIBRARY_ID') }}"
+                                    <input type="text" name="GRIMMORY_2_LIBRARY_ID" value="{{ get_val('GRIMMORY_2_LIBRARY_ID') }}"
                                         placeholder="e.g. 1" class="input-flex">
-                                    <button class="btn" type="button" onclick="fetchBookloreLibs('/api/booklore2/libraries', event)">Find IDs</button>
+                                    <button class="btn" type="button" onclick="fetchGrimmoryLibs('/api/grimmory2/libraries', event)">Find IDs</button>
                                 </div>
                                 <div class="help-text">Restricts sync to a specific library. Leave empty to sync all.</div>
                             </div>
@@ -386,6 +386,7 @@
                     <div class="sub-section">
                         <div class="sub-section-header">
                             <h3><span class="accent-dot accent-dot-kosync"></span> Sync Source</h3>
+
                             <div class="toggle-switch-wrapper">
                                 <span class="toggle-label">Enable</span>
                                 <label class="toggle-switch">
@@ -590,7 +591,7 @@
                 <div class="tab-panel" id="panel-bookfusion" role="tabpanel" aria-labelledby="tab-bookfusion" aria-hidden="true" hidden>
                     <div class="panel-header">
                         <h2>BookFusion</h2>
-                        <p>Push books from Booklore to BookFusion and sync highlights back.</p>
+                        <p>Push books from Grimmory to BookFusion and sync highlights back.</p>
                     </div>
 
                     {% set bookfusion_configured = get_val('BOOKFUSION_API_KEY') != '' %}
@@ -905,37 +906,37 @@
                             </div>
                             {% endif %}
 
-                            {% if get_bool('BOOKLORE_ENABLED') %}
+                            {% if get_bool('GRIMMORY_ENABLED') %}
                             <div class="form-group">
-                                <label>{{ get_val('BOOKLORE_LABEL', 'Booklore') or 'Booklore' }} Poll Mode</label>
-                                <select name="BOOKLORE_POLL_MODE" id="booklore_poll_mode"
-                                        onchange="togglePollSeconds('booklore_poll_seconds_row', this.value)">
-                                    <option value="global" {% if get_val('BOOKLORE_POLL_MODE', 'global') == 'global' %}selected{% endif %}>Global</option>
-                                    <option value="custom" {% if get_val('BOOKLORE_POLL_MODE') == 'custom' %}selected{% endif %}>Custom</option>
+                                <label>{{ get_val('GRIMMORY_LABEL', 'Grimmory') or 'Grimmory' }} Poll Mode</label>
+                                <select name="GRIMMORY_POLL_MODE" id="grimmory_poll_mode"
+                                        onchange="togglePollSeconds('grimmory_poll_seconds_row', this.value)">
+                                    <option value="global" {% if get_val('GRIMMORY_POLL_MODE', 'global') == 'global' %}selected{% endif %}>Global</option>
+                                    <option value="custom" {% if get_val('GRIMMORY_POLL_MODE') == 'custom' %}selected{% endif %}>Custom</option>
                                 </select>
                             </div>
-                            <div class="form-group poll-settings-row {% if get_val('BOOKLORE_POLL_MODE') != 'custom' %}is-disabled{% endif %}" id="booklore_poll_seconds_row">
-                                <label>{{ get_val('BOOKLORE_LABEL', 'Booklore') or 'Booklore' }} Poll Interval (seconds)</label>
-                                <input type="number" name="BOOKLORE_POLL_SECONDS" min="10"
-                                       value="{{ get_val('BOOKLORE_POLL_SECONDS', '300') }}">
-                                <div class="help-text">Recommended: 300s for Booklore.</div>
+                            <div class="form-group poll-settings-row {% if get_val('GRIMMORY_POLL_MODE') != 'custom' %}is-disabled{% endif %}" id="grimmory_poll_seconds_row">
+                                <label>{{ get_val('GRIMMORY_LABEL', 'Grimmory') or 'Grimmory' }} Poll Interval (seconds)</label>
+                                <input type="number" name="GRIMMORY_POLL_SECONDS" min="10"
+                                       value="{{ get_val('GRIMMORY_POLL_SECONDS', '300') }}">
+                                <div class="help-text">Recommended: 300s for Grimmory.</div>
                             </div>
                             {% endif %}
 
-                            {% if get_bool('BOOKLORE_2_ENABLED') %}
+                            {% if get_bool('GRIMMORY_2_ENABLED') %}
                             <div class="form-group">
-                                <label>{{ get_val('BOOKLORE_2_LABEL', 'Booklore 2') or 'Booklore 2' }} Poll Mode</label>
-                                <select name="BOOKLORE_2_POLL_MODE" id="booklore2_poll_mode"
-                                        onchange="togglePollSeconds('booklore2_poll_seconds_row', this.value)">
-                                    <option value="global" {% if get_val('BOOKLORE_2_POLL_MODE', 'global') == 'global' %}selected{% endif %}>Global</option>
-                                    <option value="custom" {% if get_val('BOOKLORE_2_POLL_MODE') == 'custom' %}selected{% endif %}>Custom</option>
+                                <label>{{ get_val('GRIMMORY_2_LABEL', 'Grimmory 2') or 'Grimmory 2' }} Poll Mode</label>
+                                <select name="GRIMMORY_2_POLL_MODE" id="grimmory2_poll_mode"
+                                        onchange="togglePollSeconds('grimmory2_poll_seconds_row', this.value)">
+                                    <option value="global" {% if get_val('GRIMMORY_2_POLL_MODE', 'global') == 'global' %}selected{% endif %}>Global</option>
+                                    <option value="custom" {% if get_val('GRIMMORY_2_POLL_MODE') == 'custom' %}selected{% endif %}>Custom</option>
                                 </select>
                             </div>
-                            <div class="form-group poll-settings-row {% if get_val('BOOKLORE_2_POLL_MODE') != 'custom' %}is-disabled{% endif %}" id="booklore2_poll_seconds_row">
-                                <label>{{ get_val('BOOKLORE_2_LABEL', 'Booklore 2') or 'Booklore 2' }} Poll Interval (seconds)</label>
-                                <input type="number" name="BOOKLORE_2_POLL_SECONDS" min="10"
-                                       value="{{ get_val('BOOKLORE_2_POLL_SECONDS', '300') }}">
-                                <div class="help-text">Recommended: 300s for Booklore.</div>
+                            <div class="form-group poll-settings-row {% if get_val('GRIMMORY_2_POLL_MODE') != 'custom' %}is-disabled{% endif %}" id="grimmory2_poll_seconds_row">
+                                <label>{{ get_val('GRIMMORY_2_LABEL', 'Grimmory 2') or 'Grimmory 2' }} Poll Interval (seconds)</label>
+                                <input type="number" name="GRIMMORY_2_POLL_SECONDS" min="10"
+                                       value="{{ get_val('GRIMMORY_2_POLL_SECONDS', '300') }}">
+                                <div class="help-text">Recommended: 300s for Grimmory.</div>
                             </div>
                             {% endif %}
 

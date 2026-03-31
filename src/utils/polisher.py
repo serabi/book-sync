@@ -8,6 +8,7 @@ import re
 
 logger = logging.getLogger(__name__)
 
+
 class Polisher:
     """
     Polishes text for alignment and rebuilds fragmented sentences.
@@ -15,16 +16,39 @@ class Polisher:
 
     def __init__(self):
         # Roman numeral pattern (I to X, simplistic for chapter numbers)
-        self.roman_pattern = re.compile(r'^(?=[MDCLXVI])M*(C[MD]|D?C{0,3})(X[CL]|L?X{0,3})(I[XV]|V?I{0,3})$', re.IGNORECASE)
+        self.roman_pattern = re.compile(
+            r"^(?=[MDCLXVI])M*(C[MD]|D?C{0,3})(X[CL]|L?X{0,3})(I[XV]|V?I{0,3})$", re.IGNORECASE
+        )
         # Spelled out numbers mapping (0-100 covering most common cases)
         self.number_map = {
-            'zero': 0, 'one': 1, 'two': 2, 'three': 3, 'four': 4, 'five': 5,
-            'six': 6, 'seven': 7, 'eight': 8, 'nine': 9, 'ten': 10,
-            'eleven': 11, 'twelve': 12, 'thirteen': 13, 'fourteen': 14,
-            'fifteen': 15, 'sixteen': 16, 'seventeen': 17, 'eighteen': 18,
-            'nineteen': 19, 'twenty': 20, 'thirty': 30, 'forty': 40,
-            'fifty': 50, 'sixty': 60, 'seventy': 70, 'eighty': 80,
-            'ninety': 90
+            "zero": 0,
+            "one": 1,
+            "two": 2,
+            "three": 3,
+            "four": 4,
+            "five": 5,
+            "six": 6,
+            "seven": 7,
+            "eight": 8,
+            "nine": 9,
+            "ten": 10,
+            "eleven": 11,
+            "twelve": 12,
+            "thirteen": 13,
+            "fourteen": 14,
+            "fifteen": 15,
+            "sixteen": 16,
+            "seventeen": 17,
+            "eighteen": 18,
+            "nineteen": 19,
+            "twenty": 20,
+            "thirty": 30,
+            "forty": 40,
+            "fifty": 50,
+            "sixty": 60,
+            "seventy": 70,
+            "eighty": 80,
+            "ninety": 90,
         }
 
     def clean_punctuation(self, text: str) -> str:
@@ -33,9 +57,9 @@ class Polisher:
         Keeps alphanumerics and spaces.
         """
         # Replace dashes/underscores with spaces to avoid merging words
-        text = re.sub(r'[-_]', ' ', text)
+        text = re.sub(r"[-_]", " ", text)
         # Remove non-alphanumeric (except spaces)
-        text = re.sub(r'[^\w\s]', '', text)
+        text = re.sub(r"[^\w\s]", "", text)
         return text
 
     def roman_to_int(self, text: str) -> str:
@@ -48,7 +72,7 @@ class Polisher:
             return text
 
         # Simple conversion logic
-        roman_values = {'I': 1, 'V': 5, 'X': 10, 'L': 50, 'C': 100, 'D': 500, 'M': 1000}
+        roman_values = {"I": 1, "V": 5, "X": 10, "L": 50, "C": 100, "D": 500, "M": 1000}
         total = 0
         prev_value = 0
 
@@ -76,7 +100,7 @@ class Polisher:
                 value = self.number_map[word]
                 # Check for compound (twenty one)
                 if i + 1 < len(words):
-                    next_word = words[i+1].lower()
+                    next_word = words[i + 1].lower()
                     if next_word in self.number_map:
                         next_val = self.number_map[next_word]
                         # Only combined distinct magnitudes (20 + 1)
@@ -92,7 +116,7 @@ class Polisher:
 
     def collapse_whitespace(self, text: str) -> str:
         """Reduces multiple spaces to a single space and strips ends."""
-        return re.sub(r'\s+', ' ', text).strip()
+        return re.sub(r"\s+", " ", text).strip()
 
     def normalize(self, text: str) -> str:
         """
@@ -147,18 +171,18 @@ class Polisher:
 
         for next_segment in segments[1:]:
             # Check gap
-            gap = next_segment['start'] - current_segment['end']
+            gap = next_segment["start"] - current_segment["end"]
 
             # Heuristic: If gap is small (< 1.5s) and combined text looks like a continuation
             if gap < 2.0:
                 # Simple check: Does the first segment end with specific punctuation?
                 # If it ends with . or ? or !, likely a real sentence end.
-                if not re.search(r'[.?!"]$', current_segment['text'].strip()):
+                if not re.search(r'[.?!"]$', current_segment["text"].strip()):
                     # Likely fragmented. Merge.
                     current_segment = {
-                        'start': current_segment['start'],
-                        'end': next_segment['end'],
-                        'text': current_segment['text'] + " " + next_segment['text']
+                        "start": current_segment["start"],
+                        "end": next_segment["end"],
+                        "text": current_segment["text"] + " " + next_segment["text"],
                     }
                     continue
 

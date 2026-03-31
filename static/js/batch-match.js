@@ -58,14 +58,21 @@ function updateBatchActionState() {
 
     if (hasAudiobook && !hasLinkedSource) {
         addButton.textContent = 'Add Audio Only to Queue';
-    } else if (!hasAudiobook && hasLinkedSource) {
+    } else if (!hasAudiobook && hasEbook) {
         addButton.textContent = 'Add Ebook Only to Queue';
+    } else if (!hasAudiobook && hasStoryteller && !hasEbook) {
+        addButton.textContent = 'Add Storyteller Only to Queue';
     } else {
         addButton.textContent = 'Add to Queue';
     }
 
     if (!hasAnything) {
         statusLabel.textContent = 'Select a book to enable queueing.';
+        return;
+    }
+
+    if (!hasAudiobook && hasStoryteller && !hasEbook) {
+        statusLabel.textContent = 'Queue will be created as Storyteller-only.';
         return;
     }
 

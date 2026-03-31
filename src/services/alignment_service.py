@@ -38,8 +38,8 @@ def normalize_for_cross_format_comparison(book, config, sync_clients, ebook_pars
     Returns:
         dict of {client_name: normalized_value} for comparison, or None
     """
-    has_abs = 'ABS' in config
-    ebook_clients = [k for k in config.keys() if k != 'ABS']
+    has_abs = "ABS" in config
+    ebook_clients = [k for k in config.keys() if k != "ABS"]
     book_label = book.title or str(book.id)
 
     if not ebook_clients:
@@ -65,7 +65,7 @@ def normalize_for_cross_format_comparison(book, config, sync_clients, ebook_pars
             if not client:
                 continue
             client_state = config[client_name]
-            client_pct = client_state.current.get('pct', 0)
+            client_pct = client_state.current.get("pct", 0)
             try:
                 client_pct = max(0.0, min(1.0, float(client_pct)))
             except (TypeError, ValueError):
@@ -74,20 +74,21 @@ def normalize_for_cross_format_comparison(book, config, sync_clients, ebook_pars
             try:
                 text_snippet = client.get_text_from_current_state(book, client_state)
                 if text_snippet:
-                    loc = ebook_parser.find_text_location(
-                        book.ebook_filename, text_snippet,
-                        hint_percentage=client_pct
-                    )
+                    loc = ebook_parser.find_text_location(book.ebook_filename, text_snippet, hint_percentage=client_pct)
                     if loc and loc.match_index is not None:
                         normalized[client_name] = loc.match_index
-                        logger.debug(f"'{book_label}' Normalized '{client_name}' {client_pct:.2%} -> char {loc.match_index}")
+                        logger.debug(
+                            f"'{book_label}' Normalized '{client_name}' {client_pct:.2%} -> char {loc.match_index}"
+                        )
                         matched = True
             except Exception as e:
                 logger.debug(f"'{book_label}' Text-based normalization failed for '{client_name}': {e}")
             if not matched:
                 used_fallback = True
                 normalized[client_name] = int(client_pct * total_text_len)
-                logger.debug(f"'{book_label}' Normalized '{client_name}' {client_pct:.2%} -> char {int(client_pct * total_text_len)} (pct fallback)")
+                logger.debug(
+                    f"'{book_label}' Normalized '{client_name}' {client_pct:.2%} -> char {int(client_pct * total_text_len)} (pct fallback)"
+                )
 
         if used_fallback:
             # Mixing text-matched positions with percentage-based estimates is
@@ -105,9 +106,9 @@ def normalize_for_cross_format_comparison(book, config, sync_clients, ebook_pars
 
     normalized = {}
 
-    abs_state = config['ABS']
-    abs_ts = abs_state.current.get('ts', 0)
-    normalized['ABS'] = abs_ts
+    abs_state = config["ABS"]
+    abs_ts = abs_state.current.get("ts", 0)
+    normalized["ABS"] = abs_ts
 
     for client_name in ebook_clients:
         client = sync_clients.get(client_name)
@@ -115,7 +116,7 @@ def normalize_for_cross_format_comparison(book, config, sync_clients, ebook_pars
             continue
 
         client_state = config[client_name]
-        client_pct = client_state.current.get('pct', 0)
+        client_pct = client_state.current.get("pct", 0)
         try:
             client_pct = max(0.0, min(1.0, float(client_pct)))
         except (TypeError, ValueError):
@@ -127,17 +128,14 @@ def normalize_for_cross_format_comparison(book, config, sync_clients, ebook_pars
             total_text_len = len(full_text)
 
             char_offset = int(client_pct * total_text_len)
-            txt = full_text[max(0, char_offset - 400):min(total_text_len, char_offset + 400)]
+            txt = full_text[max(0, char_offset - 400) : min(total_text_len, char_offset + 400)]
 
             if not txt:
                 logger.debug(f"'{book_label}' Could not get text from '{client_name}' for normalization")
                 continue
 
             if alignment_service:
-                ts_for_text = alignment_service.get_time_for_text(
-                    book.id,
-                    char_offset_hint=char_offset
-                )
+                ts_for_text = alignment_service.get_time_for_text(book.id, char_offset_hint=char_offset)
             else:
                 ts_for_text = None
 
@@ -147,11 +145,14 @@ def normalize_for_cross_format_comparison(book, config, sync_clients, ebook_pars
             else:
                 logger.debug(f"'{book_label}' Could not find timestamp for '{client_name}' text")
         except Exception as e:
-            logger.warning(f"'{book_label}' Cross-format normalization failed for '{client_name}': {sanitize_exception(e)}")
+            logger.warning(
+                f"'{book_label}' Cross-format normalization failed for '{client_name}': {sanitize_exception(e)}"
+            )
 
     if len(normalized) > 1:
         return normalized
     return None
+
 
 class AlignmentService:
     def __init__(self, database_service, polisher: Polisher):
@@ -162,7 +163,14 @@ class AlignmentService:
         return bool(book_id and self._get_alignment(book_id))
 
     @time_execution
-    def align_and_store(self, book_id: int, raw_segments: list[dict], ebook_text: str, spine_chapters: list[dict] = None, source: str = None):
+    def align_and_store(
+        self,
+        book_id: int,
+        raw_segments: list[dict],
+        ebook_text: str,
+        spine_chapters: list[dict] = None,
+        source: str = None,
+    ):
         """
         Main entry point for "Unified Alignment".
 
@@ -174,7 +182,9 @@ class AlignmentService:
         4. Rebuild: Fix fragmented sentences in transcript using ebook text as a guide.
         5. Store: Save ONLY the mapping and essential metadata to DB.
         """
-        logger.info(f"AlignmentService: Processing book {book_id} (Text: {len(ebook_text)} chars, Segments: {len(raw_segments)})")
+        logger.info(
+            f"AlignmentService: Processing book {book_id} (Text: {len(ebook_text)} chars, Segments: {len(raw_segments)})"
+        )
 
         # 1. Validation (Spine Check)
         # Note: This is soft validation. If lengths assume vastly different sizes, warn.
@@ -182,12 +192,12 @@ class AlignmentService:
         # For now, we trust the inputs but log warnings.
         ebook_len = len(ebook_text)
         # Estimate audio text length
-        audio_text_rough = " ".join([s['text'] for s in raw_segments])
+        audio_text_rough = " ".join([s["text"] for s in raw_segments])
         audio_len = len(audio_text_rough)
 
         ratio = audio_len / ebook_len if ebook_len > 0 else 0
         if ratio < 0.5 or ratio > 1.5:
-             logger.warning(f"Alignment Size Mismatch: Audio text is {ratio:.2%} of Ebook text size.")
+            logger.warning(f"Alignment Size Mismatch: Audio text is {ratio:.2%} of Ebook text size.")
 
         # 2. Normalize & Rebuild
         # Fix fragmented sentences (Mr. Smith case)
@@ -216,8 +226,10 @@ class AlignmentService:
         Each wordTimeline entry is expected to have 'startTime' (float seconds)
         and 'word' or 'text' (string).
         """
-        logger.info(f"AlignmentService: Processing book {book_id} via Storyteller wordTimeline "
-                     f"({len(storyteller_chapters)} chapters, {len(ebook_text)} chars)")
+        logger.info(
+            f"AlignmentService: Processing book {book_id} via Storyteller wordTimeline "
+            f"({len(storyteller_chapters)} chapters, {len(ebook_text)} chars)"
+        )
 
         # Build segments from wordTimeline data (~15-second groups)
         SEGMENT_DURATION = 15.0
@@ -227,9 +239,9 @@ class AlignmentService:
         last_word_start = 0.0
 
         for chapter in storyteller_chapters:
-            for entry in chapter.get('words', []):
-                start_time = entry.get('startTime', 0.0)
-                word = entry.get('word') or entry.get('text', '')
+            for entry in chapter.get("words", []):
+                start_time = entry.get("startTime", 0.0)
+                word = entry.get("word") or entry.get("text", "")
                 if not word:
                     continue
 
@@ -241,21 +253,25 @@ class AlignmentService:
 
                 # Close segment when duration exceeds threshold
                 if start_time - segment_start >= SEGMENT_DURATION and len(current_words) > 1:
-                    segments.append({
-                        'start': segment_start,
-                        'end': start_time,
-                        'text': ' '.join(current_words),
-                    })
+                    segments.append(
+                        {
+                            "start": segment_start,
+                            "end": start_time,
+                            "text": " ".join(current_words),
+                        }
+                    )
                     current_words = []
 
         # Flush remaining words
         if current_words:
             end_time = max(last_word_start, segment_start + 1.0)
-            segments.append({
-                'start': segment_start,
-                'end': end_time,
-                'text': ' '.join(current_words),
-            })
+            segments.append(
+                {
+                    "start": segment_start,
+                    "end": end_time,
+                    "text": " ".join(current_words),
+                }
+            )
 
         if not segments:
             logger.error(f"AlignmentService: No segments produced from wordTimeline for book {book_id}")
@@ -269,14 +285,14 @@ class AlignmentService:
 
         if not alignment_map:
             # Fallback: linear map from total duration
-            total_duration = segments[-1]['end']
+            total_duration = segments[-1]["end"]
             alignment_map = [
                 {"char": 0, "ts": 0.0},
                 {"char": len(ebook_text), "ts": total_duration},
             ]
             logger.warning(f"   N-gram anchoring failed, using linear fallback for book {book_id}")
 
-        self._save_alignment(book_id, alignment_map, source='storyteller')
+        self._save_alignment(book_id, alignment_map, source="storyteller")
         return True
 
     def get_time_for_text(self, book_id: int, char_offset_hint: int = None) -> float | None:
@@ -295,29 +311,31 @@ class AlignmentService:
         left = 0
         right = len(map_points) - 1
 
-        if target_offset < map_points[0]['char']:
-            return map_points[0]['ts']
+        if target_offset < map_points[0]["char"]:
+            return map_points[0]["ts"]
 
         # Detect partial alignment: use second-to-last point as the real
         # data boundary (last point may be a sentinel mapping to epub end)
         real_end = map_points[-1]
         if len(map_points) >= 2:
             penultimate = map_points[-2]
-            char_gap = real_end['char'] - penultimate['char']
-            ts_gap = real_end['ts'] - penultimate['ts']
-            if ts_gap > 0 and char_gap / max(ts_gap, 1) > 1000:
+            char_gap = real_end["char"] - penultimate["char"]
+            ts_gap = real_end["ts"] - penultimate["ts"]
+            if ts_gap > 0 and char_gap / ts_gap > 1000:
                 real_end = penultimate
 
-        if target_offset > real_end['char']:
-            logger.warning(f"book {book_id}: Char offset {target_offset} exceeds alignment range "
-                           f"(max {real_end['char']}) — alignment may be partial")
+        if target_offset > real_end["char"]:
+            logger.warning(
+                f"book {book_id}: Char offset {target_offset} exceeds alignment range "
+                f"(max {real_end['char']}) — alignment may be partial"
+            )
             return None
 
         # Manual binary search to find floor
         floor_idx = 0
         while left <= right:
             mid = (left + right) // 2
-            if map_points[mid]['char'] <= target_offset:
+            if map_points[mid]["char"] <= target_offset:
                 floor_idx = mid
                 left = mid + 1
             else:
@@ -329,16 +347,17 @@ class AlignmentService:
         if floor_idx + 1 < len(map_points):
             p2 = map_points[floor_idx + 1]
         else:
-            return p1['ts']
+            return p1["ts"]
 
         # Linear Interpolation
-        char_span = p2['char'] - p1['char']
-        time_span = p2['ts'] - p1['ts']
+        char_span = p2["char"] - p1["char"]
+        time_span = p2["ts"] - p1["ts"]
 
-        if char_span == 0: return p1['ts']
+        if char_span == 0:
+            return p1["ts"]
 
-        ratio = (target_offset - p1['char']) / char_span
-        estimated_time = p1['ts'] + (time_span * ratio)
+        ratio = (target_offset - p1["char"]) / char_span
+        estimated_time = p1["ts"] + (time_span * ratio)
 
         return float(estimated_time)
 
@@ -359,30 +378,32 @@ class AlignmentService:
         left = 0
         right = len(map_points) - 1
 
-        if target_ts <= map_points[0]['ts']:
-            return int(map_points[0]['char'])
+        if target_ts <= map_points[0]["ts"]:
+            return int(map_points[0]["char"])
 
         # Detect partial alignment: use second-to-last point as the real
         # data boundary (last point may be a sentinel mapping to epub end)
         real_end = map_points[-1]
         if len(map_points) >= 2:
             penultimate = map_points[-2]
-            char_gap = real_end['char'] - penultimate['char']
-            ts_gap = real_end['ts'] - penultimate['ts']
+            char_gap = real_end["char"] - penultimate["char"]
+            ts_gap = real_end["ts"] - penultimate["ts"]
             # If the last point has a disproportionate char jump, it's a sentinel
-            if ts_gap > 0 and char_gap / max(ts_gap, 1) > 1000:
+            if ts_gap > 0 and char_gap / ts_gap > 1000:
                 real_end = penultimate
 
-        if target_ts > real_end['ts']:
+        if target_ts > real_end["ts"]:
             # Timestamp is beyond the alignment data — can't determine position
-            logger.warning(f"book {book_id}: Timestamp {target_ts:.1f}s exceeds alignment range "
-                           f"(max {real_end['ts']:.1f}s) — alignment may be partial")
+            logger.warning(
+                f"book {book_id}: Timestamp {target_ts:.1f}s exceeds alignment range "
+                f"(max {real_end['ts']:.1f}s) — alignment may be partial"
+            )
             return None
 
         floor_idx = 0
         while left <= right:
             mid = (left + right) // 2
-            if map_points[mid]['ts'] <= target_ts:
+            if map_points[mid]["ts"] <= target_ts:
                 floor_idx = mid
                 left = mid + 1
             else:
@@ -392,16 +413,17 @@ class AlignmentService:
         if floor_idx + 1 < len(map_points):
             p2 = map_points[floor_idx + 1]
         else:
-            return int(p1['char'])
+            return int(p1["char"])
 
         # 3. Interpolate
-        time_span = p2['ts'] - p1['ts']
-        char_span = p2['char'] - p1['char']
+        time_span = p2["ts"] - p1["ts"]
+        char_span = p2["char"] - p1["char"]
 
-        if time_span == 0: return int(p1['char'])
+        if time_span == 0:
+            return int(p1["char"])
 
-        ratio = (target_ts - p1['ts']) / time_span
-        estimated_char = p1['char'] + (char_span * ratio)
+        ratio = (target_ts - p1["ts"]) / time_span
+        estimated_char = p1["char"] + (char_span * ratio)
 
         return int(estimated_char)
 
@@ -414,32 +436,33 @@ class AlignmentService:
         # 1. Tokenize Transcript
         transcript_words = []
         for seg in segments:
-            raw_words = seg['text'].split()
-            if not raw_words: continue
+            raw_words = seg["text"].split()
+            if not raw_words:
+                continue
 
-            duration = seg['end'] - seg['start']
+            duration = seg["end"] - seg["start"]
             per_word = duration / len(raw_words)
 
             for i, w in enumerate(raw_words):
                 norm = self.polisher.normalize(w)
-                if not norm: continue
-                transcript_words.append({
-                    "word": norm,
-                    "ts": seg['start'] + (i * per_word),
-                    "orig_index": len(transcript_words) # Keep track for slicing
-                })
+                if not norm:
+                    continue
+                transcript_words.append(
+                    {
+                        "word": norm,
+                        "ts": seg["start"] + (i * per_word),
+                        "orig_index": len(transcript_words),  # Keep track for slicing
+                    }
+                )
 
         # 2. Tokenize Book
         book_words = []
-        for match in re.finditer(r'\S+', full_text):
+        for match in re.finditer(r"\S+", full_text):
             raw_w = match.group()
             norm = self.polisher.normalize(raw_w)
-            if not norm: continue
-            book_words.append({
-                "word": norm,
-                "char": match.start(),
-                "orig_index": len(book_words)
-            })
+            if not norm:
+                continue
+            book_words.append({"word": norm, "char": match.start(), "orig_index": len(book_words)})
 
         if not transcript_words or not book_words:
             return []
@@ -450,9 +473,10 @@ class AlignmentService:
             def build_ngrams(items, is_book=False):
                 grams = {}
                 for i in range(len(items) - n_size + 1):
-                    keys = [x['word'] for x in items[i:i+n_size]]
+                    keys = [x["word"] for x in items[i : i + n_size]]
                     key = "_".join(keys)
-                    if key not in grams: grams[key] = []
+                    if key not in grams:
+                        grams[key] = []
                     # Store entire object to retrieve ts/char/index
                     grams[key].append(items[i])
                 return grams
@@ -462,44 +486,46 @@ class AlignmentService:
 
             found = []
             for key, t_list in t_grams.items():
-                if len(t_list) == 1: # Unique in transcript slice
-                    if key in b_grams and len(b_grams[key]) == 1: # Unique in book slice
+                if len(t_list) == 1:  # Unique in transcript slice
+                    if key in b_grams and len(b_grams[key]) == 1:  # Unique in book slice
                         # Safe access using indices
                         b_item = b_grams[key][0]
                         t_item = t_list[0]
-                        found.append({
-                            "ts": t_item['ts'],
-                            "char": b_item['char'],
-                            "t_idx": t_item['orig_index'],
-                            "b_idx": b_item['orig_index']
-                        })
+                        found.append(
+                            {
+                                "ts": t_item["ts"],
+                                "char": b_item["char"],
+                                "t_idx": t_item["orig_index"],
+                                "b_idx": b_item["orig_index"],
+                            }
+                        )
             return found
 
         # 3. PASS 1: Global Search (N=12)
         anchors = _find_anchors(transcript_words, book_words, n_size=12)
 
         # Sort by character position
-        anchors.sort(key=lambda x: x['char'])
+        anchors.sort(key=lambda x: x["char"])
 
         # Filter Monotonic (Global)
         valid_anchors = []
         if anchors:
             valid_anchors.append(anchors[0])
             for a in anchors[1:]:
-                if a['ts'] > valid_anchors[-1]['ts']:
+                if a["ts"] > valid_anchors[-1]["ts"]:
                     valid_anchors.append(a)
 
         # 4. PASS 2: Backfill Start (N=6) "Work Backwards"
         # If the first anchor is significantly into the book, try to recover the intro.
         # Threshold: First anchor is > 1000 chars in AND > 30 seconds in
-        if valid_anchors and valid_anchors[0]['char'] > 1000 and valid_anchors[0]['ts'] > 30.0:
+        if valid_anchors and valid_anchors[0]["char"] > 1000 and valid_anchors[0]["ts"] > 30.0:
             first = valid_anchors[0]
             logger.info(f"   Late start detected (Char: {first['char']}, TS: {first['ts']:.1f}s) — Attempting backfill")
 
             # Slice the data: Everything BEFORE the first anchor
             # We use the indices we stored during tokenization
-            t_slice = transcript_words[:first['t_idx']]
-            b_slice = book_words[:first['b_idx']]
+            t_slice = transcript_words[: first["t_idx"]]
+            b_slice = book_words[: first["b_idx"]]
 
             if t_slice and b_slice:
                 # Run with reduced N-Gram (N=6)
@@ -507,12 +533,12 @@ class AlignmentService:
                 early_anchors = _find_anchors(t_slice, b_slice, n_size=6)
 
                 # Filter Early Anchors (Must be monotonic with themselves)
-                early_anchors.sort(key=lambda x: x['char'])
+                early_anchors.sort(key=lambda x: x["char"])
                 valid_early = []
                 if early_anchors:
                     valid_early.append(early_anchors[0])
                     for a in early_anchors[1:]:
-                        if a['ts'] > valid_early[-1]['ts']:
+                        if a["ts"] > valid_early[-1]["ts"]:
                             valid_early.append(a)
 
                 if valid_early:
@@ -520,24 +546,22 @@ class AlignmentService:
                     # Prepend to main list
                     valid_anchors = valid_early + valid_anchors
 
-
-
         # 5. Build Final Map
         final_map = []
         if not valid_anchors:
             return []
 
         # Force 0,0 if still missing (Linear Interpolation fallback)
-        if valid_anchors[0]['char'] > 0:
+        if valid_anchors[0]["char"] > 0:
             final_map.append({"char": 0, "ts": 0.0})
 
         final_map.extend(valid_anchors)
 
         # Force End
         last = valid_anchors[-1]
-        if last['char'] < len(full_text):
+        if last["char"] < len(full_text):
             # Safe check for segments
-            end_ts = segments[-1]['end'] if segments else last['ts']
+            end_ts = segments[-1]["end"] if segments else last["ts"]
             final_map.append({"char": len(full_text), "ts": end_ts})
 
         logger.info(f"   Anchored Alignment: Found {len(valid_anchors)} anchors (Total).")
@@ -563,18 +587,18 @@ class AlignmentService:
                 real_end = data[-1]
                 if len(data) >= 2:
                     penultimate = data[-2]
-                    char_gap = real_end['char'] - penultimate['char']
-                    ts_gap = real_end['ts'] - penultimate['ts']
-                    if ts_gap > 0 and char_gap / max(ts_gap, 1) > 1000:
+                    char_gap = real_end["char"] - penultimate["char"]
+                    ts_gap = real_end["ts"] - penultimate["ts"]
+                    if ts_gap > 0 and char_gap / ts_gap > 1000:
                         real_end = penultimate
 
                 return {
-                    'num_points': len(data),
-                    'max_timestamp': real_end['ts'],
-                    'max_char': real_end['char'],
-                    'total_chars': data[-1]['char'],
-                    'last_updated': row.last_updated,
-                    'source': row.source,
+                    "num_points": len(data),
+                    "max_timestamp": real_end["ts"],
+                    "max_char": real_end["char"],
+                    "total_chars": data[-1]["char"],
+                    "last_updated": row.last_updated,
+                    "source": row.source,
                 }
             except (KeyError, TypeError, IndexError):
                 logger.warning(f"Malformed alignment data for book {book_id}")
@@ -594,7 +618,7 @@ class AlignmentService:
             book = session.query(Book).filter_by(id=book_id).first()
             if book:
                 book.transcript_file = None
-                book.status = 'pending'
+                book.status = "pending"
             logger.info(f"Re-alignment queued for book {book_id}")
 
     def _save_alignment(self, book_id: int, alignment_map: list[dict], source: str = None):
@@ -636,9 +660,9 @@ class AlignmentService:
             # Validate structure: each point must have int 'char' and float 'ts'
             validated = []
             for point in raw:
-                if isinstance(point, dict) and 'char' in point and 'ts' in point:
+                if isinstance(point, dict) and "char" in point and "ts" in point:
                     try:
-                        validated.append({'char': int(point['char']), 'ts': float(point['ts'])})
+                        validated.append({"char": int(point["char"]), "ts": float(point["ts"])})
                     except (ValueError, TypeError):
                         logger.warning(f"Skipping invalid alignment point for book {book_id}: {point}")
                 else:
@@ -654,5 +678,5 @@ class AlignmentService:
         alignment = self._get_alignment(book_id)
         if alignment and len(alignment) > 0:
             # The last point in the alignment map should have the max timestamp
-            return float(alignment[-1]['ts'])
+            return float(alignment[-1]["ts"])
         return None

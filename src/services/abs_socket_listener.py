@@ -28,12 +28,12 @@ logger = logging.getLogger(__name__)
 
 def record_abs_write(abs_id: str) -> None:
     """Call after Stitch successfully pushes progress to ABS."""
-    record_write('ABS', abs_id)
+    record_write("ABS", abs_id)
 
 
 def is_own_write(abs_id: str, suppression_window: int = 60) -> bool:
     """Return True if a recent ABS progress event was caused by our own write."""
-    return _tracker_is_own_write('ABS', abs_id, suppression_window)
+    return _tracker_is_own_write("ABS", abs_id, suppression_window)
 
 
 class ABSSocketListener:
@@ -61,9 +61,7 @@ class ABSSocketListener:
         self._db = database_service
         self._sync_manager = sync_manager
 
-        self._debounce_window = int(
-            os.environ.get("ABS_SOCKET_DEBOUNCE_SECONDS", "30")
-        )
+        self._debounce_window = int(os.environ.get("ABS_SOCKET_DEBOUNCE_SECONDS", "30"))
 
         # {abs_id: last_event_timestamp}
         self._pending: dict[str, float] = {}
@@ -107,9 +105,7 @@ class ABSSocketListener:
 
         Returns None if the exchange fails after all retries.
         """
-        logger.debug(
-            f"ABS Socket.IO: API token is {self._describe_token(self._api_token)}"
-        )
+        logger.debug(f"ABS Socket.IO: API token is {self._describe_token(self._api_token)}")
         max_retries = 3
         for attempt in range(1, max_retries + 1):
             try:
@@ -153,10 +149,7 @@ class ABSSocketListener:
 
         @sio.event
         def connect():
-            logger.info(
-                f"ABS Socket.IO: Connected — sending auth "
-                f"({self._describe_token(self._socket_token)})"
-            )
+            logger.info(f"ABS Socket.IO: Connected — sending auth ({self._describe_token(self._socket_token)})")
             sio.emit("auth", self._socket_token)
 
         @sio.event
@@ -217,16 +210,20 @@ class ABSSocketListener:
         # Check if this is a tracked book in our database
         book = self._db.get_book_by_abs_id(library_item_id)
         if not book:
-            logger.debug(f"ABS Socket.IO: Progress event for '{library_item_id[:12]}...' — not a tracked book, queuing suggestion discovery")
+            logger.debug(
+                f"ABS Socket.IO: Progress event for '{library_item_id[:12]}...' — not a tracked book, queuing suggestion discovery"
+            )
             self._suggestion_pool.submit(self._sync_manager.queue_suggestion, library_item_id)
             return
-        if book.status in ('paused', 'dnf', 'not_started') and not book.activity_flag:
+        if book.status in ("paused", "dnf", "not_started") and not book.activity_flag:
             book.activity_flag = True
             self._db.save_book(book)
             logger.info(f"ABS Socket.IO: Activity detected on {book.status} book '{book.title}'")
             return
         if book.status != "active":
-            logger.debug(f"ABS Socket.IO: Progress event for '{library_item_id[:12]}...' — not an active book, ignoring")
+            logger.debug(
+                f"ABS Socket.IO: Progress event for '{library_item_id[:12]}...' — not an active book, ignoring"
+            )
             return
 
         with self._lock:

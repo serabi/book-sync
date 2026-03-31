@@ -177,8 +177,8 @@
 
         {# ── Overview Tab ── #}
         <div class="r-tab-panel" data-tab="overview" style="{% if active_tab != 'overview' %}display: none;{% endif %}">
-            {# Services — dashboard order: ABS, KoSync, Storyteller, Booklore, Hardcover, BookFusion #}
-            {% set any_service = integrations.abs or integrations.kosync or integrations.storyteller or integrations.booklore or integrations.hardcover or integrations.bookfusion or services_enabled.storyteller or services_enabled.booklore or services_enabled.hardcover or services_enabled.bookfusion or (services_enabled.abs and not integrations.abs and book.book_type == 'ebook-only') %}
+            {# Services — dashboard order: ABS, KoSync, Storyteller, Grimmory, Hardcover, BookFusion #}
+            {% set any_service = integrations.abs or integrations.kosync or integrations.storyteller or integrations.grimmory or integrations.hardcover or integrations.bookfusion or services_enabled.storyteller or services_enabled.grimmory or services_enabled.hardcover or services_enabled.bookfusion or (services_enabled.abs and not integrations.abs and book.book_type == 'ebook-only') %}
             {% if any_service %}
             <div class="r-detail-section">
                 <div class="r-services-list">
@@ -230,26 +230,26 @@
                     {% endif %}
                     {% endif %}
 
-                    {# ── Booklore ── #}
-                    {% if services_enabled.booklore %}
-                    {% if integrations.booklore %}
+                    {# ── Grimmory ── #}
+                    {% if services_enabled.grimmory %}
+                    {% if integrations.grimmory %}
                     <div class="r-service-row">
-                        <img src="/static/booklore.png" alt="BL" class="r-service-row-icon">
-                        {% if metadata.booklore_url %}
-                        <a href="{{ metadata.booklore_url }}" target="_blank" rel="noopener noreferrer" class="r-service-row-name">Booklore</a>
+                        <img src="/static/grimmory.png" alt="GR" class="r-service-row-icon">
+                        {% if metadata.grimmory_url %}
+                        <a href="{{ metadata.grimmory_url }}" target="_blank" rel="noopener noreferrer" class="r-service-row-name">Grimmory</a>
                         {% else %}
-                        <span class="r-service-row-name">Booklore</span>
+                        <span class="r-service-row-name">Grimmory</span>
                         {% endif %}
-                        <button type="button" class="r-service-row-action" onclick="openBookloreModal(_rdAbsId, _rdTitle)">Edit</button>
+                        <button type="button" class="r-service-row-action" onclick="openGrimmoryModal(_rdAbsId, _rdTitle)">Edit</button>
                         <span class="r-service-row-value">
-                            {% if service_states.booklore is defined %}{{ '%.1f' | format(service_states.booklore.percentage) }}%{% else %}--{% endif %}
+                            {% if service_states.grimmory is defined %}{{ '%.1f' | format(service_states.grimmory.percentage) }}%{% else %}--{% endif %}
                         </span>
                     </div>
                     {% else %}
                     <div class="r-service-row r-service-row--unlinked">
-                        <img src="/static/booklore.png" alt="BL" class="r-service-row-icon">
-                        <span class="r-service-row-name">Booklore</span>
-                        <button type="button" class="r-service-row-link-action" onclick="openBookloreModal(_rdAbsId, _rdTitle)">Link</button>
+                        <img src="/static/grimmory.png" alt="GR" class="r-service-row-icon">
+                        <span class="r-service-row-name">Grimmory</span>
+                        <button type="button" class="r-service-row-link-action" onclick="openGrimmoryModal(_rdAbsId, _rdTitle)">Link</button>
                     </div>
                     {% endif %}
                     {% endif %}
@@ -745,13 +745,13 @@
         </div>
     </div>
 
-    {# ── Booklore Link Modal ── #}
+    {# ── Grimmory Link Modal ── #}
     <div id="bl-modal" class="hc-modal" style="display:none;">
-        <div class="hc-modal-backdrop" onclick="closeBookloreModal()"></div>
+        <div class="hc-modal-backdrop" onclick="closeGrimmoryModal()"></div>
         <div class="hc-modal-content">
             <div class="hc-modal-header">
-                <h3 id="bl-modal-title">Link to Booklore</h3>
-                <button class="hc-modal-close" onclick="closeBookloreModal()" aria-label="Close">
+                <h3 id="bl-modal-title">Link to Grimmory</h3>
+                <button class="hc-modal-close" onclick="closeGrimmoryModal()" aria-label="Close">
                     <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor"
                         stroke-width="2" stroke-linecap="round">
                         <path d="M1 1l12 12M13 1L1 13" />
@@ -760,8 +760,8 @@
             </div>
             <div class="hc-modal-body">
                 <div class="st-search-bar">
-                    <input type="text" id="bl-search-input" placeholder="Search Booklore..." class="modal-search-input">
-                    <button onclick="searchBooklore()" class="btn btn-primary">Search</button>
+                    <input type="text" id="bl-search-input" placeholder="Search Grimmory..." class="modal-search-input">
+                    <button onclick="searchGrimmory()" class="btn btn-primary">Search</button>
                 </div>
                 <div id="bl-results" class="st-results"></div>
             </div>
@@ -786,7 +786,7 @@
     </div>
 
     <script src="/static/js/hardcover-modal.js"></script>
-    <script src="/static/js/booklore-link-modal.js"></script>
+    <script src="/static/js/grimmory-link-modal.js"></script>
     <script src="/static/js/storyteller-modal.js"></script>
     <script src="/static/js/cover-picker-modal.js"></script>
     <script src="/static/js/reading.js"></script>

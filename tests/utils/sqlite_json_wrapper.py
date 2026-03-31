@@ -27,11 +27,11 @@ class SQLiteJsonDBWrapper:
 
         # Create database service with SQLAlchemy
         db_dir = self.filepath.parent
-        if self.file_type in ['mapping', 'state']:
+        if self.file_type in ["mapping", "state"]:
             self.db_service = DatabaseService(str(db_dir / "database.db"))
         else:
             # Generic case
-            db_path = self.filepath.with_suffix('.db')
+            db_path = self.filepath.with_suffix(".db")
             self.db_service = DatabaseService(str(db_path))
 
         # Perform migration if needed
@@ -40,38 +40,26 @@ class SQLiteJsonDBWrapper:
     def _determine_file_type(self) -> str:
         """Determine the type of JSON file based on filename."""
         filename = self.filepath.name.lower()
-        if 'mapping' in filename:
-            return 'mapping'
-        elif 'state' in filename:
-            return 'state'
+        if "mapping" in filename:
+            return "mapping"
+        elif "state" in filename:
+            return "state"
         else:
-            return 'unknown'
+            return "unknown"
 
     def _migrate_if_needed(self):
         """Migrate from JSON files if they exist and SQLAlchemy database is empty."""
-        if self.file_type == 'mapping':
+        if self.file_type == "mapping":
             # For mapping files, we need to check both mapping and state files
             state_path = self.filepath.parent / "last_state.json"
-            migrator = DatabaseMigrator(
-                self.db_service,
-                str(self.filepath),
-                str(state_path)
-            )
-        elif self.file_type == 'state':
+            migrator = DatabaseMigrator(self.db_service, str(self.filepath), str(state_path))
+        elif self.file_type == "state":
             # For state files, we need to check both mapping and state files
             mapping_path = self.filepath.parent / "mapping_db.json"
-            migrator = DatabaseMigrator(
-                self.db_service,
-                str(mapping_path),
-                str(self.filepath)
-            )
+            migrator = DatabaseMigrator(self.db_service, str(mapping_path), str(self.filepath))
         else:
             # Generic migration - try to find related files
-            migrator = DatabaseMigrator(
-                self.db_service,
-                str(self.filepath),
-                str(self.filepath)
-            )
+            migrator = DatabaseMigrator(self.db_service, str(self.filepath), str(self.filepath))
 
         if migrator.should_migrate():
             logger.info(f"Migrating {self.filepath} to SQLAlchemy database...")
@@ -86,12 +74,12 @@ class SQLiteJsonDBWrapper:
             default = {}
 
         try:
-            if self.file_type == 'mapping':
+            if self.file_type == "mapping":
                 # Return mappings in the original JSON format
                 mappings = self._get_mappings_as_dict()
                 return {"mappings": mappings} if mappings else default
 
-            elif self.file_type == 'state':
+            elif self.file_type == "state":
                 # Return state data in the original JSON format
                 states = self._get_states_as_dict()
                 return states if states else default
@@ -111,16 +99,16 @@ class SQLiteJsonDBWrapper:
         Converts the data to the appropriate SQLAlchemy operations.
         """
         try:
-            if self.file_type == 'mapping':
+            if self.file_type == "mapping":
                 # Handle mapping data
-                if 'mappings' in data:
-                    self._save_mappings_from_dict(data['mappings'])
+                if "mappings" in data:
+                    self._save_mappings_from_dict(data["mappings"])
                     return True
                 else:
                     logger.warning("Invalid mapping data format")
                     return False
 
-            elif self.file_type == 'state':
+            elif self.file_type == "state":
                 # Handle state data
                 self._save_states_from_dict(data)
                 return True
@@ -161,23 +149,25 @@ class SQLiteJsonDBWrapper:
 
         for book in books:
             mapping = {
-                'abs_id': book.abs_id,
-                'title': book.title,
-                'ebook_filename': book.ebook_filename,
-                'kosync_doc_id': book.kosync_doc_id,
-                'transcript_file': book.transcript_file,
-                'status': book.status,
-                'duration': book.duration
+                "abs_id": book.abs_id,
+                "title": book.title,
+                "ebook_filename": book.ebook_filename,
+                "kosync_doc_id": book.kosync_doc_id,
+                "transcript_file": book.transcript_file,
+                "status": book.status,
+                "duration": book.duration,
             }
 
             # Add latest job data if it exists
             latest_job = self.db_service.get_latest_job(book.abs_id)
             if latest_job:
-                mapping.update({
-                    'last_attempt': latest_job.last_attempt,
-                    'retry_count': latest_job.retry_count,
-                    'last_error': latest_job.last_error
-                })
+                mapping.update(
+                    {
+                        "last_attempt": latest_job.last_attempt,
+                        "retry_count": latest_job.retry_count,
+                        "last_error": latest_job.last_error,
+                    }
+                )
 
             mappings.append(mapping)
 
@@ -187,23 +177,23 @@ class SQLiteJsonDBWrapper:
         """Convert dictionary mappings to Book models and save."""
         for mapping in mappings_list:
             book = Book(
-                abs_id=mapping['abs_id'],
-                title=mapping.get('title'),
-                ebook_filename=mapping.get('ebook_filename'),
-                kosync_doc_id=mapping.get('kosync_doc_id'),
-                transcript_file=mapping.get('transcript_file'),
-                status=mapping.get('status', 'active'),
-                duration=mapping.get('duration')
+                abs_id=mapping["abs_id"],
+                title=mapping.get("title"),
+                ebook_filename=mapping.get("ebook_filename"),
+                kosync_doc_id=mapping.get("kosync_doc_id"),
+                transcript_file=mapping.get("transcript_file"),
+                status=mapping.get("status", "active"),
+                duration=mapping.get("duration"),
             )
             self.db_service.save_book(book)
 
             # Also save job data if present
-            if any(key in mapping for key in ['last_attempt', 'retry_count', 'last_error']):
+            if any(key in mapping for key in ["last_attempt", "retry_count", "last_error"]):
                 job = Job(
-                    abs_id=mapping['abs_id'],
-                    last_attempt=mapping.get('last_attempt'),
-                    retry_count=mapping.get('retry_count', 0),
-                    last_error=mapping.get('last_error')
+                    abs_id=mapping["abs_id"],
+                    last_attempt=mapping.get("last_attempt"),
+                    retry_count=mapping.get("retry_count", 0),
+                    last_error=mapping.get("last_error"),
                 )
                 self.db_service.save_job(job)
 
@@ -218,96 +208,96 @@ class SQLiteJsonDBWrapper:
                 result[state.abs_id] = {}
 
             # Map client names to the expected format
-            if state.client_name == 'kosync':
-                result[state.abs_id]['kosync_pct'] = state.percentage
+            if state.client_name == "kosync":
+                result[state.abs_id]["kosync_pct"] = state.percentage
                 if state.xpath:
-                    result[state.abs_id]['kosync_xpath'] = state.xpath
-            elif state.client_name == 'abs':
-                result[state.abs_id]['abs_pct'] = state.percentage
+                    result[state.abs_id]["kosync_xpath"] = state.xpath
+            elif state.client_name == "abs":
+                result[state.abs_id]["abs_pct"] = state.percentage
                 if state.timestamp:
-                    result[state.abs_id]['abs_ts'] = state.timestamp
-            elif state.client_name == 'absebook':
-                result[state.abs_id]['absebook_pct'] = state.percentage
+                    result[state.abs_id]["abs_ts"] = state.timestamp
+            elif state.client_name == "absebook":
+                result[state.abs_id]["absebook_pct"] = state.percentage
                 if state.cfi:
-                    result[state.abs_id]['absebook_cfi'] = state.cfi
-            elif state.client_name == 'storyteller':
-                result[state.abs_id]['storyteller_pct'] = state.percentage
+                    result[state.abs_id]["absebook_cfi"] = state.cfi
+            elif state.client_name == "storyteller":
+                result[state.abs_id]["storyteller_pct"] = state.percentage
                 if state.xpath:
-                    result[state.abs_id]['storyteller_xpath'] = state.xpath
+                    result[state.abs_id]["storyteller_xpath"] = state.xpath
                 if state.cfi:
-                    result[state.abs_id]['storyteller_cfi'] = state.cfi
-            elif state.client_name == 'booklore':
-                result[state.abs_id]['booklore_pct'] = state.percentage
+                    result[state.abs_id]["storyteller_cfi"] = state.cfi
+            elif state.client_name == "grimmory":
+                result[state.abs_id]["grimmory_pct"] = state.percentage
                 if state.xpath:
-                    result[state.abs_id]['booklore_xpath'] = state.xpath
+                    result[state.abs_id]["grimmory_xpath"] = state.xpath
                 if state.cfi:
-                    result[state.abs_id]['booklore_cfi'] = state.cfi
+                    result[state.abs_id]["grimmory_cfi"] = state.cfi
 
             # Set last_updated from any state record
             if state.last_updated:
-                result[state.abs_id]['last_updated'] = state.last_updated
+                result[state.abs_id]["last_updated"] = state.last_updated
 
         return result
 
     def _save_states_from_dict(self, state_dict: dict):
         """Convert dictionary states to State models and save."""
         for abs_id, data in state_dict.items():
-            last_updated = data.get('last_updated')
+            last_updated = data.get("last_updated")
 
             # Handle kosync data
-            if 'kosync_pct' in data:
+            if "kosync_pct" in data:
                 state = State(
                     abs_id=abs_id,
-                    client_name='kosync',
+                    client_name="kosync",
                     last_updated=last_updated,
-                    percentage=data['kosync_pct'],
-                    xpath=data.get('kosync_xpath')
+                    percentage=data["kosync_pct"],
+                    xpath=data.get("kosync_xpath"),
                 )
                 self.db_service.save_state(state)
 
             # Handle ABS data
-            if 'abs_pct' in data:
+            if "abs_pct" in data:
                 state = State(
                     abs_id=abs_id,
-                    client_name='abs',
+                    client_name="abs",
                     last_updated=last_updated,
-                    percentage=data['abs_pct'],
-                    timestamp=data.get('abs_ts')
+                    percentage=data["abs_pct"],
+                    timestamp=data.get("abs_ts"),
                 )
                 self.db_service.save_state(state)
 
             # Handle ABS ebook data
-            if 'absebook_pct' in data:
+            if "absebook_pct" in data:
                 state = State(
                     abs_id=abs_id,
-                    client_name='absebook',
+                    client_name="absebook",
                     last_updated=last_updated,
-                    percentage=data['absebook_pct'],
-                    cfi=data.get('absebook_cfi')
+                    percentage=data["absebook_pct"],
+                    cfi=data.get("absebook_cfi"),
                 )
                 self.db_service.save_state(state)
 
             # Handle Storyteller data
-            if 'storyteller_pct' in data:
+            if "storyteller_pct" in data:
                 state = State(
                     abs_id=abs_id,
-                    client_name='storyteller',
+                    client_name="storyteller",
                     last_updated=last_updated,
-                    percentage=data['storyteller_pct'],
-                    xpath=data.get('storyteller_xpath'),
-                    cfi=data.get('storyteller_cfi')
+                    percentage=data["storyteller_pct"],
+                    xpath=data.get("storyteller_xpath"),
+                    cfi=data.get("storyteller_cfi"),
                 )
                 self.db_service.save_state(state)
 
-            # Handle Booklore data
-            if 'booklore_pct' in data:
+            # Handle Grimmory data
+            if "grimmory_pct" in data:
                 state = State(
                     abs_id=abs_id,
-                    client_name='booklore',
+                    client_name="grimmory",
                     last_updated=last_updated,
-                    percentage=data['booklore_pct'],
-                    xpath=data.get('booklore_xpath'),
-                    cfi=data.get('booklore_cfi')
+                    percentage=data["grimmory_pct"],
+                    xpath=data.get("grimmory_xpath"),
+                    cfi=data.get("grimmory_cfi"),
                 )
                 self.db_service.save_state(state)
 

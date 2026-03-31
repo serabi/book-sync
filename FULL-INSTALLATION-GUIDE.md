@@ -14,7 +14,7 @@ This guide walks you through installing, configuring, and running PageKeeper fro
   - [Audiobookshelf](#audiobookshelf)
   - [KOReader (KoSync)](#koreader-kosync)
   - [Storyteller](#storyteller)
-  - [Booklore](#booklore)
+  - [Grimmory](#grimmory)
   - [Calibre-Web Automated (CWA)](#calibre-web-automated-cwa)
   - [Hardcover](#hardcover)
   - [BookFusion](#bookfusion)
@@ -93,7 +93,7 @@ services:
       - ./data:/data                              # App data (database, cache, logs)
 
       # === OPTIONAL — Ebook Sources ===
-      # Only needed for cross-format sync if you're NOT using Booklore or CWA
+      # Only needed for cross-format sync if you're NOT using Grimmory or CWA
       # - /path/to/ebooks:/books:ro
 
       # === OPTIONAL — Storyteller ===
@@ -232,20 +232,20 @@ Then set **Import Directory** to `/storyteller-import` and **Assets Directory** 
 
 **How submission works:** When matching a book, check "Submit to Storyteller" (or enable Force Storyteller mode). PageKeeper copies the EPUB and audio files to Storyteller's import directory, waits for Storyteller to detect them, then triggers processing via the API. Once Storyteller finishes, PageKeeper uses its word-level timeline for alignment — Whisper does not run locally.
 
-### Booklore
+### Grimmory
 
-An ebook library manager. PageKeeper can fetch ebook metadata and files through Booklore's API, removing the need for a direct volume mount.
+An ebook library manager. PageKeeper can fetch ebook metadata and files through Grimmory's API, removing the need for a direct volume mount.
 
-Configure in **Settings > Booklore**:
+Configure in **Settings > Grimmory**:
 
 | Field | Description |
 |---|---|
-| **Server URL** | e.g. `http://booklore:5000` |
-| **Username** | Booklore login |
-| **Password** | Booklore password |
-| **Library ID** | Target library ID in Booklore |
+| **Server URL** | e.g. `http://grimmory:5000` |
+| **Username** | Grimmory login |
+| **Password** | Grimmory password |
+| **Library ID** | Target library ID in Grimmory |
 | **Shelf Name** | Shelf to use for tracking (default: `Kobo`) |
-| **Label** | Display name in PageKeeper UI (default: `Booklore`) |
+| **Label** | Display name in PageKeeper UI (default: `Grimmory`) |
 
 ### Calibre-Web Automated (CWA)
 
@@ -290,9 +290,9 @@ The cross-format sync aligns your position between audiobooks and ebooks. This p
 
 PageKeeper needs access to your EPUB files to build alignment maps. Three options, in order of simplicity:
 
-1. **Booklore** — PageKeeper fetches EPUBs through the Booklore API. No volume mount needed. Just configure the Booklore integration.
+1. **Grimmory** — PageKeeper fetches EPUBs through the Grimmory API. No volume mount needed. Just configure the Grimmory integration.
 
-2. **CWA** — Same idea as Booklore - PageKeeper fetches EPUBs through CWA's OPDS API.
+2. **CWA** — Same idea as Grimmory - PageKeeper fetches EPUBs through CWA's OPDS API.
 
 3. **Mount a volume** — If you don't want to run a book server, you can point `/books` at your EPUB directory:
    ```yaml
@@ -508,17 +508,17 @@ All settings are configurable from the web UI and persist in the database. Envir
 | `STORYTELLER_FORCE_MODE` | `false` | Auto-submit all books to Storyteller, skip Whisper |
 | `STORYTELLER_IMPORT_DETECT_TIMEOUT` | `120` | Seconds to wait for Storyteller to detect imported files |
 
-### Booklore
+### Grimmory
 
 | Variable | Default | Description |
 |---|---|---|
-| `BOOKLORE_ENABLED` | `false` | Enable Booklore integration |
-| `BOOKLORE_SERVER` | (none) | Booklore server URL |
-| `BOOKLORE_USER` | (none) | Booklore username |
-| `BOOKLORE_PASSWORD` | (none) | Booklore password |
-| `BOOKLORE_LIBRARY_ID` | (none) | Target library ID |
-| `BOOKLORE_SHELF_NAME` | `Kobo` | Shelf name for tracking |
-| `BOOKLORE_LABEL` | `Booklore` | Display label in UI |
+| `GRIMMORY_ENABLED` | `false` | Enable Grimmory integration |
+| `GRIMMORY_SERVER` | (none) | Grimmory server URL |
+| `GRIMMORY_USER` | (none) | Grimmory username |
+| `GRIMMORY_PASSWORD` | (none) | Grimmory password |
+| `GRIMMORY_LIBRARY_ID` | (none) | Target library ID |
+| `GRIMMORY_SHELF_NAME` | `Kobo` | Shelf name for tracking |
+| `GRIMMORY_LABEL` | `Grimmory` | Display label in UI |
 
 ### Calibre-Web Automated (CWA)
 
@@ -598,7 +598,7 @@ All settings are configurable from the web UI and persist in the database. Envir
 | `/storyteller-import` | Storyteller import directory (for book submissions) | No | `rw` |
 | `/storyteller-data` | Storyteller data directory (for completion detection and native alignment) | No | `ro` |
 
-\* Not needed if you use Booklore or CWA to fetch ebooks via API.
+\* Not needed if you use Grimmory or CWA to fetch ebooks via API.
 
 ### What lives in `/data`
 
@@ -652,7 +652,7 @@ docker compose logs --tail=100 | grep -A 10 "ERROR"
 
 ### Alignment fails
 
-- Ensure PageKeeper can access the EPUB file (via `/books` mount, Booklore, or CWA)
+- Ensure PageKeeper can access the EPUB file (via `/books` mount, Grimmory, or CWA)
 - Check that `ffmpeg` is working: `docker exec pagekeeper ffmpeg -version`
 - Try a larger Whisper model if transcription quality is poor
 - Check `/data/logs/` for detailed error output

@@ -10,10 +10,10 @@ from src.blueprints.helpers import get_abs_service, get_container, get_covers_di
 
 logger = logging.getLogger(__name__)
 
-abs_bp = Blueprint('abs', __name__)
+abs_bp = Blueprint("abs", __name__)
 
 
-@abs_bp.route('/api/abs/libraries', methods=['GET'])
+@abs_bp.route("/api/abs/libraries", methods=["GET"])
 def get_abs_libraries():
     """Return available ABS libraries."""
     abs_service = get_abs_service()
@@ -23,13 +23,13 @@ def get_abs_libraries():
     return jsonify(libraries)
 
 
-@abs_bp.route('/api/cover-proxy/<book_ref>')
+@abs_bp.route("/api/cover-proxy/<book_ref>")
 def proxy_cover(book_ref):
     """Proxy cover access with local caching for offline resilience."""
     book = get_database_service().get_book_by_ref(book_ref)
     abs_id = book.abs_id if book and book.abs_id else book_ref
 
-    if not re.fullmatch(r'[a-zA-Z0-9_\-]+', abs_id):
+    if not re.fullmatch(r"[a-zA-Z0-9_\-]+", abs_id):
         return "Invalid ID", 400
 
     covers_dir = get_covers_dir()
@@ -50,8 +50,8 @@ def proxy_cover(book_ref):
                     cache_file.write_bytes(data)
                 except Exception:
                     logger.debug(f"Failed to cache cover for '{abs_id}'")
-                resp = Response(data, content_type=req.headers.get('content-type', 'image/jpeg'))
-                resp.headers['Cache-Control'] = 'public, max-age=86400, immutable'
+                resp = Response(data, content_type=req.headers.get("content-type", "image/jpeg"))
+                resp.headers["Cache-Control"] = "public, max-age=86400, immutable"
                 return resp
         except Exception as e:
             logger.error(f"Error proxying cover for '{abs_id}': {e}")
@@ -59,7 +59,7 @@ def proxy_cover(book_ref):
     # Fall back to local cache
     if cache_file.exists():
         resp = send_from_directory(covers_dir, cache_file.name)
-        resp.headers['Cache-Control'] = 'public, max-age=86400, immutable'
+        resp.headers["Cache-Control"] = "public, max-age=86400, immutable"
         return resp
 
     return "Cover not found", 404

@@ -7,7 +7,6 @@ from .models import Book, KosyncDocument
 
 
 class KoSyncRepository(BaseRepository):
-
     def get_kosync_document(self, document_hash):
         return self._get_one(KosyncDocument, KosyncDocument.document_hash == document_hash)
 
@@ -32,9 +31,7 @@ class KoSyncRepository(BaseRepository):
 
     def link_kosync_document(self, document_hash, book_id, abs_id=None):
         with self.get_session() as session:
-            doc = session.query(KosyncDocument).filter(
-                KosyncDocument.document_hash == document_hash
-            ).first()
+            doc = session.query(KosyncDocument).filter(KosyncDocument.document_hash == document_hash).first()
             if doc:
                 doc.linked_book_id = book_id
                 doc.linked_abs_id = abs_id
@@ -44,9 +41,7 @@ class KoSyncRepository(BaseRepository):
 
     def unlink_kosync_document(self, document_hash):
         with self.get_session() as session:
-            doc = session.query(KosyncDocument).filter(
-                KosyncDocument.document_hash == document_hash
-            ).first()
+            doc = session.query(KosyncDocument).filter(KosyncDocument.document_hash == document_hash).first()
             if doc:
                 doc.linked_abs_id = None
                 doc.linked_book_id = None
@@ -65,20 +60,16 @@ class KoSyncRepository(BaseRepository):
             return None
         return self._get_one(KosyncDocument, KosyncDocument.filename == filename)
 
-    def get_kosync_doc_by_booklore_id(self, booklore_id):
-        if booklore_id is None:
+    def get_kosync_doc_by_grimmory_id(self, grimmory_id):
+        if grimmory_id is None:
             return None
-        return self._get_one(KosyncDocument, KosyncDocument.booklore_id == str(booklore_id))
+        return self._get_one(KosyncDocument, KosyncDocument.grimmory_id == str(grimmory_id))
 
     def get_orphaned_kosync_books(self):
         """Get books with kosync_doc_id set but no matching KosyncDocument."""
         with self.get_session() as session:
             subq = session.query(KosyncDocument.document_hash)
-            results = (session.query(Book)
-                       .filter(Book.kosync_doc_id != None)
-                       .filter(~Book.kosync_doc_id.in_(subq))
-                       .all())
+            results = session.query(Book).filter(Book.kosync_doc_id != None).filter(~Book.kosync_doc_id.in_(subq)).all()
             for r in results:
                 session.expunge(r)
             return results
-

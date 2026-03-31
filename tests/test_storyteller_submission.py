@@ -373,7 +373,9 @@ class TestStorytellerSubmission(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as assets_dir:
             # Simulate Storyteller's suffixed directory
-            suffixed_dir = Path(assets_dir) / "assets" / "Bury Our Bones in the Midnight Soil [Ru93Xoc2]" / "transcriptions"
+            suffixed_dir = (
+                Path(assets_dir) / "assets" / "Bury Our Bones in the Midnight Soil [Ru93Xoc2]" / "transcriptions"
+            )
             suffixed_dir.mkdir(parents=True)
             (suffixed_dir / "00001-00001.json").write_text("{}")
 

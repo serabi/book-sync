@@ -29,35 +29,46 @@ class KosyncDocument(Base):
     Model for raw KOSync documents (mirroring the official server's schema).
     This allows syncing unlinked documents between devices.
     """
-    __tablename__ = 'kosync_documents'
+
+    __tablename__ = "kosync_documents"
 
     document_hash = Column(String(32), primary_key=True)  # MD5 Hash from KOReader
-    progress = Column(String(512), nullable=True)         # XPath / CFI
-    percentage = Column(Numeric(10, 6), default=0)        # Decimal precision
+    progress = Column(String(512), nullable=True)  # XPath / CFI
+    percentage = Column(Numeric(10, 6), default=0)  # Decimal precision
     device = Column(String(128), nullable=True)
     device_id = Column(String(64), nullable=True)
     timestamp = Column(DateTime, nullable=True)
 
     # Bridge specific fields — linked_book_id is the canonical FK
     linked_abs_id = Column(String(255), nullable=True, index=True)
-    linked_book_id = Column(Integer, ForeignKey('books.id'), nullable=True, index=True)
+    linked_book_id = Column(Integer, ForeignKey("books.id"), nullable=True, index=True)
     first_seen = Column(DateTime, default=datetime.utcnow)
     last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Hash cache replacement fields
     filename = Column(String(500), nullable=True)
     source = Column(String(50), nullable=True)
-    booklore_id = Column(String(255), nullable=True, index=True)
+    grimmory_id = Column(String(255), nullable=True, index=True)
     mtime = Column(Float, nullable=True)
 
     # Relationship to Book (optional)
     linked_book = relationship("Book", backref="kosync_documents", foreign_keys=[linked_book_id])
 
-    def __init__(self, document_hash: str, progress: str = None, percentage: float = 0,
-                 device: str = None, device_id: str = None, timestamp: datetime = None,
-                 linked_abs_id: str = None, linked_book_id: int = None,
-                 filename: str = None, source: str = None,
-                 booklore_id: str = None, mtime: float = None):
+    def __init__(
+        self,
+        document_hash: str,
+        progress: str = None,
+        percentage: float = 0,
+        device: str = None,
+        device_id: str = None,
+        timestamp: datetime = None,
+        linked_abs_id: str = None,
+        linked_book_id: int = None,
+        filename: str = None,
+        source: str = None,
+        grimmory_id: str = None,
+        mtime: float = None,
+    ):
         self.document_hash = document_hash
         self.progress = progress
         self.percentage = percentage
@@ -68,7 +79,7 @@ class KosyncDocument(Base):
         self.linked_book_id = linked_book_id
         self.filename = filename
         self.source = source
-        self.booklore_id = booklore_id
+        self.grimmory_id = grimmory_id
         self.mtime = mtime
         self.first_seen = datetime.utcnow()
         self.last_updated = datetime.utcnow()
@@ -81,7 +92,8 @@ class Book(Base):
     """
     Book model storing book metadata and mapping information.
     """
-    __tablename__ = 'books'
+
+    __tablename__ = "books"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     abs_id = Column(String(255), unique=True, nullable=True, index=True)
@@ -90,10 +102,10 @@ class Book(Base):
     original_ebook_filename = Column(String(500))
     kosync_doc_id = Column(String(255), index=True)
     transcript_file = Column(String(500))
-    status = Column(String(50), default='not_started')
+    status = Column(String(50), default="not_started")
     activity_flag = Column(sa.Boolean, default=False)
     duration = Column(Float)  # Duration in seconds from AudioBookShelf
-    sync_mode = Column(String(20), default='audiobook')  # 'audiobook' or 'ebook_only'
+    sync_mode = Column(String(20), default="audiobook")  # 'audiobook' or 'ebook_only'
     storyteller_uuid = Column(String(36), index=True, nullable=True)
     abs_ebook_item_id = Column(String(255), nullable=True)
     ebook_item_id = Column(String(255), nullable=True)
@@ -102,34 +114,54 @@ class Book(Base):
     subtitle = Column(String(500), nullable=True)
 
     # Reading tracker fields
-    started_at = Column(String(10), nullable=True)    # YYYY-MM-DD
-    finished_at = Column(String(10), nullable=True)   # YYYY-MM-DD
-    rating = Column(Float, nullable=True)             # 0-5 (half-star increments)
+    started_at = Column(String(10), nullable=True)  # YYYY-MM-DD
+    finished_at = Column(String(10), nullable=True)  # YYYY-MM-DD
+    rating = Column(Float, nullable=True)  # 0-5 (half-star increments)
     read_count = Column(Integer, default=1)
 
     # Relationships (all use book_id FK on child side)
-    states = relationship("State", back_populates="book", cascade="all, delete-orphan",
-                          foreign_keys="State.book_id")
-    jobs = relationship("Job", back_populates="book", cascade="all, delete-orphan",
-                        foreign_keys="Job.book_id")
-    hardcover_details = relationship("HardcoverDetails", back_populates="book",
-                                     cascade="all, delete-orphan", uselist=False,
-                                     foreign_keys="HardcoverDetails.book_id")
-    alignment = relationship("BookAlignment", back_populates="book", uselist=False,
-                             cascade="all, delete-orphan",
-                             foreign_keys="BookAlignment.book_id")
-    reading_journals = relationship("ReadingJournal", back_populates="book",
-                                    cascade="all, delete-orphan",
-                                    foreign_keys="ReadingJournal.book_id")
+    states = relationship("State", back_populates="book", cascade="all, delete-orphan", foreign_keys="State.book_id")
+    jobs = relationship("Job", back_populates="book", cascade="all, delete-orphan", foreign_keys="Job.book_id")
+    hardcover_details = relationship(
+        "HardcoverDetails",
+        back_populates="book",
+        cascade="all, delete-orphan",
+        uselist=False,
+        foreign_keys="HardcoverDetails.book_id",
+    )
+    alignment = relationship(
+        "BookAlignment",
+        back_populates="book",
+        uselist=False,
+        cascade="all, delete-orphan",
+        foreign_keys="BookAlignment.book_id",
+    )
+    reading_journals = relationship(
+        "ReadingJournal", back_populates="book", cascade="all, delete-orphan", foreign_keys="ReadingJournal.book_id"
+    )
 
-    def __init__(self, abs_id: str = None, title: str = None, ebook_filename: str = None,
-                 original_ebook_filename: str = None,
-                 kosync_doc_id: str = None, transcript_file: str = None,
-                 status: str = 'not_started', duration: float = None, sync_mode: str = 'audiobook',
-                 storyteller_uuid: str = None, abs_ebook_item_id: str = None, ebook_item_id: str = None,
-                 custom_cover_url: str = None, author: str = None, subtitle: str = None,
-                 started_at: str = None, finished_at: str = None,
-                 rating: float = None, read_count: int = 1):
+    def __init__(
+        self,
+        abs_id: str = None,
+        title: str = None,
+        ebook_filename: str = None,
+        original_ebook_filename: str = None,
+        kosync_doc_id: str = None,
+        transcript_file: str = None,
+        status: str = "not_started",
+        duration: float = None,
+        sync_mode: str = "audiobook",
+        storyteller_uuid: str = None,
+        abs_ebook_item_id: str = None,
+        ebook_item_id: str = None,
+        custom_cover_url: str = None,
+        author: str = None,
+        subtitle: str = None,
+        started_at: str = None,
+        finished_at: str = None,
+        rating: float = None,
+        read_count: int = 1,
+    ):
         self.abs_id = abs_id
         self.title = title
         self.ebook_filename = ebook_filename
@@ -156,21 +188,29 @@ class Book(Base):
 
 class ReadingJournal(Base):
     """Journal entries for reading activity — auto-generated on status transitions and user notes."""
-    __tablename__ = 'reading_journals'
+
+    __tablename__ = "reading_journals"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     abs_id = Column(String(255), nullable=False)
-    book_id = Column(Integer, ForeignKey('books.id', ondelete='CASCADE'), nullable=False, index=True)
-    event = Column(String(20), nullable=False)   # started|progress|finished|note|paused|resumed|dnf
-    entry = Column(Text, nullable=True)           # freeform text note
-    percentage = Column(Float, nullable=True)     # progress at time of entry
+    book_id = Column(Integer, ForeignKey("books.id", ondelete="CASCADE"), nullable=False, index=True)
+    event = Column(String(20), nullable=False)  # started|progress|finished|note|paused|resumed|dnf
+    entry = Column(Text, nullable=True)  # freeform text note
+    percentage = Column(Float, nullable=True)  # progress at time of entry
     created_at = Column(DateTime, default=datetime.utcnow)
 
     book = relationship("Book", back_populates="reading_journals", foreign_keys=[book_id])
 
-    def __init__(self, abs_id: str = None, event: str = None, entry: str = None,
-                 percentage: float = None, created_at=None, book_id: int = None):
-        self.abs_id = abs_id or ''
+    def __init__(
+        self,
+        abs_id: str = None,
+        event: str = None,
+        entry: str = None,
+        percentage: float = None,
+        created_at=None,
+        book_id: int = None,
+    ):
+        self.abs_id = abs_id or ""
         self.book_id = book_id
         self.event = event
         self.entry = entry
@@ -183,7 +223,8 @@ class ReadingJournal(Base):
 
 class ReadingGoal(Base):
     """Yearly reading goal — simple book count target."""
-    __tablename__ = 'reading_goals'
+
+    __tablename__ = "reading_goals"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     year = Column(Integer, unique=True, nullable=False)
@@ -201,11 +242,11 @@ class HardcoverDetails(Base):
     """
     HardcoverDetails model storing hardcover book matching information.
     """
-    __tablename__ = 'hardcover_details'
+
+    __tablename__ = "hardcover_details"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    book_id = Column(Integer, ForeignKey('books.id', ondelete='CASCADE'), nullable=False,
-                     unique=True, index=True)
+    book_id = Column(Integer, ForeignKey("books.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
     abs_id = Column(String(255), nullable=True)
     hardcover_book_id = Column(String(255))
     hardcover_slug = Column(String(255))
@@ -226,14 +267,24 @@ class HardcoverDetails(Base):
     # Relationship
     book = relationship("Book", back_populates="hardcover_details", foreign_keys=[book_id])
 
-    def __init__(self, abs_id: str = None, hardcover_book_id: str = None, hardcover_slug: str = None,
-                 hardcover_edition_id: str = None,
-                 hardcover_pages: int = None, hardcover_audio_seconds: int = None,
-                 isbn: str = None, asin: str = None, matched_by: str = None,
-                 hardcover_cover_url: str = None,
-                 hardcover_user_book_id: int = None, hardcover_user_book_read_id: int = None,
-                 hardcover_status_id: int = None, hardcover_audio_edition_id: str = None,
-                 book_id: int = None):
+    def __init__(
+        self,
+        abs_id: str = None,
+        hardcover_book_id: str = None,
+        hardcover_slug: str = None,
+        hardcover_edition_id: str = None,
+        hardcover_pages: int = None,
+        hardcover_audio_seconds: int = None,
+        isbn: str = None,
+        asin: str = None,
+        matched_by: str = None,
+        hardcover_cover_url: str = None,
+        hardcover_user_book_id: int = None,
+        hardcover_user_book_read_id: int = None,
+        hardcover_status_id: int = None,
+        hardcover_audio_edition_id: str = None,
+        book_id: int = None,
+    ):
         self.abs_id = abs_id
         self.book_id = book_id
         self.hardcover_book_id = hardcover_book_id
@@ -256,24 +307,34 @@ class HardcoverDetails(Base):
 
 class HardcoverSyncLog(Base):
     """Log of Hardcover sync actions for debugging and visibility."""
-    __tablename__ = 'hardcover_sync_logs'
+
+    __tablename__ = "hardcover_sync_logs"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     abs_id = Column(String(255), nullable=True, index=True)
-    book_id = Column(Integer, ForeignKey('books.id', ondelete='SET NULL'), nullable=True, index=True)
+    book_id = Column(Integer, ForeignKey("books.id", ondelete="SET NULL"), nullable=True, index=True)
     book_title = Column(String(500), nullable=True)
-    direction = Column(String(4), nullable=False)   # 'push' or 'pull'
+    direction = Column(String(4), nullable=False)  # 'push' or 'pull'
     action = Column(String(30), nullable=False, index=True)
-    detail = Column(Text, nullable=True)             # JSON blob
+    detail = Column(Text, nullable=True)  # JSON blob
     success = Column(Boolean, default=True)
     error_message = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
     book = relationship("Book", backref="hardcover_sync_logs", foreign_keys=[book_id])
 
-    def __init__(self, abs_id=None, book_title=None, direction='push', action='',
-                 detail=None, success=True, error_message=None, created_at=None,
-                 book_id=None):
+    def __init__(
+        self,
+        abs_id=None,
+        book_title=None,
+        direction="push",
+        action="",
+        detail=None,
+        success=True,
+        error_message=None,
+        created_at=None,
+        book_id=None,
+    ):
         self.abs_id = abs_id
         self.book_id = book_id
         self.book_title = book_title
@@ -290,12 +351,13 @@ class HardcoverSyncLog(Base):
 
 class StorytellerSubmission(Base):
     """Tracks books submitted to Storyteller for narrated EPUB3 creation."""
-    __tablename__ = 'storyteller_submissions'
+
+    __tablename__ = "storyteller_submissions"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     abs_id = Column(String(255), nullable=False)
-    book_id = Column(Integer, ForeignKey('books.id', ondelete='CASCADE'), nullable=False, index=True)
-    status = Column(String(20), nullable=False, default='queued')  # queued, processing, ready, failed
+    book_id = Column(Integer, ForeignKey("books.id", ondelete="CASCADE"), nullable=False, index=True)
+    status = Column(String(20), nullable=False, default="queued")  # queued, processing, ready, failed
     submission_dir = Column(String(500), nullable=True)
     storyteller_uuid = Column(String(36), nullable=True)
     error = Column(Text, nullable=True)
@@ -304,9 +366,16 @@ class StorytellerSubmission(Base):
 
     book = relationship("Book", backref="storyteller_submissions", foreign_keys=[book_id])
 
-    def __init__(self, abs_id: str = None, status: str = 'queued', submission_dir: str = None,
-                 storyteller_uuid: str = None, error: str = None, book_id: int = None):
-        self.abs_id = abs_id or ''
+    def __init__(
+        self,
+        abs_id: str = None,
+        status: str = "queued",
+        submission_dir: str = None,
+        storyteller_uuid: str = None,
+        error: str = None,
+        book_id: int = None,
+    ):
+        self.abs_id = abs_id or ""
         self.book_id = book_id
         self.status = status
         self.submission_dir = submission_dir
@@ -322,11 +391,12 @@ class State(Base):
     """
     State model storing sync state per book and client.
     """
-    __tablename__ = 'states'
+
+    __tablename__ = "states"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     abs_id = Column(String(255), nullable=False)
-    book_id = Column(Integer, ForeignKey('books.id', ondelete='CASCADE'), nullable=False, index=True)
+    book_id = Column(Integer, ForeignKey("books.id", ondelete="CASCADE"), nullable=False, index=True)
     client_name = Column(String(50), nullable=False)
     last_updated = Column(Float)
     percentage = Column(Float)
@@ -337,10 +407,18 @@ class State(Base):
     # Relationship
     book = relationship("Book", back_populates="states", foreign_keys=[book_id])
 
-    def __init__(self, abs_id: str = None, client_name: str = None, last_updated: float = None,
-                 percentage: float = None, timestamp: float = None,
-                 xpath: str = None, cfi: str = None, book_id: int = None):
-        self.abs_id = abs_id or ''
+    def __init__(
+        self,
+        abs_id: str = None,
+        client_name: str = None,
+        last_updated: float = None,
+        percentage: float = None,
+        timestamp: float = None,
+        xpath: str = None,
+        cfi: str = None,
+        book_id: int = None,
+    ):
+        self.abs_id = abs_id or ""
         self.book_id = book_id
         self.client_name = client_name
         self.last_updated = last_updated
@@ -357,11 +435,12 @@ class Job(Base):
     """
     Job model storing job execution data for books.
     """
-    __tablename__ = 'jobs'
+
+    __tablename__ = "jobs"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     abs_id = Column(String(255), nullable=False)
-    book_id = Column(Integer, ForeignKey('books.id', ondelete='CASCADE'), nullable=False, index=True)
+    book_id = Column(Integer, ForeignKey("books.id", ondelete="CASCADE"), nullable=False, index=True)
     last_attempt = Column(Float)
     retry_count = Column(Integer, default=0)
     last_error = Column(Text)
@@ -370,10 +449,16 @@ class Job(Base):
     # Relationship
     book = relationship("Book", back_populates="jobs", foreign_keys=[book_id])
 
-    def __init__(self, abs_id: str = None, last_attempt: float = None,
-                 retry_count: int = 0, last_error: str = None, progress: float = 0.0,
-                 book_id: int = None):
-        self.abs_id = abs_id or ''
+    def __init__(
+        self,
+        abs_id: str = None,
+        last_attempt: float = None,
+        retry_count: int = 0,
+        last_error: str = None,
+        progress: float = 0.0,
+        book_id: int = None,
+    ):
+        self.abs_id = abs_id or ""
         self.book_id = book_id
         self.last_attempt = last_attempt
         self.retry_count = retry_count
@@ -388,21 +473,29 @@ class PendingSuggestion(Base):
     """
     Model for progress-triggered ebook suggestions.
     """
-    __tablename__ = 'pending_suggestions'
+
+    __tablename__ = "pending_suggestions"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    source = Column(String(50), default='abs')
+    source = Column(String(50), default="abs")
     source_id = Column(String(255))
     title = Column(String(500))
     author = Column(String(500))
     cover_url = Column(String(500))
     matches_json = Column(Text)
-    status = Column(String(20), default='pending')
+    status = Column(String(20), default="pending")
     created_at = Column(DateTime, default=datetime.utcnow)
 
-    def __init__(self, source_id: str, title: str, author: str = None,
-                 cover_url: str = None, matches_json: str = "[]", status: str = 'pending',
-                 source: str = 'abs'):
+    def __init__(
+        self,
+        source_id: str,
+        title: str,
+        author: str = None,
+        cover_url: str = None,
+        matches_json: str = "[]",
+        status: str = "pending",
+        source: str = "abs",
+    ):
         self.source = source
         self.source_id = source_id
         self.title = title
@@ -415,15 +508,11 @@ class PendingSuggestion(Base):
     @property
     def matches(self):
         import json
+
         try:
             return json.loads(self.matches_json) if self.matches_json else []
         except json.JSONDecodeError:
             return []
-
-    @property
-    def audiobook_count(self):
-        """Count only audiobook matches, excluding ebook entries."""
-        return sum(1 for m in self.matches if m.get('source') != 'ebook')
 
     def __repr__(self):
         return f"<PendingSuggestion(id={self.id}, title='{self.title}', status='{self.status}')>"
@@ -433,7 +522,8 @@ class Setting(Base):
     """
     Setting model storing application configuration.
     """
-    __tablename__ = 'settings'
+
+    __tablename__ = "settings"
 
     key = Column(String(255), primary_key=True)
     value = Column(Text, nullable=True)
@@ -451,11 +541,11 @@ class BookAlignment(Base):
     Model for storing the computed alignment map for a book.
     Replaces legacy JSON files in transcripts/ directory.
     """
-    __tablename__ = 'book_alignments'
+
+    __tablename__ = "book_alignments"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    book_id = Column(Integer, ForeignKey('books.id', ondelete='CASCADE'), nullable=False,
-                     unique=True, index=True)
+    book_id = Column(Integer, ForeignKey("books.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
     abs_id = Column(String(255), nullable=True)
     alignment_map_json = Column(Text, nullable=False)  # JSON-encoded list of dicts or optimized structure
     source = Column(String(20), nullable=True)  # storyteller, smil, whisper
@@ -464,8 +554,7 @@ class BookAlignment(Base):
     # Relationship
     book = relationship("Book", back_populates="alignment", foreign_keys=[book_id])
 
-    def __init__(self, abs_id: str = None, alignment_map_json: str = None, source: str = None,
-                 book_id: int = None):
+    def __init__(self, abs_id: str = None, alignment_map_json: str = None, source: str = None, book_id: int = None):
         self.abs_id = abs_id
         self.book_id = book_id
         self.alignment_map_json = alignment_map_json
@@ -474,7 +563,8 @@ class BookAlignment(Base):
 
 class BookfusionHighlight(Base):
     """BookFusion highlight synced via the Obsidian API."""
-    __tablename__ = 'bookfusion_highlights'
+
+    __tablename__ = "bookfusion_highlights"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     bookfusion_book_id = Column(String(255), nullable=False)
@@ -486,15 +576,22 @@ class BookfusionHighlight(Base):
     highlighted_at = Column(DateTime, nullable=True)
     quote_text = Column(Text, nullable=True)
     matched_abs_id = Column(String(255), nullable=True)
-    matched_book_id = Column(Integer, ForeignKey('books.id', ondelete='SET NULL'),
-                             nullable=True, index=True)
+    matched_book_id = Column(Integer, ForeignKey("books.id", ondelete="SET NULL"), nullable=True, index=True)
 
     matched_book = relationship("Book", foreign_keys=[matched_book_id])
 
-    def __init__(self, bookfusion_book_id: str, highlight_id: str, content: str,
-                 book_title: str = None, chapter_heading: str = None,
-                 highlighted_at=None, quote_text: str = None,
-                 matched_abs_id: str = None, matched_book_id: int = None):
+    def __init__(
+        self,
+        bookfusion_book_id: str,
+        highlight_id: str,
+        content: str,
+        book_title: str = None,
+        chapter_heading: str = None,
+        highlighted_at=None,
+        quote_text: str = None,
+        matched_abs_id: str = None,
+        matched_book_id: int = None,
+    ):
         self.bookfusion_book_id = bookfusion_book_id
         self.highlight_id = highlight_id
         self.content = content
@@ -512,7 +609,8 @@ class BookfusionHighlight(Base):
 
 class BookfusionBook(Base):
     """BookFusion library catalog entry synced via the Obsidian API."""
-    __tablename__ = 'bookfusion_books'
+
+    __tablename__ = "bookfusion_books"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     bookfusion_id = Column(String(255), unique=True, nullable=False)
@@ -522,21 +620,29 @@ class BookfusionBook(Base):
     frontmatter = Column(Text)
     tags = Column(String(500))
     series = Column(String(500))
-    highlight_count = Column(Integer, default=0, nullable=False, server_default='0')
+    highlight_count = Column(Integer, default=0, nullable=False, server_default="0")
     matched_abs_id = Column(String(255), nullable=True)
-    matched_book_id = Column(Integer, ForeignKey('books.id', ondelete='SET NULL'),
-                             nullable=True, index=True)
-    hidden = Column(Boolean, default=False, nullable=False, server_default='0')
+    matched_book_id = Column(Integer, ForeignKey("books.id", ondelete="SET NULL"), nullable=True, index=True)
+    hidden = Column(Boolean, default=False, nullable=False, server_default="0")
     fetched_at = Column(DateTime, default=datetime.utcnow)
     last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     matched_book = relationship("Book", foreign_keys=[matched_book_id])
 
-    def __init__(self, bookfusion_id: str, title: str = None, authors: str = None,
-                 filename: str = None, frontmatter: str = None, tags: str = None,
-                 series: str = None, highlight_count: int = 0,
-                 matched_abs_id: str = None, matched_book_id: int = None,
-                 hidden: bool = False):
+    def __init__(
+        self,
+        bookfusion_id: str,
+        title: str = None,
+        authors: str = None,
+        filename: str = None,
+        frontmatter: str = None,
+        tags: str = None,
+        series: str = None,
+        highlight_count: int = 0,
+        matched_abs_id: str = None,
+        matched_book_id: int = None,
+        hidden: bool = False,
+    ):
         self.bookfusion_id = bookfusion_id
         self.title = title
         self.authors = authors
@@ -558,7 +664,8 @@ class BookfusionBook(Base):
 class TbrItem(Base):
     """A book on the user's To Be Read list. Separate from the Book table —
     a TBR item may not be owned yet."""
-    __tablename__ = 'tbr_items'
+
+    __tablename__ = "tbr_items"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     title = Column(String(500), nullable=False)
@@ -573,7 +680,7 @@ class TbrItem(Base):
     hardcover_slug = Column(String(255), nullable=True)
 
     # Source tracking: 'manual', 'open_library', 'hardcover_search', 'hardcover_wtr', 'hardcover_list'
-    source = Column(String(50), default='manual')
+    source = Column(String(50), default="manual")
 
     # Open Library link (if sourced from OL search)
     ol_work_key = Column(String(255), nullable=True)
@@ -589,24 +696,38 @@ class TbrItem(Base):
     rating = Column(Float, nullable=True)
     ratings_count = Column(Integer, nullable=True)
     release_year = Column(Integer, nullable=True)
-    genres = Column(Text, nullable=True)          # JSON-encoded list of strings
+    genres = Column(Text, nullable=True)  # JSON-encoded list of strings
     subtitle = Column(String(500), nullable=True)
 
     # Link to owned Book (set when matched/acquired)
     book_abs_id = Column(String(255), nullable=True, index=True)
-    book_id = Column(Integer, ForeignKey('books.id', ondelete='SET NULL'), nullable=True, index=True)
+    book_id = Column(Integer, ForeignKey("books.id", ondelete="SET NULL"), nullable=True, index=True)
     book = relationship("Book", foreign_keys=[book_id])
 
-    def __init__(self, title: str, author: str = None, cover_url: str = None,
-                 notes: str = None, priority: int = 0, source: str = 'manual',
-                 hardcover_book_id: int = None, hardcover_slug: str = None,
-                 ol_work_key: str = None, isbn: str = None,
-                 hardcover_list_id: int = None, hardcover_list_name: str = None,
-                 book_abs_id: str = None, book_id: int = None,
-                 description: str = None, page_count: int = None,
-                 rating: float = None, ratings_count: int = None,
-                 release_year: int = None, genres: str = None,
-                 subtitle: str = None):
+    def __init__(
+        self,
+        title: str,
+        author: str = None,
+        cover_url: str = None,
+        notes: str = None,
+        priority: int = 0,
+        source: str = "manual",
+        hardcover_book_id: int = None,
+        hardcover_slug: str = None,
+        ol_work_key: str = None,
+        isbn: str = None,
+        hardcover_list_id: int = None,
+        hardcover_list_name: str = None,
+        book_abs_id: str = None,
+        book_id: int = None,
+        description: str = None,
+        page_count: int = None,
+        rating: float = None,
+        ratings_count: int = None,
+        release_year: int = None,
+        genres: str = None,
+        subtitle: str = None,
+    ):
         self.title = title
         self.author = author
         self.cover_url = cover_url
@@ -634,34 +755,40 @@ class TbrItem(Base):
         return f"<TbrItem(id={self.id}, title='{self.title}')>"
 
 
-class BookloreBook(Base):
+class GrimmoryBook(Base):
     """
-    Model for caching Booklore search results, replacing local JSON cache.
+    Model for caching Grimmory search results, replacing local JSON cache.
     """
-    __tablename__ = 'booklore_books'
+
+    __tablename__ = "grimmory_books"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    server_id = Column(String(50), nullable=False, default='default')
+    server_id = Column(String(50), nullable=False, default="default")
     filename = Column(String(500), nullable=False)
     title = Column(String(500))
     authors = Column(String(500))
-    raw_metadata = Column(Text)  # JSON blob of full booklore response
+    raw_metadata = Column(Text)
     last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    __table_args__ = (
-        UniqueConstraint('server_id', 'filename', name='uq_booklore_server_filename'),
-    )
+    __table_args__ = (UniqueConstraint("server_id", "filename", name="uq_grimmory_server_filename"),)
 
     @property
     def raw_metadata_dict(self):
         import json
+
         try:
             return json.loads(self.raw_metadata) if self.raw_metadata else {}
         except json.JSONDecodeError:
             return {}
 
-    def __init__(self, filename: str, title: str | None = None, authors: str | None = None,
-                 raw_metadata: str | None = None, server_id: str = 'default'):
+    def __init__(
+        self,
+        filename: str,
+        title: str | None = None,
+        authors: str | None = None,
+        raw_metadata: str | None = None,
+        server_id: str = "default",
+    ):
         self.server_id = server_id
         self.filename = filename
         self.title = title
@@ -677,16 +804,16 @@ class DatabaseManager:
 
     def __init__(self, db_path: str):
         import os
+
         self.db_path = os.path.abspath(db_path)
         # Increase timeout to reduce lock errors, enable WAL mode for concurrency, allow multi-thread access
         # Using 4 slashes guarantees an absolute path in SQLAlchemy
         self.engine = create_engine(
-            f'sqlite:///{self.db_path}',
-            echo=False,
-            connect_args={'timeout': 30, 'check_same_thread': False}
+            f"sqlite:///{self.db_path}", echo=False, connect_args={"timeout": 30, "check_same_thread": False}
         )
 
         from sqlalchemy import event
+
         @event.listens_for(self.engine, "connect")
         def set_sqlite_pragma(dbapi_connection, connection_record):
             cursor = dbapi_connection.cursor()

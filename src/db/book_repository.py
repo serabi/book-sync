@@ -18,7 +18,6 @@ logger = logging.getLogger(__name__)
 
 
 class BookRepository(BaseRepository):
-
     # ── Book CRUD ──
 
     def get_book_by_abs_id(self, abs_id):
@@ -57,6 +56,9 @@ class BookRepository(BaseRepository):
     def get_book_by_kosync_id(self, kosync_id):
         return self._get_one(Book, Book.kosync_doc_id == kosync_id)
 
+    def get_book_by_storyteller_uuid(self, uuid):
+        return self._get_one(Book, Book.storyteller_uuid == uuid)
+
     def get_all_books(self):
         return self._get_all(Book)
 
@@ -68,10 +70,7 @@ class BookRepository(BaseRepository):
         if not query or not query.strip():
             return []
         with self.get_session() as session:
-            results = (session.query(Book)
-                       .filter(Book.title.ilike(f'%{query}%'))
-                       .limit(limit)
-                       .all())
+            results = session.query(Book).filter(Book.title.ilike(f"%{query}%")).limit(limit).all()
             for r in results:
                 session.expunge(r)
             return results
@@ -79,19 +78,34 @@ class BookRepository(BaseRepository):
     def get_book_by_ebook_filename(self, filename):
         """Find a book by its ebook filename (current or original)."""
         from sqlalchemy import or_
-        return self._get_one(
-            Book,
-            or_(Book.ebook_filename == filename, Book.original_ebook_filename == filename)
-        )
+
+        return self._get_one(Book, or_(Book.ebook_filename == filename, Book.original_ebook_filename == filename))
 
     def create_book(self, book):
         return self._save_new(book)
 
     def save_book(self, book):
-        update_attrs = ['title', 'ebook_filename', 'original_ebook_filename', 'kosync_doc_id',
-                        'transcript_file', 'status', 'duration', 'sync_mode', 'storyteller_uuid',
-                        'abs_ebook_item_id', 'ebook_item_id', 'activity_flag', 'custom_cover_url',
-                        'started_at', 'finished_at', 'rating', 'read_count']
+        update_attrs = [
+            "title",
+            "author",
+            "subtitle",
+            "ebook_filename",
+            "original_ebook_filename",
+            "kosync_doc_id",
+            "transcript_file",
+            "status",
+            "duration",
+            "sync_mode",
+            "storyteller_uuid",
+            "abs_ebook_item_id",
+            "ebook_item_id",
+            "activity_flag",
+            "custom_cover_url",
+            "started_at",
+            "finished_at",
+            "rating",
+            "read_count",
+        ]
         if book.id:
             return self._upsert(Book, [Book.id == book.id], book, update_attrs)
         elif book.abs_id:
@@ -101,9 +115,9 @@ class BookRepository(BaseRepository):
 
     def delete_book(self, book_id):
         with self.get_session() as session:
-            session.query(KosyncDocument).filter(
-                KosyncDocument.linked_book_id == book_id
-            ).update({KosyncDocument.linked_abs_id: None, KosyncDocument.linked_book_id: None})
+            session.query(KosyncDocument).filter(KosyncDocument.linked_book_id == book_id).update(
+                {KosyncDocument.linked_abs_id: None, KosyncDocument.linked_book_id: None}
+            )
             book = session.query(Book).filter(Book.id == book_id).first()
             if book:
                 session.delete(book)
@@ -125,9 +139,7 @@ class BookRepository(BaseRepository):
 
                 # Delete states for the new abs_id that would conflict
                 incoming_clients = {
-                    r[0] for r in session.query(State.client_name).filter(
-                        State.book_id == book.id
-                    ).all()
+                    r[0] for r in session.query(State.client_name).filter(State.book_id == book.id).all()
                 }
                 target_book = session.query(Book).filter(Book.abs_id == new_abs_id).first()
                 if target_book:
@@ -145,17 +157,21 @@ class BookRepository(BaseRepository):
 
                 # Update denormalized abs_id on child rows
                 session.query(State).filter(State.book_id == book.id).update(
-                    {State.abs_id: new_abs_id}, synchronize_session=False)
+                    {State.abs_id: new_abs_id}, synchronize_session=False
+                )
                 session.query(Job).filter(Job.book_id == book.id).update(
-                    {Job.abs_id: new_abs_id}, synchronize_session=False)
+                    {Job.abs_id: new_abs_id}, synchronize_session=False
+                )
                 session.query(ReadingJournal).filter(ReadingJournal.book_id == book.id).update(
-                    {ReadingJournal.abs_id: new_abs_id}, synchronize_session=False)
+                    {ReadingJournal.abs_id: new_abs_id}, synchronize_session=False
+                )
                 session.query(StorytellerSubmission).filter(StorytellerSubmission.book_id == book.id).update(
-                    {StorytellerSubmission.abs_id: new_abs_id}, synchronize_session=False)
+                    {StorytellerSubmission.abs_id: new_abs_id}, synchronize_session=False
+                )
 
-                session.query(KosyncDocument).filter(
-                    KosyncDocument.linked_abs_id == old_abs_id
-                ).update({KosyncDocument.linked_abs_id: new_abs_id}, synchronize_session=False)
+                session.query(KosyncDocument).filter(KosyncDocument.linked_abs_id == old_abs_id).update(
+                    {KosyncDocument.linked_abs_id: new_abs_id}, synchronize_session=False
+                )
 
                 logger.info(f"Migrated book identity from '{old_abs_id}' to '{new_abs_id}'")
             except Exception as e:
@@ -186,7 +202,7 @@ class BookRepository(BaseRepository):
             State,
             lookup,
             state,
-            ['last_updated', 'percentage', 'timestamp', 'xpath', 'cfi', 'abs_id', 'book_id'],
+            ["last_updated", "percentage", "timestamp", "xpath", "cfi", "abs_id", "book_id"],
         )
 
     def delete_states_for_book(self, book_id):
@@ -199,9 +215,7 @@ class BookRepository(BaseRepository):
 
     def get_latest_job(self, book_id):
         with self.get_session() as session:
-            job = session.query(Job).filter(
-                Job.book_id == book_id
-            ).order_by(Job.last_attempt.desc()).first()
+            job = session.query(Job).filter(Job.book_id == book_id).order_by(Job.last_attempt.desc()).first()
             if job:
                 session.expunge(job)
             return job
@@ -228,7 +242,7 @@ class BookRepository(BaseRepository):
                 .join(
                     latest,
                     (Job.book_id == latest.c.book_id)
-                    & (Job.last_attempt == latest.c.max_ts),
+                    & (func.coalesce(Job.last_attempt, "1970-01-01") == func.coalesce(latest.c.max_ts, "1970-01-01")),
                 )
                 .all()
             )
@@ -249,9 +263,7 @@ class BookRepository(BaseRepository):
 
     def update_latest_job(self, book_id, **kwargs):
         with self.get_session() as session:
-            job = session.query(Job).filter(
-                Job.book_id == book_id
-            ).order_by(Job.last_attempt.desc()).first()
+            job = session.query(Job).filter(Job.book_id == book_id).order_by(Job.last_attempt.desc()).first()
             if job:
                 for key, value in kwargs.items():
                     if hasattr(job, key):
@@ -274,22 +286,31 @@ class BookRepository(BaseRepository):
 
     def get_books_with_recent_activity(self, limit=10):
         with self.get_session() as session:
-            latest = session.query(
-                State.book_id,
-                func.max(State.last_updated).label('max_updated')
-            ).group_by(State.book_id).subquery()
-            books = session.query(Book).join(
-                latest, Book.id == latest.c.book_id
-            ).order_by(latest.c.max_updated.desc()).limit(limit).all()
+            latest = (
+                session.query(State.book_id, func.max(State.last_updated).label("max_updated"))
+                .group_by(State.book_id)
+                .subquery()
+            )
+            books = (
+                session.query(Book)
+                .join(latest, Book.id == latest.c.book_id)
+                .order_by(latest.c.max_updated.desc())
+                .limit(limit)
+                .all()
+            )
             for book in books:
                 session.expunge(book)
             return books
 
     def get_failed_jobs(self, limit=20):
         with self.get_session() as session:
-            jobs = session.query(Job).filter(
-                Job.last_error.isnot(None)
-            ).order_by(Job.last_attempt.desc()).limit(limit).all()
+            jobs = (
+                session.query(Job)
+                .filter(Job.last_error.isnot(None))
+                .order_by(Job.last_attempt.desc())
+                .limit(limit)
+                .all()
+            )
             for job in jobs:
                 session.expunge(job)
             return jobs
@@ -297,16 +318,14 @@ class BookRepository(BaseRepository):
     def get_statistics(self):
         with self.get_session() as session:
             stats = {
-                'total_books': session.query(Book).count(),
-                'active_books': session.query(Book).filter(Book.status == 'active').count(),
-                'paused_books': session.query(Book).filter(Book.status == 'paused').count(),
-                'dnf_books': session.query(Book).filter(Book.status == 'dnf').count(),
-                'total_states': session.query(State).count(),
-                'total_jobs': session.query(Job).count(),
-                'failed_jobs': session.query(Job).filter(Job.last_error.isnot(None)).count(),
+                "total_books": session.query(Book).count(),
+                "active_books": session.query(Book).filter(Book.status == "active").count(),
+                "paused_books": session.query(Book).filter(Book.status == "paused").count(),
+                "dnf_books": session.query(Book).filter(Book.status == "dnf").count(),
+                "total_states": session.query(State).count(),
+                "total_jobs": session.query(Job).count(),
+                "failed_jobs": session.query(Job).filter(Job.last_error.isnot(None)).count(),
             }
-            client_counts = session.query(
-                State.client_name, func.count(State.id)
-            ).group_by(State.client_name).all()
-            stats['states_by_client'] = {client: count for client, count in client_counts}
+            client_counts = session.query(State.client_name, func.count(State.id)).group_by(State.client_name).all()
+            stats["states_by_client"] = {client: count for client, count in client_counts}
             return stats

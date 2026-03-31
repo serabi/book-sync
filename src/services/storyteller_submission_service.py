@@ -133,7 +133,9 @@ class StorytellerSubmissionService:
             if existing:
                 submission = existing
                 self.database_service.update_storyteller_submission_status(
-                    existing.id, "queued", submission_dir=dir_name,
+                    existing.id,
+                    "queued",
+                    submission_dir=dir_name,
                 )
             else:
                 submission = StorytellerSubmission(
@@ -217,7 +219,9 @@ class StorytellerSubmissionService:
                     self._update_submission_status(submission, "ready")
                     return "ready"
                 else:
-                    logger.debug(f"Storyteller UUID check: no transcriptions yet for uuid={submission.storyteller_uuid[:8]}...")
+                    logger.debug(
+                        f"Storyteller UUID check: no transcriptions yet for uuid={submission.storyteller_uuid[:8]}..."
+                    )
             except Exception as e:
                 logger.warning(f"Storyteller UUID transcription check failed for abs_id={abs_id}: {e}")
 
@@ -238,7 +242,8 @@ class StorytellerSubmissionService:
                     # Fuzzy match: Storyteller may have added a deduplication suffix
                     escaped = glob_module.escape(submission.submission_dir)
                     candidates = [
-                        p for p in assets_root.glob(f"{escaped}*/transcriptions")
+                        p
+                        for p in assets_root.glob(f"{escaped}*/transcriptions")
                         if p.is_dir() and assets_root.resolve() in p.resolve().parents
                     ]
                     for candidate in candidates:
@@ -265,8 +270,7 @@ class StorytellerSubmissionService:
                 try:
                     results = self.storyteller_client.search_books(book.title)
                     # Only accept a single exact title match to avoid misidentification
-                    exact = [r for r in results
-                             if r.get("title", "").strip().lower() == book.title.strip().lower()]
+                    exact = [r for r in results if r.get("title", "").strip().lower() == book.title.strip().lower()]
                     if len(exact) == 1:
                         storyteller_uuid = exact[0].get("uuid")
                         submission.storyteller_uuid = storyteller_uuid
@@ -276,7 +280,9 @@ class StorytellerSubmissionService:
                         # in case Storyteller has the book but never started alignment
                         if storyteller_uuid:
                             self.storyteller_client.trigger_processing(storyteller_uuid)
-                            logger.info(f"Storyteller: discovered UUID {storyteller_uuid[:8]}... for abs_id={abs_id}, triggered processing")
+                            logger.info(
+                                f"Storyteller: discovered UUID {storyteller_uuid[:8]}... for abs_id={abs_id}, triggered processing"
+                            )
 
                         return "processing"
                     else:
@@ -364,8 +370,7 @@ class StorytellerSubmissionService:
 
         if not storyteller_uuid:
             logger.warning(
-                f"Storyteller did not detect '{title}' within {timeout_secs}s — "
-                "will retry on next status check"
+                f"Storyteller did not detect '{title}' within {timeout_secs}s — will retry on next status check"
             )
             return None
 
@@ -375,7 +380,9 @@ class StorytellerSubmissionService:
             self._update_submission_status(submission, "processing")
             # Update the submission with the discovered UUID
             self.database_service.update_storyteller_submission_status(
-                submission.id, "processing", datetime.now(UTC),
+                submission.id,
+                "processing",
+                datetime.now(UTC),
                 storyteller_uuid=storyteller_uuid,
             )
             logger.info(f"Storyteller processing triggered for '{title}' (uuid: {storyteller_uuid[:8]}...)")

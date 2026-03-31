@@ -602,3 +602,144 @@
   font-size: 0.72rem;
   font-weight: 600;
 }
+
+/* Suggestion Banner */
+.suggestion-banner {
+  border: 1px solid var(--color-primary-border);
+  border-radius: var(--radius-lg);
+  padding: 16px 20px;
+  background: var(--color-primary-light);
+}
+
+.suggestion-banner .section-header {
+  margin-bottom: 4px;
+}
+
+.suggestion-banner-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  background: var(--color-primary);
+  color: #fff;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.suggestion-banner-help {
+  color: var(--color-text-muted);
+  font-size: 0.85rem;
+  margin: 0 0 12px;
+}
+
+.suggestion-banner-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.suggestion-banner-card {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  background: var(--color-bg-raised);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius);
+  transition: border-color var(--transition);
+}
+
+.suggestion-banner-card:hover {
+  border-color: var(--color-primary-border);
+}
+
+.suggestion-banner-cover {
+  width: 48px;
+  height: 68px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+  background: var(--color-surface);
+}
+
+.suggestion-banner-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.suggestion-banner-title {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.suggestion-banner-author {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.suggestion-banner-match {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+}
+
+.suggestion-banner-match-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+}
+
+.suggestion-banner-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.suggestion-banner .chip--confidence-high {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  background: var(--color-confidence-high-bg);
+  color: var(--color-confidence-high);
+}
+
+.suggestion-banner .chip--confidence-medium {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  background: var(--color-confidence-medium-bg);
+  color: var(--color-confidence-medium);
+}
+
+.suggestion-banner-card.removing {
+  opacity: 0;
+  transform: scale(0.95);
+  transition: opacity 0.2s, transform 0.2s;
+}
+
+@media (max-width: 640px) {
+  .suggestion-banner-grid {
+    grid-template-columns: 1fr;
+  }
+}

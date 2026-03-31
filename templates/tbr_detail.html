@@ -129,7 +129,7 @@
         {% if item.description %}
         <section class="r-detail-section">
             <h3 class="r-section-title">About</h3>
-            <div class="tbr-description">{{ item.description }}</div>
+            <div class="tbr-description">{{ item.description | sanitize_html }}</div>
         </section>
         {% endif %}
 

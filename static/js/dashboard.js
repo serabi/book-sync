@@ -1,6 +1,8 @@
 /* PageKeeper — Dashboard JS
    Extracted from index.html inline scripts. */
 
+var refreshPaused = false;
+
 function initDashboard() {
     const processingGrid = document.getElementById('processing-grid');
     const currentlyReadingGrid = document.getElementById('currently-reading-grid');
@@ -159,7 +161,9 @@ function initDashboard() {
             return direction === 'asc' ? comparison : -comparison;
         });
 
-        sortedCards.forEach(card => grid.appendChild(card));
+        var fragment = document.createDocumentFragment();
+        sortedCards.forEach(function(card) { fragment.appendChild(card); });
+        grid.appendChild(fragment);
     }
 
     function applySorting(sortBy) {
@@ -223,8 +227,6 @@ function initDashboard() {
     if (dashboardSearch) {
         dashboardSearch.addEventListener('input', filterBooks);
     }
-
-    let refreshPaused = false;
 
     function refreshDashboard() {
         if (refreshPaused) {
@@ -850,3 +852,41 @@ document.addEventListener('keydown', function(e) {
         closeConfirmModal();
     }
 });
+
+/* Suggestion banner dismiss */
+function dismissSuggestion(sourceId, source, btn) {
+    if (btn) btn.disabled = true;
+    fetch('/api/suggestions/' + encodeURIComponent(sourceId) + '/hide?source=' + encodeURIComponent(source || 'abs'), { method: 'POST' })
+        .then(function(r) {
+            if (!r.ok) throw new Error('Failed to dismiss');
+            var card = document.getElementById('suggestion-card-' + sourceId);
+            if (card) {
+                card.classList.add('removing');
+                setTimeout(function() {
+                    card.remove();
+                    var banner = document.getElementById('suggestion-banner');
+                    var remaining = banner ? banner.querySelectorAll('.suggestion-banner-card') : [];
+                    if (remaining.length === 0 && banner) {
+                        banner.style.display = 'none';
+                    }
+                    var countEl = document.getElementById('suggestion-banner-count');
+                    if (countEl && remaining.length > 0) {
+                        countEl.textContent = remaining.length;
+                    }
+                    // Update navbar badge
+                    var badge = document.querySelector('.nav-badge');
+                    if (badge) {
+                        var current = parseInt(badge.textContent, 10) || 0;
+                        if (current > 1) {
+                            badge.textContent = current - 1;
+                        } else {
+                            badge.style.display = 'none';
+                        }
+                    }
+                }, 200);
+            }
+        })
+        .catch(function() {
+            if (btn) btn.disabled = false;
+        });
+}

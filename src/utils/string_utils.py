@@ -1,4 +1,3 @@
-
 import difflib
 import re
 
@@ -15,7 +14,7 @@ def clean_book_title(title: str) -> str:
         return ""
 
     # Remove text in parentheses (often series info or edition info)
-    title = re.sub(r'\s*\(.*?\)', '', title)
+    title = re.sub(r"\s*\(.*?\)", "", title)
 
     # Remove text after a colon (often subtitles) - debatable, but trying for stickiness to main title
     # For matching purposes, sometimes the subtitle is noise.
@@ -23,10 +22,11 @@ def clean_book_title(title: str) -> str:
     # But usually Hardcover search is better with fewer words.
     # Let's strip subtitles for now as a "clean" strategy,
     # but the caller might want to try both raw and clean.
-    if ':' in title:
-        title = title.split(':')[0]
+    if ":" in title:
+        title = title.split(":")[0]
 
     return title.strip()
+
 
 def calculate_similarity(a: str, b: str) -> float:
     """
@@ -40,6 +40,7 @@ def calculate_similarity(a: str, b: str) -> float:
     b = b.lower().strip()
 
     return difflib.SequenceMatcher(None, a, b).ratio()
+
 
 def fuzzy_match_title(query: str, target: str, threshold: float = 0.6) -> bool:
     """
@@ -59,7 +60,7 @@ def fuzzy_match_title(query: str, target: str, threshold: float = 0.6) -> bool:
 
     # Normalize: lowercase and remove punctuation except spaces
     def normalize(s):
-        return re.sub(r'[^\w\s]', '', s.lower())
+        return re.sub(r"[^\w\s]", "", s.lower())
 
     query_norm = normalize(query)
     target_norm = normalize(target)
@@ -82,7 +83,7 @@ def fuzzy_match_title(query: str, target: str, threshold: float = 0.6) -> bool:
     # Third check: Reject if target has extra words that look like sequel numbers
     # (e.g., reject "Dragons Justice 2" when searching for "Dragons Justice")
     extra_words = [w for w in target_words if w not in query_words]
-    sequel_indicators = {'2', '3', '4', '5', '6', '7', '8', '9', 'ii', 'iii', 'iv', 'two', 'three', 'four', 'five'}
+    sequel_indicators = {"2", "3", "4", "5", "6", "7", "8", "9", "ii", "iii", "iv", "two", "three", "four", "five"}
     has_sequel_number = any(word in sequel_indicators for word in extra_words)
 
     if has_sequel_number:

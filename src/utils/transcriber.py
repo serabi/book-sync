@@ -31,6 +31,7 @@ from src.utils.transcription_providers import get_transcription_provider
 
 logger = logging.getLogger(__name__)
 
+
 class AudioTranscriber:
     def __init__(self, data_dir, smil_extractor, polisher: Polisher):
         self.data_dir = data_dir
@@ -47,7 +48,9 @@ class AudioTranscriber:
         self._cache_capacity = 3
 
         # Unified threshold logic
-        self.match_threshold = int(os.environ.get("TRANSCRIPT_MATCH_THRESHOLD", os.environ.get("FUZZY_MATCH_THRESHOLD", 80)))
+        self.match_threshold = int(
+            os.environ.get("TRANSCRIPT_MATCH_THRESHOLD", os.environ.get("FUZZY_MATCH_THRESHOLD", 80))
+        )
 
         self.smil_extractor = smil_extractor
         self.polisher = polisher
@@ -68,22 +71,23 @@ class AudioTranscriber:
         device = self.whisper_device
         compute_type = self.whisper_compute_type
 
-        if device == 'auto':
+        if device == "auto":
             try:
                 import torch
+
                 if torch.cuda.is_available():
-                    device = 'cuda'
+                    device = "cuda"
                     logger.info(f"CUDA available: {torch.cuda.get_device_name(0)}")
                 else:
-                    device = 'cpu'
+                    device = "cpu"
                     logger.info("CUDA not available, using CPU")
             except ImportError:
-                device = 'cpu'
+                device = "cpu"
                 logger.info("PyTorch not installed, using CPU")
 
-        if compute_type == 'auto':
+        if compute_type == "auto":
             # float16 for GPU, int8 for CPU (optimal defaults)
-            compute_type = 'float16' if device == 'cuda' else 'int8'
+            compute_type = "float16" if device == "cuda" else "int8"
 
         logger.info(f"Whisper config: device={device}, compute_type={compute_type}, model={self.model_size}")
         return device, compute_type
@@ -100,16 +104,16 @@ class AudioTranscriber:
             (is_valid, score) - score is overlap_ratio (if failed overlap) or match_percentage (if passed overlap)
         """
         if not smil_segments or len(smil_segments) < 2:
-             return True, 1.0
+            return True, 1.0
 
         # 1. Overlap Check (Basic) - Allow up to 15% overlap noise
         overlap_count = 0
         for i in range(1, len(smil_segments)):
-            if smil_segments[i]['start'] < smil_segments[i-1]['end']:
+            if smil_segments[i]["start"] < smil_segments[i - 1]["end"]:
                 overlap_count += 1
 
         overlap_ratio = overlap_count / len(smil_segments)
-        if overlap_ratio > 0.15: # 15% threshold
+        if overlap_ratio > 0.15:  # 15% threshold
             logger.warning(f"SMIL contains explicit overlaps ({overlap_ratio:.1%}) — Might be invalid")
             # Don't fail just on overlap if text match is perfect (e.g. concurrent audio layers in SMIL)
             # But usually high overlap means bad SMIL.
@@ -119,12 +123,12 @@ class AudioTranscriber:
         # This prevents accepting "Page 1", "Page 2" type SMILs that don't match audio content.
 
         # Construct full SMIL text
-        smil_text_raw = " ".join([s['text'] for s in smil_segments])
+        smil_text_raw = " ".join([s["text"] for s in smil_segments])
         smil_norm = self.polisher.normalize(smil_text_raw)
 
         # Normalize a chunk of ebook text (first 50k chars to save time, or fully if small)
         # Ideally, we used the full extracted text passed in.
-        ebook_norm = self.polisher.normalize(ebook_text[:max(len(ebook_text), len(smil_text_raw)*2)])
+        ebook_norm = self.polisher.normalize(ebook_text[: max(len(ebook_text), len(smil_text_raw) * 2)])
 
         if not smil_norm:
             return False, 0.0
@@ -135,7 +139,8 @@ class AudioTranscriber:
         ebook_tokens = set(ebook_norm.split())
 
         common = smil_tokens.intersection(ebook_tokens)
-        if not smil_tokens: return False, 0.0
+        if not smil_tokens:
+            return False, 0.0
 
         match_ratio = len(common) / len(smil_tokens)
 
@@ -143,18 +148,23 @@ class AudioTranscriber:
         # Must have significant text overlap (proving it aligns to THIS book)
         # Threshold is configurable via SMIL_VALIDATION_THRESHOLD (default 60%)
         smil_threshold = float(os.getenv("SMIL_VALIDATION_THRESHOLD", "60")) / 100.0
-        logger.info(f"   SMIL Validation: Overlap={overlap_ratio:.1%}, Token Match={match_ratio:.1%} (threshold={smil_threshold:.0%})")
+        logger.info(
+            f"   SMIL Validation: Overlap={overlap_ratio:.1%}, Token Match={match_ratio:.1%} (threshold={smil_threshold:.0%})"
+        )
         if match_ratio < smil_threshold:
-             return False, match_ratio
+            return False, match_ratio
 
         return True, match_ratio
 
-    def transcribe_from_smil(self, abs_id: str, epub_path: Path, abs_chapters: list, full_book_text: str = None, progress_callback=None) -> list | None:
+    def transcribe_from_smil(
+        self, abs_id: str, epub_path: Path, abs_chapters: list, full_book_text: str = None, progress_callback=None
+    ) -> list | None:
         """
         Attempts to extract a transcript directly from the EPUB's SMIL overlay data.
         Returns RAW SEGMENTS (list of dicts) if successful, None otherwise.
         """
-        if progress_callback: progress_callback(0.0)
+        if progress_callback:
+            progress_callback(0.0)
 
         if not self.smil_extractor.has_media_overlays(str(epub_path)):
             return None
@@ -169,14 +179,16 @@ class AudioTranscriber:
             # [FAILSAFE] Check Duration / Coverage
             # If the SMIL transcript is significantly shorter than the audiobook, reject it.
             if abs_chapters and len(abs_chapters) > 0:
-                expected_duration = float(abs_chapters[-1].get('end', 0))
+                expected_duration = float(abs_chapters[-1].get("end", 0))
                 if expected_duration > 0:
-                    transcript_duration = transcript[-1]['end']
+                    transcript_duration = transcript[-1]["end"]
                     coverage = transcript_duration / expected_duration
 
                     # Reject if coverage is less than 85%
                     if coverage < 0.85:
-                        logger.warning(f"SMIL REJECTED: Coverage too low ({coverage:.1%}). Expected {expected_duration:.0f}s, got {transcript_duration:.0f}s — Falling back to transcriber")
+                        logger.warning(
+                            f"SMIL REJECTED: Coverage too low ({coverage:.1%}). Expected {expected_duration:.0f}s, got {transcript_duration:.0f}s — Falling back to transcriber"
+                        )
                         return None
 
             # Validate transcript against BOOK TEXT
@@ -194,7 +206,7 @@ class AudioTranscriber:
                 logger.warning("Skipping detailed SMIL validation (no ebook text provided)")
 
             logger.info(f"SMIL Extraction complete: {len(transcript)} segments")
-            return transcript # Return raw data!
+            return transcript  # Return raw data!
         except Exception as e:
             logger.error(f"Failed to extract SMIL transcript: {e}")
             return None
@@ -207,7 +219,7 @@ class AudioTranscriber:
             return self._transcript_cache[path_str]
 
         try:
-            with open(path, encoding='utf-8') as f:
+            with open(path, encoding="utf-8") as f:
                 data = json.load(f)
             self._transcript_cache[path_str] = data
             self._transcript_cache.move_to_end(path_str)
@@ -222,13 +234,19 @@ class AudioTranscriber:
         """Aggressive text cleaner to boost fuzzy match scores."""
         if not text:
             return ""
-        return re.sub(r'\s+', ' ', text).strip()
+        return re.sub(r"\s+", " ", text).strip()
 
     def get_audio_duration(self, file_path):
         """Get duration of audio file using ffprobe."""
         cmd = [
-            'ffprobe', '-v', 'error', '-show_entries', 'format=duration',
-            '-of', 'default=noprint_wrappers=1:nokey=1', str(file_path)
+            "ffprobe",
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
+            str(file_path),
         ]
         try:
             result = subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=30)
@@ -250,23 +268,30 @@ class AudioTranscriber:
         Returns:
             Path to the normalized WAV file, or None on failure
         """
-        output_path = input_path.with_suffix('.wav')
+        output_path = input_path.with_suffix(".wav")
 
         # If input is already a WAV, still convert to ensure proper format
-        if input_path.suffix.lower() == '.wav':
+        if input_path.suffix.lower() == ".wav":
             output_path = input_path.with_name(f"{input_path.stem}_normalized.wav")
 
         logger.info(f"   Normalizing: {input_path.name} -> WAV")
 
         cmd = [
-            'ffmpeg', '-y',
-            '-i', str(input_path),
-            '-ar', '16000',      # 16kHz sample rate (optimal for Whisper)
-            '-ac', '1',          # Mono
-            '-c:a', 'pcm_s16le', # 16-bit PCM (most compatible)
-            '-f', 'wav',         # Force WAV container
-            '-loglevel', 'error',
-            str(output_path)
+            "ffmpeg",
+            "-y",
+            "-i",
+            str(input_path),
+            "-ar",
+            "16000",  # 16kHz sample rate (optimal for Whisper)
+            "-ac",
+            "1",  # Mono
+            "-c:a",
+            "pcm_s16le",  # 16-bit PCM (most compatible)
+            "-f",
+            "wav",  # Force WAV container
+            "-loglevel",
+            "error",
+            str(output_path),
         ]
 
         try:
@@ -289,35 +314,44 @@ class AudioTranscriber:
         if duration <= target_max_duration_sec:
             return [file_path]
 
-        logger.warning(f"File '{file_path.name}' is {duration/60:.1f}m — Splitting")
+        logger.warning(f"File '{file_path.name}' is {duration / 60:.1f}m — Splitting")
         num_parts = math.ceil(duration / target_max_duration_sec)
         segment_duration = duration / num_parts
         new_files = []
-        base_name = file_path.stem.replace('_normalized', '')  # Clean up name
+        base_name = file_path.stem.replace("_normalized", "")  # Clean up name
 
         for i in range(num_parts):
             start_time = i * segment_duration
             # Output as WAV for consistency
-            new_filename = f"{base_name}_split_{i+1:03d}.wav"
+            new_filename = f"{base_name}_split_{i + 1:03d}.wav"
             new_path = file_path.parent / new_filename
             cmd = [
-                'ffmpeg', '-y',
-                '-i', str(file_path),
-                '-ss', str(start_time),
-                '-t', str(segment_duration),
-                '-ar', '16000',      # 16kHz
-                '-ac', '1',          # Mono
-                '-c:a', 'pcm_s16le', # PCM WAV
-                '-f', 'wav',
-                '-loglevel', 'error',
-                str(new_path)
+                "ffmpeg",
+                "-y",
+                "-i",
+                str(file_path),
+                "-ss",
+                str(start_time),
+                "-t",
+                str(segment_duration),
+                "-ar",
+                "16000",  # 16kHz
+                "-ac",
+                "1",  # Mono
+                "-c:a",
+                "pcm_s16le",  # PCM WAV
+                "-f",
+                "wav",
+                "-loglevel",
+                "error",
+                str(new_path),
             ]
             try:
                 subprocess.run(cmd, check=True)
                 new_files.append(new_path)
-                logger.info(f"      Created chunk {i+1}/{num_parts}: {new_filename}")
+                logger.info(f"      Created chunk {i + 1}/{num_parts}: {new_filename}")
             except subprocess.CalledProcessError as e:
-                logger.error(f"Failed to create chunk {i+1}: {e}")
+                logger.error(f"Failed to create chunk {i + 1}: {e}")
 
         # Remove original file after splitting
         if new_files:
@@ -349,15 +383,15 @@ class AudioTranscriber:
 
         # If we have a fully completed progress file, we can just return the result!
         if progress_file.exists():
-             try:
+            try:
                 with open(progress_file) as f:
                     progress = json.load(f)
                 # If it looks like a complete run?
-                if progress.get('chunks_completed', 0) > 0 and progress.get('done', False):
+                if progress.get("chunks_completed", 0) > 0 and progress.get("done", False):
                     logger.info(f"Resuming from completed local cache for {abs_id}")
-                    return progress.get('transcript', [])
-             except (json.JSONDecodeError, OSError) as e:
-                 logger.debug(f"Failed to read progress cache file: {e}")
+                    return progress.get("transcript", [])
+            except (json.JSONDecodeError, OSError) as e:
+                logger.debug(f"Failed to read progress cache file: {e}")
 
         MAX_DURATION_SECONDS = 45 * 60
 
@@ -373,9 +407,9 @@ class AudioTranscriber:
                 try:
                     with open(progress_file) as f:
                         progress = json.load(f)
-                    chunks_completed = progress.get('chunks_completed', 0)
-                    cumulative_duration = progress.get('cumulative_duration', 0.0)
-                    full_transcript = progress.get('transcript', [])
+                    chunks_completed = progress.get("chunks_completed", 0)
+                    cumulative_duration = progress.get("cumulative_duration", 0.0)
+                    full_transcript = progress.get("transcript", [])
 
                     # Find existing split files
                     cached_files = sorted(book_cache_dir.glob("part_*_split_*.wav"))
@@ -386,7 +420,8 @@ class AudioTranscriber:
                         logger.info(f"Resuming transcription: {chunks_completed} chunks previously done")
                 except Exception as e:
                     logger.warning(f"Could not resume (will start fresh): {e}")
-                    if book_cache_dir.exists(): shutil.rmtree(book_cache_dir)
+                    if book_cache_dir.exists():
+                        shutil.rmtree(book_cache_dir)
                     book_cache_dir.mkdir(parents=True, exist_ok=True)
                     resuming = False
 
@@ -405,11 +440,15 @@ class AudioTranscriber:
                         break
 
                 if existing_files and not missing_parts:
-                    logger.info(f"Found valid cache ({len(existing_files)} files covering all {len(audio_urls)} parts). Skipping download.")
+                    logger.info(
+                        f"Found valid cache ({len(existing_files)} files covering all {len(audio_urls)} parts). Skipping download."
+                    )
                     downloaded_files = list(existing_files)
                 else:
                     if existing_files:
-                        logger.warning(f"Found {len(existing_files)} cached files but some parts are missing. Wiping cache to start fresh")
+                        logger.warning(
+                            f"Found {len(existing_files)} cached files but some parts are missing. Wiping cache to start fresh"
+                        )
                         shutil.rmtree(book_cache_dir)
 
                     # Original logic: Wipe and Start Fresh
@@ -418,15 +457,16 @@ class AudioTranscriber:
 
                     logger.info(f"Phase 1: Downloading {len(audio_urls)} audio files...")
                     for idx, audio_data in enumerate(audio_urls):
-                        stream_url = audio_data['stream_url']
-                        extension = audio_data.get('ext', '.mp3')
-                        if not extension.startswith('.'): extension = f".{extension}"
+                        stream_url = audio_data["stream_url"]
+                        extension = audio_data.get("ext", ".mp3")
+                        if not extension.startswith("."):
+                            extension = f".{extension}"
                         local_path = book_cache_dir / f"part_{idx:03d}{extension}"
 
                         logger.info(f"   Downloading Part {idx + 1}/{len(audio_urls)}...")
                         with requests.get(stream_url, stream=True, timeout=300) as r:
                             r.raise_for_status()
-                            with open(local_path, 'wb') as f:
+                            with open(local_path, "wb") as f:
                                 for chunk in r.iter_content(chunk_size=8192):
                                     f.write(chunk)
 
@@ -436,7 +476,7 @@ class AudioTranscriber:
                         # Normalize to WAV
                         normalized_path = self.normalize_audio_to_wav(local_path)
                         if not normalized_path:
-                            raise ValueError(f"Normalization failed for part {idx+1}")
+                            raise ValueError(f"Normalization failed for part {idx + 1}")
 
                         # Split if needed
                         downloaded_files.extend(self.split_audio_file(normalized_path, MAX_DURATION_SECONDS))
@@ -465,39 +505,48 @@ class AudioTranscriber:
 
                 # Skip corrupt or near-empty chunks (< 1 second has no meaningful content)
                 if duration < 1.0:
-                    logger.warning(f"   Skipping chunk {idx + 1}/{total_chunks} ({local_path.name}): duration {duration:.2f}s < 1s")
+                    logger.warning(
+                        f"   Skipping chunk {idx + 1}/{total_chunks} ({local_path.name}): duration {duration:.2f}s < 1s"
+                    )
                     cumulative_duration += duration
                     chunks_completed = idx + 1
                     continue
 
                 pct = (cumulative_duration / total_audio_duration * 100) if total_audio_duration > 0 else 0
-                logger.info(f"   [{pct:.0f}%] Transcribing chunk {idx + 1}/{total_chunks} ({duration/60:.1f} min)...")
+                logger.info(f"   [{pct:.0f}%] Transcribing chunk {idx + 1}/{total_chunks} ({duration / 60:.1f} min)...")
 
                 try:
                     # Use the transcription provider
                     segments = provider.transcribe(local_path)
 
                     for segment in segments:
-                        full_transcript.append({
-                            "start": segment["start"] + cumulative_duration,
-                            "end": segment["end"] + cumulative_duration,
-                            "text": segment["text"]
-                        })
+                        full_transcript.append(
+                            {
+                                "start": segment["start"] + cumulative_duration,
+                                "end": segment["end"] + cumulative_duration,
+                                "text": segment["text"],
+                            }
+                        )
 
                 except Exception as e:
-                    logger.warning(f"   Transcription failed for chunk {idx + 1}/{total_chunks} ({local_path.name}), skipping: {e}")
+                    logger.warning(
+                        f"   Transcription failed for chunk {idx + 1}/{total_chunks} ({local_path.name}), skipping: {e}"
+                    )
 
                 cumulative_duration += duration
                 chunks_completed = idx + 1
 
                 # Save progress after each chunk for resumption
-                with open(progress_file, 'w') as f:
-                    json.dump({
-                        'chunks_completed': chunks_completed,
-                        'cumulative_duration': cumulative_duration,
-                        'transcript': full_transcript,
-                        'done': (chunks_completed == total_chunks)
-                    }, f)
+                with open(progress_file, "w") as f:
+                    json.dump(
+                        {
+                            "chunks_completed": chunks_completed,
+                            "cumulative_duration": cumulative_duration,
+                            "transcript": full_transcript,
+                            "done": (chunks_completed == total_chunks),
+                        },
+                        f,
+                    )
 
                 if progress_callback:
                     # Report progress for this phase (handled by SyncManager logic)
@@ -537,8 +586,18 @@ class AudioTranscriber:
             return True
 
         # Check for common audio markers (case-insensitive)
-        markers = ['[music]', '[applause]', '[laughter]', '[silence]', '[sound]',
-                   '[inaudible]', '[noise]', '[background]', '♪', '🎵']
+        markers = [
+            "[music]",
+            "[applause]",
+            "[laughter]",
+            "[silence]",
+            "[sound]",
+            "[inaudible]",
+            "[noise]",
+            "[background]",
+            "♪",
+            "🎵",
+        ]
         lower_text = cleaned.lower()
         for marker in markers:
             if marker in lower_text:
@@ -567,15 +626,15 @@ class AudioTranscriber:
             # Find segment containing timestamp
             target_idx = -1
             for i, seg in enumerate(data):
-                if seg['start'] <= timestamp <= seg['end']:
+                if seg["start"] <= timestamp <= seg["end"]:
                     target_idx = i
                     break
 
             # Fallback: find closest segment
             if target_idx == -1:
-                closest_dist = float('inf')
+                closest_dist = float("inf")
                 for i, seg in enumerate(data):
-                    dist = min(abs(timestamp - seg['start']), abs(timestamp - seg['end']))
+                    dist = min(abs(timestamp - seg["start"]), abs(timestamp - seg["end"]))
                     if dist < closest_dist:
                         closest_dist = dist
                         target_idx = i
@@ -586,21 +645,23 @@ class AudioTranscriber:
             # Look-ahead/look-behind: If current segment has low-quality text,
             # search nearby segments for better content
             original_idx = target_idx
-            if self._is_low_quality_text(data[target_idx]['text']):
+            if self._is_low_quality_text(data[target_idx]["text"]):
                 # Prefer forward (look-ahead) slightly, but also check behind
                 # Offsets in segments: try +1, +2, -1, +3, -2, +4, -3, etc.
                 offsets = [1, 2, -1, 3, -2, 4, -3, 5]
                 for offset in offsets:
                     alt_idx = target_idx + offset
                     if 0 <= alt_idx < len(data):
-                        if not self._is_low_quality_text(data[alt_idx]['text']):
-                            logger.debug(f"Look-ahead: Skipped low-quality segment at {data[original_idx]['start']:.1f}s, using segment at {data[alt_idx]['start']:.1f}s instead")
+                        if not self._is_low_quality_text(data[alt_idx]["text"]):
+                            logger.debug(
+                                f"Look-ahead: Skipped low-quality segment at {data[original_idx]['start']:.1f}s, using segment at {data[alt_idx]['start']:.1f}s instead"
+                            )
                             target_idx = alt_idx
                             break
 
             # Gather surrounding context (~800 chars)
             segments_indices = [target_idx]
-            current_len = len(data[target_idx]['text'])
+            current_len = len(data[target_idx]["text"])
             left, right = target_idx - 1, target_idx + 1
             TARGET_LEN = 800
 
@@ -608,20 +669,20 @@ class AudioTranscriber:
                 added = False
                 if left >= 0:
                     segments_indices.insert(0, left)
-                    current_len += len(data[left]['text'])
+                    current_len += len(data[left]["text"])
                     left -= 1
                     added = True
                 if current_len >= TARGET_LEN:
                     break
                 if right < len(data):
                     segments_indices.append(right)
-                    current_len += len(data[right]['text'])
+                    current_len += len(data[right]["text"])
                     right += 1
                     added = True
                 if not added:
                     break
 
-            raw_text = " ".join([data[i]['text'] for i in segments_indices])
+            raw_text = " ".join([data[i]["text"] for i in segments_indices])
             return self._clean_text(raw_text)
 
         except Exception as e:
@@ -640,21 +701,21 @@ class AudioTranscriber:
             # Find segment containing timestamp
             target_idx = -1
             for i, seg in enumerate(data):
-                if seg['start'] <= timestamp <= seg['end']:
+                if seg["start"] <= timestamp <= seg["end"]:
                     target_idx = i
                     break
 
             # If explicit match not found, find closest
             if target_idx == -1:
-                closest_dist = float('inf')
+                closest_dist = float("inf")
                 for i, seg in enumerate(data):
-                    dist = min(abs(timestamp - seg['start']), abs(timestamp - seg['end']))
+                    dist = min(abs(timestamp - seg["start"]), abs(timestamp - seg["end"]))
                     if dist < closest_dist:
                         closest_dist = dist
                         target_idx = i
 
             if target_idx > 0:
-                prev_text = data[target_idx - 1]['text']
+                prev_text = data[target_idx - 1]["text"]
                 return self._clean_text(prev_text)
 
             return None
@@ -664,11 +725,14 @@ class AudioTranscriber:
             return None
 
     @time_execution
-    def find_time_for_text(self, transcript_path, search_text, hint_percentage=None, char_offset=None, book_title=None) -> float | None:
+    def find_time_for_text(
+        self, transcript_path, search_text, hint_percentage=None, char_offset=None, book_title=None
+    ) -> float | None:
         """
         Find timestamp for given text using windowed fuzzy matching or pre-computed alignment map.
         """
         from rapidfuzz import fuzz
+
         title_prefix = f"[{sanitize_log_data(book_title)}] " if book_title else ""
 
         try:
@@ -689,14 +753,16 @@ class AudioTranscriber:
             window_size = 12
 
             for i in range(0, len(data), window_size // 2):
-                window_segments = data[i:min(i + window_size, len(data))]
-                window_text = " ".join([seg['text'] for seg in window_segments])
-                windows.append({
-                    'start': data[i]['start'],
-                    'end': window_segments[-1]['end'],
-                    'text': self._clean_text(window_text),
-                    'index': i
-                })
+                window_segments = data[i : min(i + window_size, len(data))]
+                window_text = " ".join([seg["text"] for seg in window_segments])
+                windows.append(
+                    {
+                        "start": data[i]["start"],
+                        "end": window_segments[-1]["end"],
+                        "text": self._clean_text(window_text),
+                        "index": i,
+                    }
+                )
 
             if not windows:
                 return None
@@ -706,31 +772,35 @@ class AudioTranscriber:
 
             # First: search near hint if provided
             if hint_percentage is not None:
-                total_duration = data[-1]['end']
+                total_duration = data[-1]["end"]
                 hint_start = max(0, hint_percentage - 0.15) * total_duration
                 hint_end = min(1.0, hint_percentage + 0.15) * total_duration
-                nearby_windows = [w for w in windows if w['start'] >= hint_start and w['start'] <= hint_end]
+                nearby_windows = [w for w in windows if w["start"] >= hint_start and w["start"] <= hint_end]
 
                 for window in nearby_windows:
-                    score = fuzz.token_set_ratio(clean_search, window['text'])
+                    score = fuzz.token_set_ratio(clean_search, window["text"])
                     if score > best_score:
                         best_score = score
                         best_match = window
 
                 if best_score >= self.match_threshold:
-                    logger.info(f"{title_prefix}Match found at {best_match['start']:.1f}s | Confidence: {best_score}% - '{sanitize_log_data(clean_search)}'")
-                    return best_match['start']
+                    logger.info(
+                        f"{title_prefix}Match found at {best_match['start']:.1f}s | Confidence: {best_score}% - '{sanitize_log_data(clean_search)}'"
+                    )
+                    return best_match["start"]
 
             # Second: search all windows
             for window in windows:
-                score = fuzz.token_set_ratio(clean_search, window['text'])
+                score = fuzz.token_set_ratio(clean_search, window["text"])
                 if score > best_score:
                     best_score = score
                     best_match = window
 
             if best_match and best_score >= self.match_threshold:
-                logger.info(f"{title_prefix}Match found at {best_match['start']:.1f}s | Confidence: {best_score}% - '{sanitize_log_data(clean_search)}'")
-                return best_match['start']
+                logger.info(
+                    f"{title_prefix}Match found at {best_match['start']:.1f}s | Confidence: {best_score}% - '{sanitize_log_data(clean_search)}'"
+                )
+                return best_match["start"]
             else:
                 logger.warning(f"{title_prefix}No good match found (best: {best_score}% < {self.match_threshold}%)")
                 return None

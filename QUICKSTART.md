@@ -14,12 +14,12 @@ PageKeeper syncs progress between any combination of these services:
 | **Audiobookshelf** | Audiobook server | Tracks audiobook listening progress |
 | **KOSync** | E-reader sync | Syncs KOReader/Calibre reading position |
 | **Storyteller** | Narrated ebooks | Creates aligned narrated EPUB3s and syncs reading progress |
-| **Booklore** | Library manager | Ebook organization and shelf management |
+| **Grimmory** | Library manager | Ebook organization and shelf management |
 | **Hardcover** | Social reading | Updates reading status and page progress |
 
 You need **at least two services** to sync between. Common setups:
 
-- **Audiobook + Ebook**: Audiobookshelf + KOSync or Booklore (the classic setup)
+- **Audiobook + Ebook**: Audiobookshelf + KOSync or Grimmory (the classic setup)
 - **Audio-only**: Audiobookshelf + Hardcover
 
 ---
@@ -51,7 +51,7 @@ services:
       - TZ=America/New_York
     volumes:
       - ./data:/data
-      # Mount your ebooks directory (needed for cross-format sync if not using Booklore):
+      # Mount your ebooks directory (needed for cross-format sync if not using Grimmory):
       # - /path/to/your/ebooks:/books:ro
     ports:
       - "4477:4477"
@@ -62,7 +62,7 @@ services:
 | Mount | Purpose | When needed |
 |-------|---------|-------------|
 | `./data:/data` | Database, logs, cache | Always |
-| `/path/to/ebooks:/books:ro` | Ebook files (EPUB, etc.) | Cross-format sync without Booklore (Booklore fetches files via API) |
+| `/path/to/ebooks:/books:ro` | Ebook files (EPUB, etc.) | Cross-format sync without Grimmory (Grimmory fetches files via API) |
 | `/path/to/storyteller/import:/storyteller-import` | Storyteller's import directory | Storyteller submission (PageKeeper copies ebook + audio here) |
 | `/path/to/storyteller/data:/storyteller-assets:ro` | Storyteller's data directory | Detecting when Storyteller finishes processing |
 
@@ -108,7 +108,7 @@ You should see the PageKeeper dashboard.
 
 ## Step 6: Configure Your Services
 
-1. Go to **Settings** and enable the services you use (Audiobookshelf, KOSync, Storyteller, Booklore, Hardcover, etc.)
+1. Go to **Settings** and enable the services you use (Audiobookshelf, KOSync, Storyteller, Grimmory, Hardcover, etc.)
 2. Enter your server URLs, API keys, and credentials for each service
 3. Click **Save** — the app will connect and verify each service
 
@@ -135,7 +135,7 @@ That's it! Your mapping is saved and will appear on the dashboard immediately. T
 6. Progress syncs both directions
 
 ### Ebook-Only
-1. Enable at least two ebook services in Settings (KOSync, Storyteller, Booklore)
+1. Enable at least two ebook services in Settings (KOSync, Storyteller, Grimmory)
 2. Use "Single Match" > "Ebook Only" to import an ebook
 3. Progress syncs between all configured ebook services
 

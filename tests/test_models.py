@@ -7,15 +7,16 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from src.db.models import Base, Book, BookAlignment, BookloreBook, PendingSuggestion
+from src.db.models import Base, Book, BookAlignment, GrimmoryBook, PendingSuggestion
 
 
 @pytest.fixture
 def session():
-    engine = create_engine('sqlite:///:memory:')
+    engine = create_engine("sqlite:///:memory:")
     Base.metadata.create_all(engine)
     Session = sessionmaker(bind=engine)
     return Session()
+
 
 def test_book_alignment_model(session):
     book = Book(abs_id="test_book", title="Test Book")
@@ -31,28 +32,20 @@ def test_book_alignment_model(session):
     assert "char" in retrieved.alignment_map_json
     assert retrieved.book.title == "Test Book"
 
-def test_booklore_book_model(session):
-    cached = BookloreBook(
-        filename="test.epub",
-        title="Test Title",
-        authors="Test Author",
-        raw_metadata="{}"
-    )
+
+def test_grimmory_book_model(session):
+    cached = GrimmoryBook(filename="test.epub", title="Test Title", authors="Test Author", raw_metadata="{}")
     session.add(cached)
     session.commit()
 
-    retrieved = session.query(BookloreBook).filter_by(filename="test.epub").first()
+    retrieved = session.query(GrimmoryBook).filter_by(filename="test.epub").first()
     assert retrieved.title == "Test Title"
     assert retrieved.last_updated is not None
 
 
 def test_pending_suggestion_matches_corrupt_json(session):
     """Verify PendingSuggestion.matches returns [] on corrupt JSON."""
-    suggestion = PendingSuggestion(
-        source_id="test-hash",
-        title="Test Book",
-        matches_json="{not valid json!!"
-    )
+    suggestion = PendingSuggestion(source_id="test-hash", title="Test Book", matches_json="{not valid json!!")
     session.add(suggestion)
     session.commit()
 
@@ -63,9 +56,7 @@ def test_pending_suggestion_matches_corrupt_json(session):
 def test_pending_suggestion_matches_valid_json(session):
     """Verify PendingSuggestion.matches works with valid JSON."""
     suggestion = PendingSuggestion(
-        source_id="test-hash-2",
-        title="Test Book 2",
-        matches_json='[{"source": "abs", "abs_id": "123"}]'
+        source_id="test-hash-2", title="Test Book 2", matches_json='[{"source": "abs", "abs_id": "123"}]'
     )
     session.add(suggestion)
     session.commit()
@@ -77,11 +68,7 @@ def test_pending_suggestion_matches_valid_json(session):
 
 def test_pending_suggestion_matches_none(session):
     """Verify PendingSuggestion.matches returns [] when matches_json is None."""
-    suggestion = PendingSuggestion(
-        source_id="test-hash-3",
-        title="Test Book 3",
-        matches_json=None
-    )
+    suggestion = PendingSuggestion(source_id="test-hash-3", title="Test Book 3", matches_json=None)
     session.add(suggestion)
     session.commit()
 
@@ -89,31 +76,21 @@ def test_pending_suggestion_matches_none(session):
     assert retrieved.matches == []
 
 
-def test_booklore_raw_metadata_dict_corrupt_json(session):
-    """Verify BookloreBook.raw_metadata_dict returns {} on corrupt JSON."""
-    book = BookloreBook(
-        filename="corrupt.epub",
-        title="Corrupt",
-        raw_metadata="<<<not json>>>"
-    )
+def test_grimmory_raw_metadata_dict_corrupt_json(session):
+    """Verify GrimmoryBook.raw_metadata_dict returns {} on corrupt JSON."""
+    book = GrimmoryBook(filename="corrupt.epub", title="Corrupt", raw_metadata="<<<not json>>>")
     session.add(book)
     session.commit()
 
-    retrieved = session.query(BookloreBook).filter_by(filename="corrupt.epub").first()
+    retrieved = session.query(GrimmoryBook).filter_by(filename="corrupt.epub").first()
     assert retrieved.raw_metadata_dict == {}
 
 
-def test_booklore_raw_metadata_dict_none(session):
-    """Verify BookloreBook.raw_metadata_dict returns {} when raw_metadata is None."""
-    book = BookloreBook(
-        filename="none.epub",
-        title="None Metadata",
-        raw_metadata=None
-    )
+def test_grimmory_raw_metadata_dict_none(session):
+    """Verify GrimmoryBook.raw_metadata_dict returns {} when raw_metadata is None."""
+    book = GrimmoryBook(filename="none.epub", title="None Metadata", raw_metadata=None)
     session.add(book)
     session.commit()
 
-    retrieved = session.query(BookloreBook).filter_by(filename="none.epub").first()
+    retrieved = session.query(GrimmoryBook).filter_by(filename="none.epub").first()
     assert retrieved.raw_metadata_dict == {}
-
-

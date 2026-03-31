@@ -1,6 +1,6 @@
 # BookFusion Integration
 
-PageKeeper includes an optional [BookFusion](https://www.bookfusion.com) integration that allows you to upload books from Booklore to BookFusion and then syncs your reading highlights back to PageKeeper. This integration is disabled by default and must be enabled in the settings. This document explains how the integration works. 
+PageKeeper includes an optional [BookFusion](https://www.bookfusion.com) integration that allows you to upload books from Grimmory to BookFusion and then syncs your reading highlights back to PageKeeper. This integration is disabled by default and must be enabled in the settings. This document explains how the integration works. 
 
 ## Acknowledgements
 

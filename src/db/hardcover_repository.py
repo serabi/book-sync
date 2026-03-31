@@ -9,7 +9,6 @@ logger = logging.getLogger(__name__)
 
 
 class HardcoverRepository(BaseRepository):
-
     # ── Hardcover Details ──
 
     def get_hardcover_details(self, book_id):

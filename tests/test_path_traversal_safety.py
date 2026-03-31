@@ -47,10 +47,7 @@ class TestSanitizeFilename(unittest.TestCase):
         self.assertEqual(sanitize_filename("my book.epub"), "my book.epub")
 
     def test_deeply_nested_traversal(self):
-        self.assertEqual(
-            sanitize_filename("../../../../../../../../tmp/evil.sh"),
-            "evil.sh"
-        )
+        self.assertEqual(sanitize_filename("../../../../../../../../tmp/evil.sh"), "evil.sh")
 
 
 class TestIsSafePathWithin(unittest.TestCase):
@@ -119,13 +116,16 @@ class TestCleanupMappingResourcesPathTraversal(unittest.TestCase):
             mock_manager.epub_cache_dir = None
             mock_db = MagicMock()
 
-            with patch("src.blueprints.helpers.get_container", return_value=mock_container), \
-                 patch("src.blueprints.helpers.get_manager", return_value=mock_manager), \
-                 patch("src.blueprints.helpers.get_database_service", return_value=mock_db), \
-                 patch("src.blueprints.helpers.get_abs_service") as mock_abs:
+            with (
+                patch("src.blueprints.helpers.get_container", return_value=mock_container),
+                patch("src.blueprints.helpers.get_manager", return_value=mock_manager),
+                patch("src.blueprints.helpers.get_database_service", return_value=mock_db),
+                patch("src.blueprints.helpers.get_abs_service") as mock_abs,
+            ):
                 mock_abs.return_value.remove_from_collection.return_value = None
 
                 from src.blueprints.helpers import cleanup_mapping_resources
+
                 cleanup_mapping_resources(book)
 
             # The secret file must still exist
@@ -157,16 +157,21 @@ class TestCleanupMappingResourcesPathTraversal(unittest.TestCase):
             mock_manager.epub_cache_dir = None
             mock_db = MagicMock()
 
-            with patch("src.blueprints.helpers.get_container", return_value=mock_container), \
-                 patch("src.blueprints.helpers.get_manager", return_value=mock_manager), \
-                 patch("src.blueprints.helpers.get_database_service", return_value=mock_db), \
-                 patch("src.blueprints.helpers.get_abs_service") as mock_abs:
+            with (
+                patch("src.blueprints.helpers.get_container", return_value=mock_container),
+                patch("src.blueprints.helpers.get_manager", return_value=mock_manager),
+                patch("src.blueprints.helpers.get_database_service", return_value=mock_db),
+                patch("src.blueprints.helpers.get_abs_service") as mock_abs,
+            ):
                 mock_abs.return_value.remove_from_collection.return_value = None
 
                 from src.blueprints.helpers import cleanup_mapping_resources
+
                 cleanup_mapping_resources(book)
 
-            self.assertTrue(secret_file.exists(), "File outside transcripts dir was deleted — path traversal not blocked!")
+            self.assertTrue(
+                secret_file.exists(), "File outside transcripts dir was deleted — path traversal not blocked!"
+            )
 
     def test_legitimate_transcript_deletion_still_works(self):
         """A transcript file correctly inside transcripts/ should still be deleted."""
@@ -193,13 +198,16 @@ class TestCleanupMappingResourcesPathTraversal(unittest.TestCase):
             mock_manager.epub_cache_dir = None
             mock_db = MagicMock()
 
-            with patch("src.blueprints.helpers.get_container", return_value=mock_container), \
-                 patch("src.blueprints.helpers.get_manager", return_value=mock_manager), \
-                 patch("src.blueprints.helpers.get_database_service", return_value=mock_db), \
-                 patch("src.blueprints.helpers.get_abs_service") as mock_abs:
+            with (
+                patch("src.blueprints.helpers.get_container", return_value=mock_container),
+                patch("src.blueprints.helpers.get_manager", return_value=mock_manager),
+                patch("src.blueprints.helpers.get_database_service", return_value=mock_db),
+                patch("src.blueprints.helpers.get_abs_service") as mock_abs,
+            ):
                 mock_abs.return_value.remove_from_collection.return_value = None
 
                 from src.blueprints.helpers import cleanup_mapping_resources
+
                 cleanup_mapping_resources(book)
 
             self.assertFalse(legit_transcript.exists(), "Legitimate transcript file should have been deleted")

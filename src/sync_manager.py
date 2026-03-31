@@ -28,42 +28,45 @@ from src.utils.epub_resolver import get_local_epub
 from src.utils.logging_utils import sanitize_exception, sanitize_log_data
 
 # Silence noisy third-party loggers
-for noisy in ('urllib3', 'requests', 'schedule', 'chardet', 'multipart', 'faster_whisper'):
+for noisy in ("urllib3", "requests", "schedule", "chardet", "multipart", "faster_whisper"):
     logging.getLogger(noisy).setLevel(logging.WARNING)
 
 # Only call basicConfig if logging hasn't been configured already (by memory_logger)
 root_logger = logging.getLogger()
-if not hasattr(root_logger, '_configured') or not root_logger._configured:
+if not hasattr(root_logger, "_configured") or not root_logger._configured:
     logging.basicConfig(
-        level=getattr(logging, os.getenv('LOG_LEVEL', 'INFO').upper(), logging.INFO),
-        format='%(asctime)s - %(levelname)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S'
+        level=getattr(logging, os.getenv("LOG_LEVEL", "INFO").upper(), logging.INFO),
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
     )
 logger = logging.getLogger(__name__)
 
 
 class SyncManager:
-    def __init__(self,
-                 abs_client=None,
-                 booklore_client=None,
-                 hardcover_client=None,
-                 transcriber=None,
-                 ebook_parser=None,
-                 database_service=None,
-                 storyteller_client: StorytellerAPIClient=None,
-                 sync_clients: dict[str, SyncClient]=None,
-                 alignment_service: AlignmentService = None,
-                 library_service: LibraryService = None,
-                 migration_service: MigrationService = None,
-                 suggestion_service: SuggestionService = None,
-                 background_job_service: BackgroundJobService = None,
-                 epub_cache_dir=None,
-                 data_dir=None,
-                 books_dir=None):
+    def __init__(
+        self,
+        abs_client=None,
+        grimmory_client=None,
+        hardcover_client=None,
+        transcriber=None,
+        ebook_parser=None,
+        database_service=None,
+        storyteller_client: StorytellerAPIClient = None,
+        sync_clients: dict[str, SyncClient] = None,
+        alignment_service: AlignmentService = None,
+        library_service: LibraryService = None,
+        migration_service: MigrationService = None,
+        suggestion_service: SuggestionService = None,
+        background_job_service: BackgroundJobService = None,
+        epub_cache_dir=None,
+        data_dir=None,
+        books_dir=None,
+    ):
 
         logger.info("=== Sync Manager Starting ===")
         # Use dependency injection
         self.abs_client = abs_client
-        self.booklore_client = booklore_client
+        self.grimmory_client = grimmory_client
         self.hardcover_client = hardcover_client
         self.transcriber = transcriber
         self.ebook_parser = ebook_parser
@@ -83,7 +86,9 @@ class SyncManager:
             logger.warning("Invalid SYNC_DELTA_BETWEEN_CLIENTS_PERCENT value, defaulting to 1")
             val = 1.0
         self.sync_delta_between_clients = val / 100.0
-        self.epub_cache_dir = epub_cache_dir or (self.data_dir / "epub_cache" if self.data_dir else Path("/data/epub_cache"))
+        self.epub_cache_dir = epub_cache_dir or (
+            self.data_dir / "epub_cache" if self.data_dir else Path("/data/epub_cache")
+        )
 
         # Extracted services — auto-construct if not injected (backward compat for tests)
         if suggestion_service is not None:
@@ -92,7 +97,7 @@ class SyncManager:
             self.suggestion_service = SuggestionService(
                 database_service=database_service,
                 abs_client=abs_client,
-                booklore_client=booklore_client,
+                grimmory_client=grimmory_client,
                 storyteller_client=storyteller_client,
                 library_service=library_service,
                 books_dir=books_dir,
@@ -105,7 +110,7 @@ class SyncManager:
             self.background_job_service = BackgroundJobService(
                 database_service=database_service,
                 abs_client=abs_client,
-                booklore_client=booklore_client,
+                grimmory_client=grimmory_client,
                 ebook_parser=ebook_parser,
                 transcriber=transcriber,
                 alignment_service=alignment_service,
@@ -138,7 +143,6 @@ class SyncManager:
         self.background_job_service.cleanup_stale_jobs()
         self.background_job_service.prune_hardcover_sync_logs()
 
-
     def _setup_sync_clients(self, clients: dict[str, SyncClient]):
         self.sync_clients = {}
         for name, client in clients.items():
@@ -160,7 +164,9 @@ class SyncManager:
                     client.check_connection()
                     logger.info(f"'{client_name}' connection verified (retry)")
                 except Exception as e:
-                    logger.warning(f"'{client_name}' connection failed after retry: {sanitize_exception(e)} (first attempt: {sanitize_exception(first_err)})")
+                    logger.warning(
+                        f"'{client_name}' connection failed after retry: {sanitize_exception(e)} (first attempt: {sanitize_exception(first_err)})"
+                    )
 
         # Check CWA Integration Status
         if self.library_service and self.library_service.cwa_client:
@@ -181,7 +187,7 @@ class SyncManager:
         if self.abs_client and self.abs_client.is_configured():
             try:
                 # Just verify methods exist (don't actually search during startup)
-                if hasattr(self.abs_client, 'get_ebook_files') and hasattr(self.abs_client, 'search_ebooks'):
+                if hasattr(self.abs_client, "get_ebook_files") and hasattr(self.abs_client, "search_ebooks"):
                     logger.info("ABS ebook methods available (get_ebook_files, search_ebooks)")
                 else:
                     logger.warning("ABS ebook methods missing - ebook search may not work")
@@ -194,8 +200,8 @@ class SyncManager:
             self.migration_service.migrate_legacy_data()
 
         # Backfill Hardcover state records for linked books missing them
-        hc_client = self.sync_clients.get('Hardcover')
-        if hc_client and getattr(hc_client, 'hardcover_service', None):
+        hc_client = self.sync_clients.get("Hardcover")
+        if hc_client and getattr(hc_client, "hardcover_service", None):
             try:
                 hc_client.hardcover_service.backfill_hardcover_states()
             except Exception as e:
@@ -231,8 +237,8 @@ class SyncManager:
             for suggestion in suggestions:
                 # matches property automatically parses the JSON
                 for match in suggestion.matches:
-                    if match.get('filename'):
-                        valid_filenames.add(match['filename'])
+                    if match.get("filename"):
+                        valid_filenames.add(match["filename"])
 
             # 2. Iterate cache and delete orphans
             deleted_count = 0
@@ -260,19 +266,19 @@ class SyncManager:
             logger.error(f"Error during cache cleanup: {e}")
 
     def get_audiobook_title(self, ab):
-        media = ab.get('media', {})
-        metadata = media.get('metadata', {})
-        return metadata.get('title') or ab.get('name', 'Unknown')
+        media = ab.get("media", {})
+        metadata = media.get("metadata", {})
+        return metadata.get("title") or ab.get("name", "Unknown")
 
     def get_duration(self, ab):
         """Extract duration from audiobook media data."""
-        media = ab.get('media', {})
-        return media.get('duration', 0)
+        media = ab.get("media", {})
+        return media.get("duration", 0)
 
     def _normalize_for_cross_format_comparison(self, book, config):
         """Delegate to alignment_service module-level function."""
-        # Ensure epub is available locally (download from Booklore if needed)
-        if book.ebook_filename and hasattr(self, 'books_dir'):
+        # Ensure epub is available locally (download from Grimmory if needed)
+        if book.ebook_filename and hasattr(self, "books_dir"):
             try:
                 self._get_local_epub(book.ebook_filename)
             except Exception as e:
@@ -282,8 +288,9 @@ class SyncManager:
             book, config, self.sync_clients, self.ebook_parser, self.alignment_service
         )
 
-
-    def _fetch_states_parallel(self, book, prev_states_by_client, title_snip, bulk_states_per_client=None, clients_to_use=None):
+    def _fetch_states_parallel(
+        self, book, prev_states_by_client, title_snip, bulk_states_per_client=None, clients_to_use=None
+    ):
         """Fetch states from specified clients (or all if not specified) in parallel."""
         clients_to_use = clients_to_use or self.sync_clients
         config = {}
@@ -297,9 +304,7 @@ class SyncManager:
                 # Get bulk context from the unified dict
                 bulk_ctx = bulk_states_per_client.get(client_name)
 
-                future = executor.submit(
-                    client.get_service_state, book, prev_state, title_snip, bulk_ctx
-                )
+                future = executor.submit(client.get_service_state, book, prev_state, title_snip, bulk_ctx)
                 futures[future] = client_name
 
             for future in as_completed(futures, timeout=15):
@@ -313,15 +318,9 @@ class SyncManager:
 
         return config
 
-
-
-
-
     def _get_local_epub(self, ebook_filename):
-        """Get local path to EPUB file, downloading from Booklore if necessary."""
-        return get_local_epub(
-            ebook_filename, self.books_dir, self.epub_cache_dir, self.booklore_client
-        )
+        """Get local path to EPUB file, downloading from Grimmory if necessary."""
+        return get_local_epub(ebook_filename, self.books_dir, self.epub_cache_dir, self.grimmory_client)
 
     # ── Suggestion delegation (implementation in SuggestionService) ──
 
@@ -349,13 +348,13 @@ class SyncManager:
 
         This prevents:
         - API noise on short books (0.3s changes don't count)
-        - API noise on long books (BookLore's 20s rounding errors filtered)
+        - API noise on long books (Grimmory's 20s rounding errors filtered)
         - Missing real progress on all books (30s+ changes do count)
         - A newly-added client reporting 0% from being elected leader
         """
         state = config[client_name]
         delta_pct = state.delta
-        current_pct = state.current.get('pct', 0) or 0
+        current_pct = state.current.get("pct", 0) or 0
 
         # Reject backward jumps to 0% — this is a new/reset client, not real reading
         if current_pct < 0.001 and state.previous_pct > 0.01:
@@ -367,7 +366,7 @@ class SyncManager:
             return True
 
         # Time-based check (if we have duration info)
-        if hasattr(book, 'duration') and book.duration:
+        if hasattr(book, "duration") and book.duration:
             delta_seconds = delta_pct * book.duration
             MIN_TIME_THRESHOLD = 30  # seconds
             if delta_seconds > MIN_TIME_THRESHOLD:
@@ -390,7 +389,7 @@ class SyncManager:
         for k, v in config.items():
             client = self.sync_clients[k]
             if client.can_be_leader():
-                pct = v.current.get('pct')
+                pct = v.current.get("pct")
                 if pct is not None:
                     vals[k] = pct
 
@@ -411,7 +410,9 @@ class SyncManager:
             # Only one client changed - that client is the leader (most recent change wins)
             leader = list(clients_with_delta.keys())[0]
             leader_pct = vals[leader]
-            logger.info(f"'{abs_id}' '{title_snip}' {leader} leads at {config[leader].value_formatter(leader_pct)} (only client with change)")
+            logger.info(
+                f"'{abs_id}' '{title_snip}' {leader} leads at {config[leader].value_formatter(leader_pct)} (only client with change)"
+            )
         else:
             # Multiple clients changed or this is a discrepancy resolution
             # Use "furthest wins" logic among changed clients (or all if none changed)
@@ -427,13 +428,17 @@ class SyncManager:
                     leader = max(normalized_candidates, key=normalized_candidates.get)
                     leader_ts = normalized_candidates[leader]
                     leader_pct = vals[leader]
-                    norm_label = f"{leader_ts:.1f}s" if 'ABS' in config else f"char {leader_ts}"
-                    logger.info(f"'{abs_id}' '{title_snip}' {leader} leads at {config[leader].value_formatter(leader_pct)} (normalized: {norm_label})")
+                    norm_label = f"{leader_ts:.1f}s" if "ABS" in config else f"char {leader_ts}"
+                    logger.info(
+                        f"'{abs_id}' '{title_snip}' {leader} leads at {config[leader].value_formatter(leader_pct)} (normalized: {norm_label})"
+                    )
                 else:
                     # Fallback to percentage-based comparison among candidates
                     leader = max(candidates, key=candidates.get)
                     leader_pct = vals[leader]
-                    logger.info(f"'{abs_id}' '{title_snip}' {leader} leads at {config[leader].value_formatter(leader_pct)}")
+                    logger.info(
+                        f"'{abs_id}' '{title_snip}' {leader} leads at {config[leader].value_formatter(leader_pct)}"
+                    )
             else:
                 # Same-format sync or normalization failed - use raw percentages
                 leader = max(candidates, key=candidates.get)
@@ -453,17 +458,17 @@ class SyncManager:
         # Prevent race condition: If daemon is running, skip. If Instant Sync, wait.
         acquired = False
         if target_book_id:
-             # Instant Sync: Block and wait for lock (up to 10s)
-             acquired = self._sync_lock.acquire(timeout=10)
-             if not acquired:
-                 logger.warning(f"Sync lock timeout for book_id={target_book_id} - skipping")
-                 return
+            # Instant Sync: Block and wait for lock (up to 10s)
+            acquired = self._sync_lock.acquire(timeout=10)
+            if not acquired:
+                logger.warning(f"Sync lock timeout for book_id={target_book_id} - skipping")
+                return
         else:
-             # Daemon: Non-blocking attempt
-             acquired = self._sync_lock.acquire(blocking=False)
-             if not acquired:
-                 logger.debug("Sync cycle skipped - another cycle is running")
-                 return
+            # Daemon: Non-blocking attempt
+            acquired = self._sync_lock.acquire(blocking=False)
+            if not acquired:
+                logger.debug("Sync cycle skipped - another cycle is running")
+                return
 
         try:
             self._sync_cycle_internal(target_book_id)
@@ -475,12 +480,12 @@ class SyncManager:
 
     def _sync_cycle_internal(self, target_book_id=None):
         # Clear caches at start of cycle
-        storyteller_client = self.sync_clients.get('Storyteller')
-        if storyteller_client and hasattr(storyteller_client, 'storyteller_client'):
-            if hasattr(storyteller_client.storyteller_client, 'clear_cache'):
+        storyteller_client = self.sync_clients.get("Storyteller")
+        if storyteller_client and hasattr(storyteller_client, "storyteller_client"):
+            if hasattr(storyteller_client.storyteller_client, "clear_cache"):
                 storyteller_client.storyteller_client.clear_cache()
 
-        # Refresh Library Metadata (Booklore) — throttle to once per 15 minutes
+        # Refresh Library Metadata (Grimmory) — throttle to once per 15 minutes
         if self.library_service and (time.time() - self._last_library_sync > 900):
             self.library_service.sync_library_books()
             self._last_library_sync = time.time()
@@ -515,11 +520,15 @@ class SyncManager:
         active_books = []
         if target_book_id:
             book = self.database_service.get_book_by_id(target_book_id)
-            logger.info(f"Instant Sync triggered for '{sanitize_log_data(book.title)}'" if book else f"Instant Sync triggered for book_id={target_book_id} (not found)")
-            if book and book.status == 'active':
+            logger.info(
+                f"Instant Sync triggered for '{sanitize_log_data(book.title)}'"
+                if book
+                else f"Instant Sync triggered for book_id={target_book_id} (not found)"
+            )
+            if book and book.status == "active":
                 active_books = [book]
         else:
-            active_books = self.database_service.get_books_by_status('active')
+            active_books = self.database_service.get_books_by_status("active")
 
         bulk_states_per_client = {}
         if not target_book_id:
@@ -534,24 +543,24 @@ class SyncManager:
                     logger.warning(f"Failed to pre-fetch bulk state for {client_name}: {sanitize_exception(e)}")
 
             # Check for suggestions (runs even with no active books)
-            if 'ABS' in bulk_states_per_client:
-                self.check_for_suggestions(bulk_states_per_client['ABS'], active_books)
+            if "ABS" in bulk_states_per_client:
+                self.check_for_suggestions(bulk_states_per_client["ABS"], active_books)
 
         return active_books, bulk_states_per_client
 
     def _sync_single_book(self, book, bulk_states_per_client):
         """Process a single book in the sync cycle."""
         abs_id = book.abs_id or f"book-{book.id}"
-        title_snip = sanitize_log_data(book.title or 'Unknown')
+        title_snip = sanitize_log_data(book.title or "Unknown")
         logger.info(f"'{abs_id}' Syncing '{title_snip}'")
 
         # Migration upgrade
         if self.alignment_service:
             alignment = self.alignment_service._get_alignment(book.id)
             if alignment:
-                if getattr(book, 'transcript_file', None) != 'DB_MANAGED':
+                if getattr(book, "transcript_file", None) != "DB_MANAGED":
                     logger.info(f"   Upgrading '{title_snip}' to DB_MANAGED unified architecture")
-                    book.transcript_file = 'DB_MANAGED'
+                    book.transcript_file = "DB_MANAGED"
                     self.database_service.save_book(book)
 
         # Get previous state for this book from database
@@ -561,17 +570,16 @@ class SyncManager:
             prev_states_by_client[state.client_name] = state
 
         # Determine active clients based on sync_mode
-        sync_type = 'ebook' if (hasattr(book, 'sync_mode') and book.sync_mode == 'ebook_only') else 'audiobook'
-        is_audio_only = (sync_type == 'audiobook' and not book.kosync_doc_id)
+        sync_type = "ebook" if (hasattr(book, "sync_mode") and book.sync_mode == "ebook_only") else "audiobook"
+        is_audio_only = sync_type == "audiobook" and not book.kosync_doc_id
         active_clients = {
-            name: client for name, client in self.sync_clients.items()
-            if sync_type in client.get_supported_sync_types()
+            name: client for name, client in self.sync_clients.items() if sync_type in client.get_supported_sync_types()
         }
         if is_audio_only:
-            audio_only_clients = {'ABS', 'Hardcover'}
+            audio_only_clients = {"ABS", "Hardcover"}
             active_clients = {name: client for name, client in active_clients.items() if name in audio_only_clients}
             logger.debug(f"'{abs_id}' '{title_snip}' Audio-only mode - using clients: {list(active_clients.keys())}")
-        elif sync_type == 'ebook':
+        elif sync_type == "ebook":
             logger.debug(f"'{abs_id}' '{title_snip}' Ebook-only mode - using clients: {list(active_clients.keys())}")
 
         if not active_clients:
@@ -579,20 +587,24 @@ class SyncManager:
             return
 
         # Build config using active_clients - parallel fetch
-        config = self._fetch_states_parallel(book, prev_states_by_client, title_snip, bulk_states_per_client, active_clients)
+        config = self._fetch_states_parallel(
+            book, prev_states_by_client, title_snip, bulk_states_per_client, active_clients
+        )
         if not config:
             return
 
         # Check for ABS offline condition (only for audiobook mode)
-        if not (hasattr(book, 'sync_mode') and book.sync_mode == 'ebook_only'):
-            abs_state = config.get('ABS')
+        if not (hasattr(book, "sync_mode") and book.sync_mode == "ebook_only"):
+            abs_state = config.get("ABS")
             if abs_state is None:
-                ebook_clients_active = [k for k in config.keys() if k != 'ABS']
+                ebook_clients_active = [k for k in config.keys() if k != "ABS"]
                 if ebook_clients_active:
-                     logger.info(f"'{abs_id}' '{title_snip}' ABS audiobook not found/offline, falling back to ebook-only sync between {ebook_clients_active}")
+                    logger.info(
+                        f"'{abs_id}' '{title_snip}' ABS audiobook not found/offline, falling back to ebook-only sync between {ebook_clients_active}"
+                    )
                 else:
-                     logger.debug(f"'{abs_id}' '{title_snip}' ABS audiobook offline and no other clients, skipping")
-                     return
+                    logger.debug(f"'{abs_id}' '{title_snip}' ABS audiobook offline and no other clients, skipping")
+                    return
 
         # Evaluate whether sync is needed
         should_sync = self._evaluate_sync_significance(config, book, abs_id, title_snip, prev_states_by_client)
@@ -610,7 +622,7 @@ class SyncManager:
         Returns True if sync should proceed, False to skip.
         """
         # Check for sync delta threshold between clients
-        progress_values = [cfg.current.get('pct', 0) for cfg in config.values() if cfg.current.get('pct') is not None]
+        progress_values = [cfg.current.get("pct", 0) for cfg in config.values() if cfg.current.get("pct") is not None]
         significant_diff = False
         max_progress = 0
         min_progress = 0
@@ -622,10 +634,16 @@ class SyncManager:
 
             if progress_diff >= self.sync_delta_between_clients:
                 significant_diff = True
-                logger.debug(f"'{abs_id}' '{title_snip}' Detected discrepancies between clients ({progress_diff:.2%}), forcing sync check even if deltas are 0")
-                logger.debug(f"'{abs_id}' '{title_snip}' Client discrepancy detected: {min_progress:.1%} to {max_progress:.1%}")
+                logger.debug(
+                    f"'{abs_id}' '{title_snip}' Detected discrepancies between clients ({progress_diff:.2%}), forcing sync check even if deltas are 0"
+                )
+                logger.debug(
+                    f"'{abs_id}' '{title_snip}' Client discrepancy detected: {min_progress:.1%} to {max_progress:.1%}"
+                )
             else:
-                logger.debug(f"'{abs_id}' '{title_snip}' Progress difference {progress_diff:.2%} below threshold {self.sync_delta_between_clients:.2%} - skipping sync")
+                logger.debug(
+                    f"'{abs_id}' '{title_snip}' Progress difference {progress_diff:.2%} below threshold {self.sync_delta_between_clients:.2%} - skipping sync"
+                )
 
         deltas_zero = all(round(cfg.delta, 4) == 0 for cfg in config.values())
 
@@ -644,16 +662,20 @@ class SyncManager:
             threshold = cfg.threshold
 
             if delta is None or threshold is None:
-                 logger.debug(f"'{title_snip}' '{key}' delta={delta}, threshold={threshold}")
+                logger.debug(f"'{title_snip}' '{key}' delta={delta}, threshold={threshold}")
 
             if delta is not None and threshold is not None and 0 < delta < threshold:
                 label, fmt = cfg.display
-                delta_str = cfg.value_seconds_formatter(delta) if cfg.value_seconds_formatter else cfg.value_formatter(delta)
+                delta_str = (
+                    cfg.value_seconds_formatter(delta) if cfg.value_seconds_formatter else cfg.value_formatter(delta)
+                )
                 small_changes.append(f"✋ [{abs_id}] [{title_snip}] {label} delta {delta_str} (Below threshold)")
 
         if small_changes and not any(cfg.delta >= cfg.threshold for cfg in config.values()):
             if significant_diff:
-                logger.debug(f"'{abs_id}' '{title_snip}' Proceeding with sync despite small deltas due to client discrepancies")
+                logger.debug(
+                    f"'{abs_id}' '{title_snip}' Proceeding with sync despite small deltas due to client discrepancies"
+                )
             else:
                 for s in small_changes:
                     logger.info(s)
@@ -665,7 +687,7 @@ class SyncManager:
         for _key, cfg in config.items():
             if cfg.delta > 0:
                 prev = cfg.previous_pct
-                curr = cfg.current.get('pct')
+                curr = cfg.current.get("pct")
                 label, fmt = cfg.display
                 logger.info(f"{label}: {fmt.format(prev=prev, curr=curr)}")
 
@@ -677,8 +699,8 @@ class SyncManager:
         if not leader:
             return
 
-        # Ensure epub is available locally (download from Booklore if needed)
-        if book.ebook_filename and hasattr(self, 'books_dir'):
+        # Ensure epub is available locally (download from Grimmory if needed)
+        if book.ebook_filename and hasattr(self, "books_dir"):
             try:
                 self._get_local_epub(book.ebook_filename)
             except Exception as e:
@@ -691,20 +713,24 @@ class SyncManager:
         try:
             txt = leader_client.get_text_from_current_state(book, leader_state)
         except Exception as e:
-            logger.warning(f"'{abs_id}' '{title_snip}' Error getting text from leader '{leader}': {sanitize_exception(e)}")
+            logger.warning(
+                f"'{abs_id}' '{title_snip}' Error getting text from leader '{leader}': {sanitize_exception(e)}"
+            )
             txt = None
         if not txt:
-            logger.warning(f"'{abs_id}' '{title_snip}' Could not get text from leader '{leader}', persisting leader snapshot")
+            logger.warning(
+                f"'{abs_id}' '{title_snip}' Could not get text from leader '{leader}', persisting leader snapshot"
+            )
             # Persist leader state so this delta isn't rediscovered on the next poll
             leader_current = leader_state.current
             state = State(
                 abs_id=abs_id,
                 book_id=book.id,
                 client_name=leader.lower(),
-                percentage=leader_current.get('pct'),
-                timestamp=leader_current.get('ts'),
-                xpath=leader_current.get('xpath'),
-                cfi=leader_current.get('cfi'),
+                percentage=leader_current.get("pct"),
+                timestamp=leader_current.get("ts"),
+                xpath=leader_current.get("xpath"),
+                cfi=leader_current.get("cfi"),
                 last_updated=time.time(),
             )
             self.database_service.save_state(state)
@@ -715,16 +741,20 @@ class SyncManager:
         locator = leader_client.get_locator_from_text(txt, epub, leader_pct)
         if not locator:
             # Try fallback if enabled (e.g. look at previous segment)
-            if getattr(self.ebook_parser, 'useXpathSegmentFallback', False):
+            if getattr(self.ebook_parser, "useXpathSegmentFallback", False):
                 fallback_txt = leader_client.get_fallback_text(book, leader_state)
                 if fallback_txt and fallback_txt != txt:
-                    logger.info(f"'{abs_id}' '{title_snip}' Primary text match failed. Trying previous segment fallback...")
+                    logger.info(
+                        f"'{abs_id}' '{title_snip}' Primary text match failed. Trying previous segment fallback..."
+                    )
                     locator = leader_client.get_locator_from_text(fallback_txt, epub, leader_pct)
                     if locator:
                         logger.info(f"'{abs_id}' '{title_snip}' Fallback successful!")
 
         if not locator:
-            logger.warning(f"'{abs_id}' '{title_snip}' Could not resolve locator from text for leader '{leader}', falling back to percentage of leader")
+            logger.warning(
+                f"'{abs_id}' '{title_snip}' Could not resolve locator from text for leader '{leader}', falling back to percentage of leader"
+            )
             locator = LocatorResult(percentage=leader_pct)
 
         # Update all other clients and store results
@@ -732,7 +762,7 @@ class SyncManager:
         for client_name, client_state in config.items():
             if client_name == leader:
                 continue
-            if client_name == 'ABS' and hasattr(book, 'sync_mode') and book.sync_mode == 'ebook_only':
+            if client_name == "ABS" and hasattr(book, "sync_mode") and book.sync_mode == "ebook_only":
                 continue
             client = self.sync_clients.get(client_name)
             if client is None:
@@ -765,19 +795,20 @@ class SyncManager:
             book_id=book.id,
             client_name=leader.lower(),
             last_updated=current_time,
-            percentage=leader_state_data.get('pct'),
-            timestamp=leader_state_data.get('ts'),
-            xpath=leader_state_data.get('xpath'),
-            cfi=leader_state_data.get('cfi')
+            percentage=leader_state_data.get("pct"),
+            timestamp=leader_state_data.get("ts"),
+            xpath=leader_state_data.get("xpath"),
+            cfi=leader_state_data.get("cfi"),
         )
         self.database_service.save_state(leader_state_model)
 
         for client_name, result in results.items():
             if result.success:
-                state_data = result.updated_state if result.updated_state else {'pct': result.location}
+                state_data = result.updated_state if result.updated_state else {"pct": result.location}
                 logger.info(f"'{abs_id}' '{title_snip}' Updated state data for '{client_name}': {state_data}")
                 try:
                     from src.services.write_tracker import record_write
+
                     record_write(client_name, book.id, state_data)
                 except ImportError:
                     pass
@@ -786,10 +817,10 @@ class SyncManager:
                     book_id=book.id,
                     client_name=client_name.lower(),
                     last_updated=current_time,
-                    percentage=state_data.get('pct'),
-                    timestamp=state_data.get('ts'),
-                    xpath=state_data.get('xpath'),
-                    cfi=state_data.get('cfi')
+                    percentage=state_data.get("pct"),
+                    timestamp=state_data.get("ts"),
+                    xpath=state_data.get("xpath"),
+                    cfi=state_data.get("cfi"),
                 )
                 self.database_service.save_state(client_state_model)
 
@@ -798,7 +829,7 @@ class SyncManager:
         # Flush logs to ensure we see this before any potential hard crash
         for handler in logger.handlers:
             handler.flush()
-        if hasattr(root_logger, 'handlers'):
+        if hasattr(root_logger, "handlers"):
             for handler in root_logger.handlers:
                 handler.flush()
 
@@ -834,11 +865,13 @@ class SyncManager:
             schedule.run_pending()
             time.sleep(30)
 
+
 if __name__ == "__main__":
     # This is only used for standalone testing - production uses web_server.py
     logger.info("Running sync manager in standalone mode (for testing)")
 
     from src.utils.di_container import create_container
+
     di_container = create_container()
     # Try to use dependency injection, fall back to legacy if there are issues
     sync_manager = di_container.sync_manager()

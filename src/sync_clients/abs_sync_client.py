@@ -16,7 +16,14 @@ TRANSCRIPT_DB_MANAGED = "DB_MANAGED"
 
 
 class ABSSyncClient(SyncClient):
-    def __init__(self, abs_client: ABSClient, transcriber: AudioTranscriber, ebook_parser: EbookParser, alignment_service=None, data_dir=None):
+    def __init__(
+        self,
+        abs_client: ABSClient,
+        transcriber: AudioTranscriber,
+        ebook_parser: EbookParser,
+        alignment_service=None,
+        data_dir=None,
+    ):
         super().__init__(ebook_parser)
         self.abs_client = abs_client
         self.transcriber = transcriber
@@ -37,19 +44,21 @@ class ABSSyncClient(SyncClient):
 
     def get_supported_sync_types(self) -> set:
         """ABS audiobook client only syncs audiobooks."""
-        return {'audiobook'}
+        return {"audiobook"}
 
-    def get_service_state(self, book: Book, prev_state: State | None, title_snip: str = "", bulk_context: dict = None) -> ServiceState | None:
+    def get_service_state(
+        self, book: Book, prev_state: State | None, title_snip: str = "", bulk_context: dict = None
+    ) -> ServiceState | None:
         abs_id = book.abs_id
 
         # Use bulk context if available, otherwise fetch individually
         if bulk_context and abs_id in bulk_context:
             item_data = bulk_context[abs_id]
-            abs_ts = item_data.get('currentTime', 0)
+            abs_ts = item_data.get("currentTime", 0)
             # Note: Still need to convert to percentage using transcript
         else:
             response = self.abs_client.get_progress(abs_id)
-            abs_ts = response.get('currentTime') if response is not None else None
+            abs_ts = response.get("currentTime") if response is not None else None
 
         if abs_ts is None:
             logger.info("ABS timestamp is None, probably not started the book yet")
@@ -68,14 +77,14 @@ class ABSSyncClient(SyncClient):
         delta = abs(abs_ts - prev_abs_ts) if abs_ts and prev_abs_ts else abs(abs_ts - prev_abs_ts) if abs_ts else 0
 
         return ServiceState(
-            current={'pct': abs_pct, 'ts': abs_ts},
+            current={"pct": abs_pct, "ts": abs_ts},
             previous_pct=prev_abs_pct,
             delta=delta,
             threshold=self.delta_abs_thresh,
             is_configured=True,
             display=("ABS", "{prev:.4%} -> {curr:.4%}"),
             value_seconds_formatter=lambda v: f"{v:.2f}s",
-            value_formatter=lambda v: f"{v:.4%}"
+            value_formatter=lambda v: f"{v:.4%}",
         )
 
     def _abs_to_percentage(self, abs_seconds, book: Book):
@@ -90,11 +99,11 @@ class ABSSyncClient(SyncClient):
             return None
 
         if transcript_path == TRANSCRIPT_DB_MANAGED:
-             if self.alignment_service:
-                 dur = self.alignment_service.get_book_duration(book.id)
-                 if dur:
-                     return min(max(abs_seconds / dur, 0.0), 1.0)
-             return None
+            if self.alignment_service:
+                dur = self.alignment_service.get_book_duration(book.id)
+                if dur:
+                    return min(max(abs_seconds / dur, 0.0), 1.0)
+            return None
 
         try:
             if not is_safe_path_within(transcript_path, self.data_dir / "transcripts"):
@@ -106,14 +115,14 @@ class ABSSyncClient(SyncClient):
 
             with open(transcript_path) as f:
                 data = json.load(f)
-                dur = data[-1]['end'] if isinstance(data, list) else data.get('duration', 0)
+                dur = data[-1]["end"] if isinstance(data, list) else data.get("duration", 0)
                 return min(max(abs_seconds / dur, 0.0), 1.0) if dur > 0 else None
         except Exception as e:
             logger.debug(f"Failed to parse transcript for duration calculation: {e}")
             return None
 
     def get_text_from_current_state(self, book: Book, state: ServiceState) -> str | None:
-        abs_ts = state.current.get('ts')
+        abs_ts = state.current.get("ts")
         if not book or abs_ts is None:
             return None
 
@@ -122,59 +131,65 @@ class ABSSyncClient(SyncClient):
             # Inverse lookup: Time -> Char -> Text
             char_offset = self.alignment_service.get_char_for_time(book.id, abs_ts)
             if char_offset is not None:
-                 # Need book text
-                 book_path = self.ebook_parser.resolve_book_path(book.ebook_filename)
-                 if book_path and book_path.exists():
-                     full_text, _ = self.ebook_parser.extract_text_and_map(book_path)
-                     # Return context around char
-                     start = max(0, char_offset - 50)
-                     end = min(len(full_text), char_offset + 150)
-                     return full_text[start:end]
+                # Need book text
+                book_path = self.ebook_parser.resolve_book_path(book.ebook_filename)
+                if book_path and book_path.exists():
+                    full_text, _ = self.ebook_parser.extract_text_and_map(book_path)
+                    # Return context around char
+                    start = max(0, char_offset - 50)
+                    end = min(len(full_text), char_offset + 150)
+                    return full_text[start:end]
             return None
 
         # Legacy File-Based
         # SMART FALLBACK: If file doesn't exist, try DB anyway (and self-heal)
-        if hasattr(book, 'transcript_file') and book.transcript_file:
+        if hasattr(book, "transcript_file") and book.transcript_file:
             path = Path(book.transcript_file)
             if not path.exists() and self.alignment_service:
                 logger.warning(f"'{book.abs_id}' Legacy transcript file missing: '{path}' — Attempting DB fallback")
                 # Try DB lookup
                 char_offset = self.alignment_service.get_char_for_time(book.id, abs_ts)
                 if char_offset is not None:
-                     logger.info(f"'{book.abs_id}' Found in DB despite missing file — Self-healing state")
-                     # We can't easily save the book here without circular dependency or passing DB service
-                     # But we can at least return valid text!
-                     book_path = self.ebook_parser.resolve_book_path(book.ebook_filename)
-                     if book_path and book_path.exists():
-                         full_text, _ = self.ebook_parser.extract_text_and_map(book_path)
-                         start = max(0, char_offset - 50)
-                         end = min(len(full_text), char_offset + 150)
-                         return full_text[start:end]
+                    logger.info(f"'{book.abs_id}' Found in DB despite missing file — Self-healing state")
+                    # We can't easily save the book here without circular dependency or passing DB service
+                    # But we can at least return valid text!
+                    book_path = self.ebook_parser.resolve_book_path(book.ebook_filename)
+                    if book_path and book_path.exists():
+                        full_text, _ = self.ebook_parser.extract_text_and_map(book_path)
+                        start = max(0, char_offset - 50)
+                        end = min(len(full_text), char_offset + 150)
+                        return full_text[start:end]
 
         return self.transcriber.get_text_at_time(book.transcript_file, abs_ts)
 
     def get_fallback_text(self, book: Book, state: ServiceState) -> str | None:
         # Similar logic for fallback
-        abs_ts = state.current.get('ts')
+        abs_ts = state.current.get("ts")
         if not book or abs_ts is None:
             return None
 
         if book.transcript_file == TRANSCRIPT_DB_MANAGED and self.alignment_service:
-             # Just look a bit earlier?
-             earlier_ts = max(0, abs_ts - 10)
-             return self.get_text_from_current_state(book, ServiceState({'ts': earlier_ts}))
+            # Just look a bit earlier?
+            earlier_ts = max(0, abs_ts - 10)
+            dummy_state = ServiceState(
+                current={"ts": earlier_ts},
+                previous_pct=0,
+                delta=0,
+                threshold=0,
+                is_configured=True,
+                display=("", ""),
+                value_formatter=str,
+            )
+            return self.get_text_from_current_state(book, dummy_state)
 
         return self.transcriber.get_previous_segment_text(book.transcript_file, abs_ts)
 
     def update_progress(self, book: Book, request: UpdateProgressRequest) -> SyncResult:
-        book_title = book.title or 'Unknown Book'
+        book_title = book.title or "Unknown Book"
         if request.locator_result.percentage == 0.0:
             logger.info(f"'{book_title}' Locator percentage is 0.0% — Setting ABS progress to start of book")
             result, final_ts = self._update_abs_progress_with_offset(book.abs_id, 0.0)
-            updated_state = {
-                'ts': final_ts,
-                'pct': 0.0
-            }
+            updated_state = {"ts": final_ts, "pct": 0.0}
             return SyncResult(final_ts, result.get("success", False), updated_state)
 
         # [FIX] Route DB_MANAGED books to AlignmentService, Legacy books to Transcriber
@@ -185,38 +200,34 @@ class ABSSyncClient(SyncClient):
             # We use the match_index (character offset) found by the EbookParser
             char_index = request.locator_result.match_index
             if char_index is not None:
-                ts_for_text = self.alignment_service.get_time_for_text(
-                    book.id,
-                    char_offset_hint=char_index
-                )
+                ts_for_text = self.alignment_service.get_time_for_text(book.id, char_offset_hint=char_index)
             else:
                 logger.debug(f"'{book_title}' Alignment lookup skipped: No character index provided in request")
 
         elif book.transcript_file and book.transcript_file != TRANSCRIPT_DB_MANAGED:
             # Legacy Path: Use JSON File
             ts_for_text = self.transcriber.find_time_for_text(
-                book.transcript_file, request.txt,
+                book.transcript_file,
+                request.txt,
                 hint_percentage=request.locator_result.percentage,
                 char_offset=request.locator_result.match_index,
-                book_title=book_title
+                book_title=book_title,
             )
         if ts_for_text is not None:
             response = self.abs_client.get_progress(book.abs_id)
-            abs_ts = response.get('currentTime') if response is not None else None
+            abs_ts = response.get("currentTime") if response is not None else None
             if abs_ts is not None and ts_for_text < abs_ts:
-                logger.info(f"'{book_title}' Not updating ABS progress — target timestamp {ts_for_text:.2f}s is before current ABS position {abs_ts:.2f}s")
-                return SyncResult(abs_ts, True, {
-                    'ts': abs_ts,
-                    'pct': self._abs_to_percentage(abs_ts, book) or 0
-                })
+                logger.info(
+                    f"'{book_title}' Not updating ABS progress — target timestamp {ts_for_text:.2f}s is before current ABS position {abs_ts:.2f}s"
+                )
+                return SyncResult(abs_ts, True, {"ts": abs_ts, "pct": self._abs_to_percentage(abs_ts, book) or 0})
 
-            result, final_ts = self._update_abs_progress_with_offset(book.abs_id, ts_for_text, abs_ts if abs_ts is not None else 0.0)
+            result, final_ts = self._update_abs_progress_with_offset(
+                book.abs_id, ts_for_text, abs_ts if abs_ts is not None else 0.0
+            )
             # Calculate percentage from timestamp for state
             pct = self._abs_to_percentage(final_ts, book)
-            updated_state = {
-                'ts': final_ts,
-                'pct': pct or 0
-            }
+            updated_state = {"ts": final_ts, "pct": pct or 0}
             return SyncResult(final_ts, result.get("success", False), updated_state)
         logger.warning(f"'{book_title}' Not updating ABS progress — could not find timestamp for provided text")
         return SyncResult(None, False)
@@ -243,7 +254,8 @@ class ABSSyncClient(SyncClient):
         logger.debug(f"   time_listened: {time_listened:.1f}s (prev: {prev_abs_ts:.1f}s → new: {adjusted_ts:.1f}s)")
         try:
             from src.services.write_tracker import record_write
-            record_write('ABS', abs_id)
+
+            record_write("ABS", abs_id)
         except ImportError:
             pass
         abs_ok = self.abs_client.update_progress(abs_id, adjusted_ts, time_listened)

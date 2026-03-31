@@ -14,17 +14,14 @@ logger = logging.getLogger(__name__)
 
 class TranscriptionSegment:
     """Represents a single transcription segment with timing."""
+
     def __init__(self, start: float, end: float, text: str):
         self.start = start
         self.end = end
         self.text = text
 
     def to_dict(self) -> dict:
-        return {
-            "start": self.start,
-            "end": self.end,
-            "text": self.text
-        }
+        return {"start": self.start, "end": self.end, "text": self.text}
 
 
 class TranscriptionProvider(ABC):
@@ -67,21 +64,22 @@ class LocalWhisperProvider(TranscriptionProvider):
         device = self.whisper_device
         compute_type = self.whisper_compute_type
 
-        if device == 'auto':
+        if device == "auto":
             try:
                 import torch
+
                 if torch.cuda.is_available():
-                    device = 'cuda'
+                    device = "cuda"
                     logger.info(f"CUDA available: {torch.cuda.get_device_name(0)}")
                 else:
-                    device = 'cpu'
+                    device = "cpu"
                     logger.info("CUDA not available, using CPU")
             except ImportError:
-                device = 'cpu'
+                device = "cpu"
                 logger.info("PyTorch not installed, using CPU")
 
-        if compute_type == 'auto':
-            compute_type = 'float16' if device == 'cuda' else 'int8'
+        if compute_type == "auto":
+            compute_type = "float16" if device == "cuda" else "int8"
 
         return device, compute_type
 
@@ -89,12 +87,13 @@ class LocalWhisperProvider(TranscriptionProvider):
         """Lazy-load the Whisper model."""
         if self._model is None:
             from faster_whisper import WhisperModel
+
             device, compute_type = self._get_device_config()
             logger.info(f"Loading Whisper: model={self.model_size}, device={device}, compute_type={compute_type}")
 
-            model_kwargs = {'device': device, 'compute_type': compute_type}
-            if device == 'cpu':
-                model_kwargs['cpu_threads'] = 4
+            model_kwargs = {"device": device, "compute_type": compute_type}
+            if device == "cpu":
+                model_kwargs["cpu_threads"] = 4
 
             self._model = WhisperModel(self.model_size, **model_kwargs)
         return self._model
@@ -108,11 +107,7 @@ class LocalWhisperProvider(TranscriptionProvider):
         segments, info = model.transcribe(str(audio_path), beam_size=1, best_of=1)
 
         for segment in segments:
-            segments_out.append({
-                "start": segment.start,
-                "end": segment.end,
-                "text": segment.text.strip()
-            })
+            segments_out.append({"start": segment.start, "end": segment.end, "text": segment.text.strip()})
 
         logger.info(f"Transcription complete: {len(segments_out)} segments")
         return segments_out
@@ -149,36 +144,34 @@ class DeepgramProvider(TranscriptionProvider):
             utterances=True,
             punctuate=True,
             request_options={
-               "timeout_in_seconds": 600  # Set to 10 minutes (default is 60s)
-            }
+                "timeout_in_seconds": 600  # Set to 10 minutes (default is 60s)
+            },
         )
 
         segments_out = []
 
         # Parse Deepgram response
-        if hasattr(response, 'results') and response.results:
+        if hasattr(response, "results") and response.results:
             # Try utterances first (preferred for sentence-level segments)
-            if hasattr(response.results, 'utterances') and response.results.utterances:
+            if hasattr(response.results, "utterances") and response.results.utterances:
                 for utterance in response.results.utterances:
-                    segments_out.append({
-                        "start": utterance.start,
-                        "end": utterance.end,
-                        "text": utterance.transcript.strip()
-                    })
+                    segments_out.append(
+                        {"start": utterance.start, "end": utterance.end, "text": utterance.transcript.strip()}
+                    )
             # Fallback to channels/words
-            elif hasattr(response.results, 'channels') and response.results.channels:
+            elif hasattr(response.results, "channels") and response.results.channels:
                 for channel in response.results.channels:
                     for alternative in channel.alternatives:
-                        if hasattr(alternative, 'words') and alternative.words:
+                        if hasattr(alternative, "words") and alternative.words:
                             current_segment = {"start": 0, "end": 0, "text": ""}
                             for word in alternative.words:
                                 if not current_segment["text"]:
                                     current_segment["start"] = word.start
                                 current_segment["end"] = word.end
-                                word_text = getattr(word, 'punctuated_word', word.word) or word.word
+                                word_text = getattr(word, "punctuated_word", word.word) or word.word
                                 current_segment["text"] += word_text + " "
 
-                                if word_text and word_text[-1] in '.!?':
+                                if word_text and word_text[-1] in ".!?":
                                     current_segment["text"] = current_segment["text"].strip()
                                     segments_out.append(current_segment)
                                     current_segment = {"start": 0, "end": 0, "text": ""}
@@ -186,15 +179,12 @@ class DeepgramProvider(TranscriptionProvider):
                             if current_segment["text"]:
                                 current_segment["text"] = current_segment["text"].strip()
                                 segments_out.append(current_segment)
-                        elif hasattr(alternative, 'transcript') and alternative.transcript:
-                            segments_out.append({
-                                "start": 0,
-                                "end": 0,
-                                "text": alternative.transcript.strip()
-                            })
+                        elif hasattr(alternative, "transcript") and alternative.transcript:
+                            segments_out.append({"start": 0, "end": 0, "text": alternative.transcript.strip()})
 
         logger.info(f"Deepgram transcription complete: {len(segments_out)} segments")
         return segments_out
+
 
 class WhisperCppServerProvider(TranscriptionProvider):
     """Transcription via whisper.cpp HTTP server (ggml-org)."""
@@ -202,9 +192,7 @@ class WhisperCppServerProvider(TranscriptionProvider):
     def __init__(self):
         url = os.environ.get("WHISPER_CPP_URL", "").strip()
         if not url:
-            raise ValueError(
-                "WHISPER_CPP_URL is not configured. Set it in Settings → Advanced Options."
-            )
+            raise ValueError("WHISPER_CPP_URL is not configured. Set it in Settings → Advanced Options.")
         self.server_url = url
         self.model = os.environ.get("WHISPER_MODEL", "small")
 
@@ -217,28 +205,17 @@ class WhisperCppServerProvider(TranscriptionProvider):
         logger.info(f"Transcribing with {self.get_name()}: {audio_path.name}")
 
         with open(audio_path, "rb") as f:
-            files = {
-                "file": (audio_path.name, f, "audio/wav")
-            }
+            files = {"file": (audio_path.name, f, "audio/wav")}
             data = {"model": self.model, "response_format": "verbose_json"}
 
-            response = requests.post(
-                self.server_url,
-                files=files,
-                data=data,
-                timeout=600
-            )
+            response = requests.post(self.server_url, files=files, data=data, timeout=600)
 
         response.raise_for_status()
         result = response.json()
 
         segments_out = []
         for seg in result.get("segments", []):
-            segments_out.append({
-                "start": float(seg["start"]),
-                "end": float(seg["end"]),
-                "text": seg["text"].strip()
-            })
+            segments_out.append({"start": float(seg["start"]), "end": float(seg["end"]), "text": seg["text"].strip()})
 
         logger.info(f"whisper.cpp transcription complete: {len(segments_out)} segments")
         return segments_out

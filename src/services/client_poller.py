@@ -20,10 +20,10 @@ class ClientPoller:
 
     # Keys match the container.sync_clients dict
     _POLLABLE = [
-        ('Storyteller', 'STORYTELLER'),
-        ('BookLore', 'BOOKLORE'),
-        ('BookLore2', 'BOOKLORE_2'),
-        ('Hardcover', 'HARDCOVER'),
+        ("Storyteller", "STORYTELLER"),
+        ("Grimmory", "GRIMMORY"),
+        ("Grimmory2", "GRIMMORY_2"),
+        ("Hardcover", "HARDCOVER"),
     ]
 
     def __init__(self, database_service, sync_manager, sync_clients_dict: dict):
@@ -31,7 +31,7 @@ class ClientPoller:
         self._sync_manager = sync_manager
         self._sync_clients = sync_clients_dict
         self._last_known: dict[tuple, float] = {}  # {(client_name, book_id): last_pct}
-        self._last_poll: dict[str, float] = {}     # {client_name: last_poll_timestamp}
+        self._last_poll: dict[str, float] = {}  # {client_name: last_poll_timestamp}
         self._running = False
 
     # ------------------------------------------------------------------
@@ -59,17 +59,17 @@ class ClientPoller:
     def _format_config_summary(self) -> str:
         parts = []
         for client_name, env_prefix in self._POLLABLE:
-            mode = os.environ.get(f'{env_prefix}_POLL_MODE', 'global').lower()
-            if mode == 'custom':
+            mode = os.environ.get(f"{env_prefix}_POLL_MODE", "global").lower()
+            if mode == "custom":
                 interval = self._get_interval(env_prefix)
                 parts.append(f"{client_name}: {interval}s")
             else:
                 parts.append(f"{client_name}: global")
-        return ', '.join(parts) if parts else 'none'
+        return ", ".join(parts) if parts else "none"
 
     def _get_interval(self, env_prefix: str, default: int = 300) -> int:
         try:
-            return int(os.environ.get(f'{env_prefix}_POLL_SECONDS', str(default)))
+            return int(os.environ.get(f"{env_prefix}_POLL_SECONDS", str(default)))
         except ValueError:
             return default
 
@@ -77,8 +77,8 @@ class ClientPoller:
         """Check each configured client if it is due for a poll."""
         now = time.time()
         for client_name, env_prefix in self._POLLABLE:
-            mode = os.environ.get(f'{env_prefix}_POLL_MODE', 'global').lower()
-            if mode != 'custom':
+            mode = os.environ.get(f"{env_prefix}_POLL_MODE", "global").lower()
+            if mode != "custom":
                 continue
 
             interval = self._get_interval(env_prefix)
@@ -98,7 +98,7 @@ class ClientPoller:
             return
 
         try:
-            active_books = self._db.get_books_by_status('active')
+            active_books = self._db.get_books_by_status("active")
         except Exception as e:
             logger.debug(f"ClientPoller: could not fetch active books: {e}")
             return
@@ -110,7 +110,7 @@ class ClientPoller:
                 if current_state is None:
                     continue
 
-                current_pct = current_state.current.get('pct')
+                current_pct = current_state.current.get("pct")
                 if current_pct is None:
                     continue
 
@@ -119,15 +119,11 @@ class ClientPoller:
                 last_pct = self._last_known.get(cache_key)
 
                 if last_pct is None:
-                    logger.debug(
-                        f"{client_name} poll: '{book.title}' initial position cached ({current_pct:.1%})"
-                    )
+                    logger.debug(f"{client_name} poll: '{book.title}' initial position cached ({current_pct:.1%})")
                 elif abs(current_pct - last_pct) > 0.001:
                     # Check write-suppression before acting
                     if is_own_write(client_name, book.id, state=current_state.current):
-                        logger.debug(
-                            f"{client_name} poll: Ignoring self-triggered change for '{book.title}'"
-                        )
+                        logger.debug(f"{client_name} poll: Ignoring self-triggered change for '{book.title}'")
                     else:
                         logger.info(
                             f"{client_name} poll: '{book.title}' moved "
@@ -135,7 +131,7 @@ class ClientPoller:
                         )
                         threading.Thread(
                             target=self._sync_manager.sync_cycle,
-                            kwargs={'target_book_id': book.id},
+                            kwargs={"target_book_id": book.id},
                             daemon=True,
                         ).start()
 

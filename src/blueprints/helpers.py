@@ -24,28 +24,29 @@ logger = logging.getLogger(__name__)
 
 # --------------- Accessors for shared state ---------------
 
+
 def get_container():
-    return current_app.config['container']
+    return current_app.config["container"]
 
 
 def get_manager():
-    return current_app.config['sync_manager']
+    return current_app.config["sync_manager"]
 
 
 def get_database_service():
-    return current_app.config['database_service']
+    return current_app.config["database_service"]
 
 
 def get_ebook_dir():
-    return current_app.config['EBOOK_DIR']
+    return current_app.config["EBOOK_DIR"]
 
 
 def get_covers_dir():
-    return current_app.config['COVERS_DIR']
+    return current_app.config["COVERS_DIR"]
 
 
 def get_abs_service():
-    return current_app.config['abs_service']
+    return current_app.config["abs_service"]
 
 
 def get_book_or_404(ref):
@@ -56,69 +57,71 @@ def get_book_or_404(ref):
     return book
 
 
-# --------------- Booklore helpers ---------------
-
-def get_booklore_client():
-    """Return the Booklore client group (facade over all instances)."""
-    return get_container().booklore_client_group()
+# --------------- Grimmory helpers ---------------
 
 
-def find_in_booklore(filename):
-    """Search Booklore for a book by filename, return (book_info, client) or (None, None).
+def get_grimmory_client():
+    """Return the Grimmory client group (facade over all instances)."""
+    return get_container().grimmory_client_group()
+
+
+def find_in_grimmory(filename):
+    """Search Grimmory for a book by filename, return (book_info, client) or (None, None).
 
     When found via the group facade, resolves the owning single-instance client
     so callers can use per-instance operations (e.g. download_book with a bare ID).
     """
     if not filename:
         return None, None
-    group = get_booklore_client()
+    group = get_grimmory_client()
     if group.is_configured():
         book = group.find_book_by_filename(filename)
         if book:
             # Resolve the specific client that owns this book
-            instance_id = book.get('_instance_id', 'default')
-            client = _resolve_booklore_instance(instance_id)
+            instance_id = book.get("_instance_id", "default")
+            client = _resolve_grimmory_instance(instance_id)
             return book, client
     return None, None
 
 
-def _resolve_booklore_instance(instance_id):
-    """Return the single BookloreClient for the given instance_id."""
+def _resolve_grimmory_instance(instance_id):
+    """Return the single GrimmoryClient for the given instance_id."""
     container = get_container()
-    if instance_id == '2':
-        return container.booklore_client_2()
-    return container.booklore_client()
+    if instance_id == "2":
+        return container.grimmory_client_2()
+    return container.grimmory_client()
 
 
-def get_enabled_booklore_server_ids():
-    """Return set of server_ids for enabled Booklore instances."""
-    group = get_booklore_client()
-    active = getattr(group, '_active', None)
+def get_enabled_grimmory_server_ids():
+    """Return set of server_ids for enabled Grimmory instances."""
+    group = get_grimmory_client()
+    active = getattr(group, "_active", None)
     if not isinstance(active, (list, tuple)):
         return set()
     return {c.instance_id for c in active}
 
 
-def booklore_cover_proxy_prefix(server_id):
-    """Return the cover-proxy URL path prefix for a Booklore instance."""
-    if server_id == '2':
-        return '/api/cover-proxy/booklore2'
-    return '/api/cover-proxy/booklore'
+def grimmory_cover_proxy_prefix(server_id):
+    """Return the cover-proxy URL path prefix for a Grimmory instance."""
+    if server_id == "2":
+        return "/api/cover-proxy/grimmory2"
+    return "/api/cover-proxy/grimmory"
 
 
-def any_booklore_configured():
-    """Return True if any Booklore server is configured."""
-    return get_booklore_client().is_configured()
+def any_grimmory_configured():
+    """Return True if any Grimmory server is configured."""
+    return get_grimmory_client().is_configured()
 
 
-def _booklore_label(instance_id):
-    """Return the user-facing label for a Booklore instance."""
-    if instance_id == '2':
-        return os.environ.get("BOOKLORE_2_LABEL", "Booklore 2")
-    return os.environ.get("BOOKLORE_LABEL", "Booklore")
+def _grimmory_label(instance_id):
+    """Return the user-facing label for a Grimmory instance."""
+    if instance_id == "2":
+        return os.environ.get("GRIMMORY_2_LABEL", "Grimmory 2")
+    return os.environ.get("GRIMMORY_LABEL", "Grimmory")
 
 
 # --------------- Helper functions ---------------
+
 
 def get_audiobooks_conditionally():
     """Get audiobooks from configured libraries (ABS_LIBRARY_IDS) or all libraries if not set."""
@@ -127,9 +130,9 @@ def get_audiobooks_conditionally():
 
 def get_audiobook_author(ab):
     """Extract author from audiobook metadata."""
-    media = ab.get('media', {})
-    metadata = media.get('metadata', {})
-    return metadata.get('authorName') or (metadata.get('authors') or [{}])[0].get("name", "")
+    media = ab.get("media", {})
+    metadata = media.get("metadata", {})
+    return metadata.get("authorName") or (metadata.get("authors") or [{}])[0].get("name", "")
 
 
 def audiobook_matches_search(ab, search_term):
@@ -137,7 +140,7 @@ def audiobook_matches_search(ab, search_term):
     manager = get_manager()
 
     def normalize(s):
-        return re.sub(r'[^\w\s]', '', s.lower())
+        return re.sub(r"[^\w\s]", "", s.lower())
 
     title = normalize(manager.get_audiobook_title(ab))
     author = normalize(get_audiobook_author(ab))
@@ -164,25 +167,25 @@ def find_ebook_file(filename, ebook_dir=None):
     return matches[0] if matches else None
 
 
-def get_kosync_id_for_ebook(ebook_filename, booklore_id=None, original_filename=None, bl_client=None):
+def get_kosync_id_for_ebook(ebook_filename, grimmory_id=None, original_filename=None, bl_client=None):
     """Get KOSync document ID for an ebook.
-    Tries Booklore API first (if configured and booklore_id provided),
+    Tries Grimmory API first (if configured and grimmory_id provided),
     falls back to filesystem if needed.
     """
     container = get_container()
     EBOOK_DIR = get_ebook_dir()
 
-    # Try Booklore API first — use the specific client that reported the ID
-    if booklore_id and bl_client and bl_client.is_configured():
+    # Try Grimmory API first — use the specific client that reported the ID
+    if grimmory_id and bl_client and bl_client.is_configured():
         try:
-            content = bl_client.download_book(booklore_id)
+            content = bl_client.download_book(grimmory_id)
             if content:
                 kosync_id = container.ebook_parser().get_kosync_id_from_bytes(ebook_filename, content)
                 if kosync_id:
-                    logger.debug(f"Computed KOSync ID from Booklore download: '{kosync_id}'")
+                    logger.debug(f"Computed KOSync ID from Grimmory download: '{kosync_id}'")
                     return kosync_id
         except Exception as e:
-            logger.warning(f"Failed to get KOSync ID from Booklore: {e}")
+            logger.warning(f"Failed to get KOSync ID from Grimmory: {e}")
 
     # Fall back to filesystem
     ebook_path = find_ebook_file(ebook_filename)
@@ -212,7 +215,7 @@ def get_kosync_id_for_ebook(ebook_filename, booklore_id=None, original_filename=
                     if not epub_cache.exists():
                         epub_cache.mkdir(parents=True, exist_ok=True)
 
-                    if abs_client.download_file(target['stream_url'], cached_path):
+                    if abs_client.download_file(target["stream_url"], cached_path):
                         logger.info(f"   Downloaded ABS ebook to '{cached_path}'")
                         return container.ebook_parser().get_kosync_id(cached_path)
                 else:
@@ -239,23 +242,23 @@ def get_kosync_id_for_ebook(ebook_filename, booklore_id=None, original_filename=
                     results = cwa_client.search_ebooks(cwa_id)
 
                     for res in results:
-                        if str(res.get('id')) == cwa_id:
+                        if str(res.get("id")) == cwa_id:
                             target = res
                             break
 
                     if not target and len(results) == 1:
                         target = results[0]
 
-                    if target and target.get('download_url'):
+                    if target and target.get("download_url"):
                         logger.info(f"Using direct download link from search for '{target.get('title', 'Unknown')}'")
                     else:
                         logger.debug("Search did not return a usable result, trying direct ID lookup")
                         target = cwa_client.get_book_by_id(cwa_id)
 
-                    if target and target.get('download_url'):
+                    if target and target.get("download_url"):
                         if not epub_cache.exists():
                             epub_cache.mkdir(parents=True, exist_ok=True)
-                        if cwa_client.download_ebook(target['download_url'], cached_path):
+                        if cwa_client.download_ebook(target["download_url"], cached_path):
                             logger.info(f"   Downloaded CWA ebook to '{cached_path}'")
                             return container.ebook_parser().get_kosync_id(cached_path)
                     else:
@@ -264,33 +267,46 @@ def get_kosync_id_for_ebook(ebook_filename, booklore_id=None, original_filename=
             logger.error(f"   Failed CWA on-demand download: {e}")
 
     # Neither source available
-    if not any_booklore_configured() and not EBOOK_DIR.exists():
+    if not any_grimmory_configured() and not EBOOK_DIR.exists():
         logger.warning(
             f"Cannot compute KOSync ID for '{ebook_filename}': "
-            "Neither Booklore integration nor /books volume is configured. "
-            "Enable Booklore (BOOKLORE_SERVER, BOOKLORE_USER, BOOKLORE_PASSWORD) "
+            "Neither Grimmory integration nor /books volume is configured. "
+            "Enable Grimmory (GRIMMORY_SERVER, GRIMMORY_USER, GRIMMORY_PASSWORD) "
             "or mount the ebooks directory to /books"
         )
-    elif not booklore_id and not find_ebook_file(ebook_filename):
-        logger.warning(f"Cannot compute KOSync ID for '{ebook_filename}': File not found in Booklore, filesystem, or remote sources")
+    elif not grimmory_id and not find_ebook_file(ebook_filename):
+        logger.warning(
+            f"Cannot compute KOSync ID for '{ebook_filename}': File not found in Grimmory, filesystem, or remote sources"
+        )
 
     return None
 
 
 class EbookResult:
-    """Wrapper to provide consistent interface for ebooks from Booklore, CWA, ABS, or filesystem."""
+    """Wrapper to provide consistent interface for ebooks from Grimmory, CWA, ABS, or filesystem."""
 
-    def __init__(self, name, title=None, subtitle=None, authors=None, booklore_id=None, path=None, source=None, source_id=None, cover_url=None):
+    def __init__(
+        self,
+        name,
+        title=None,
+        subtitle=None,
+        authors=None,
+        grimmory_id=None,
+        path=None,
+        source=None,
+        source_id=None,
+        cover_url=None,
+    ):
         self.name = name
         self.title = title or Path(name).stem
-        self.subtitle = subtitle or ''
-        self.authors = authors or ''
-        self.booklore_id = booklore_id
+        self.subtitle = subtitle or ""
+        self.authors = authors or ""
+        self.grimmory_id = grimmory_id
         self.path = path
         self.source = source
-        self.source_id = source_id or booklore_id
+        self.source_id = source_id or grimmory_id
         self.cover_url = cover_url
-        self.has_metadata = booklore_id is not None or (title is not None and title != name)
+        self.has_metadata = grimmory_id is not None or (title is not None and title != name)
 
     @property
     def display_name(self):
@@ -313,7 +329,7 @@ class EbookResult:
 
 
 def get_searchable_ebooks(search_term):
-    """Get ebooks from Booklore API, filesystem, ABS, and CWA.
+    """Get ebooks from Grimmory API, filesystem, ABS, and CWA.
     Returns list of EbookResult objects for consistent interface."""
     container = get_container()
     EBOOK_DIR = get_ebook_dir()
@@ -322,35 +338,37 @@ def get_searchable_ebooks(search_term):
     found_filenames = set()
     found_stems = set()
 
-    # 1. Booklore (all configured servers)
-    bl_group = get_booklore_client()
+    # 1. Grimmory (all configured servers)
+    bl_group = get_grimmory_client()
     if bl_group.is_configured():
         try:
             books = bl_group.search_books(search_term)
             if books:
                 for b in books:
-                    fname = b.get('fileName', '')
-                    if fname.lower().endswith('.epub'):
+                    fname = b.get("fileName", "")
+                    if fname.lower().endswith(".epub"):
                         if fname.lower() in found_filenames:
                             continue
                         found_filenames.add(fname.lower())
                         found_stems.add(Path(fname).stem.lower())
-                        bl_id = b.get('id')
-                        instance_id = b.get('_instance_id', 'default')
-                        label = _booklore_label(instance_id)
-                        cover_prefix = "booklore2" if instance_id == "2" else "booklore"
+                        bl_id = b.get("id")
+                        instance_id = b.get("_instance_id", "default")
+                        label = _grimmory_label(instance_id)
+                        cover_prefix = "grimmory2" if instance_id == "2" else "grimmory"
                         cover = f"/api/cover-proxy/{cover_prefix}/{bl_id}" if bl_id else None
-                        results.append(EbookResult(
-                            name=fname,
-                            title=b.get('title'),
-                            subtitle=b.get('subtitle'),
-                            authors=b.get('authors'),
-                            booklore_id=bl_id,
-                            source=label,
-                            cover_url=cover
-                        ))
+                        results.append(
+                            EbookResult(
+                                name=fname,
+                                title=b.get("title"),
+                                subtitle=b.get("subtitle"),
+                                authors=b.get("authors"),
+                                grimmory_id=bl_id,
+                                source=label,
+                                cover_url=cover,
+                            )
+                        )
         except Exception as e:
-            logger.warning(f"Booklore search failed: {e}")
+            logger.warning(f"Grimmory search failed: {e}")
 
     # 2. ABS ebook libraries
     if search_term:
@@ -359,22 +377,24 @@ def get_searchable_ebooks(search_term):
             abs_ebooks = abs_service.search_ebooks(search_term)
             if abs_ebooks:
                 for ab in abs_ebooks:
-                    ebook_files = abs_service.get_ebook_files(ab['id'])
+                    ebook_files = abs_service.get_ebook_files(ab["id"])
                     if ebook_files:
                         ef = ebook_files[0]
                         fname = f"{ab['id']}_abs.{ef['ext']}"
                         if fname.lower() not in found_filenames:
-                            results.append(EbookResult(
-                                name=fname,
-                                title=ab.get('title'),
-                                authors=ab.get('author'),
-                                source='ABS',
-                                source_id=ab.get('id'),
-                                cover_url=f"/api/cover-proxy/{ab['id']}"
-                            ))
+                            results.append(
+                                EbookResult(
+                                    name=fname,
+                                    title=ab.get("title"),
+                                    authors=ab.get("author"),
+                                    source="ABS",
+                                    source_id=ab.get("id"),
+                                    cover_url=f"/api/cover-proxy/{ab['id']}",
+                                )
+                            )
                             found_filenames.add(fname.lower())
-                            if ab.get('title'):
-                                found_stems.add(ab['title'].lower().strip())
+                            if ab.get("title"):
+                                found_stems.add(ab["title"].lower().strip())
         except Exception as e:
             logger.warning(f"ABS ebook search failed: {e}")
 
@@ -388,16 +408,18 @@ def get_searchable_ebooks(search_term):
                     for cr in cwa_results:
                         fname = f"cwa_{cr.get('id', 'unknown')}.{cr.get('ext', 'epub')}"
                         if fname.lower() not in found_filenames:
-                            results.append(EbookResult(
-                                name=fname,
-                                title=cr.get('title'),
-                                authors=cr.get('author'),
-                                source='CWA',
-                                source_id=cr.get('id')
-                            ))
+                            results.append(
+                                EbookResult(
+                                    name=fname,
+                                    title=cr.get("title"),
+                                    authors=cr.get("author"),
+                                    source="CWA",
+                                    source_id=cr.get("id"),
+                                )
+                            )
                             found_filenames.add(fname.lower())
-                            if cr.get('title'):
-                                found_stems.add(cr['title'].lower().strip())
+                            if cr.get("title"):
+                                found_stems.add(cr["title"].lower().strip())
         except Exception as e:
             logger.warning(f"CWA search failed: {e}")
 
@@ -413,17 +435,17 @@ def get_searchable_ebooks(search_term):
                     continue
 
                 if not search_term or search_term.lower() in fname_lower:
-                    results.append(EbookResult(name=eb.name, path=eb, source='Local File'))
+                    results.append(EbookResult(name=eb.name, path=eb, source="Local File"))
                     found_filenames.add(fname_lower)
                     found_stems.add(stem_lower)
 
         except Exception as e:
             logger.warning(f"Filesystem search failed: {e}")
 
-    if not results and not EBOOK_DIR.exists() and not any_booklore_configured():
+    if not results and not EBOOK_DIR.exists() and not any_grimmory_configured():
         logger.warning(
-            "No ebooks available: Neither Booklore integration nor /books volume is configured. "
-            "Enable Booklore (BOOKLORE_SERVER, BOOKLORE_USER, BOOKLORE_PASSWORD) "
+            "No ebooks available: Neither Grimmory integration nor /books volume is configured. "
+            "Enable Grimmory (GRIMMORY_SERVER, GRIMMORY_USER, GRIMMORY_PASSWORD) "
             "or mount the ebooks directory to /books"
         )
 
@@ -458,7 +480,7 @@ def cleanup_mapping_resources(book):
         except Exception as e:
             logger.debug(f"Failed to get epub cache dir: {e}")
 
-        manager_cache_dir = getattr(manager, 'epub_cache_dir', None)
+        manager_cache_dir = getattr(manager, "epub_cache_dir", None)
         if manager_cache_dir:
             cache_dirs.append(manager_cache_dir)
 
@@ -481,11 +503,11 @@ def cleanup_mapping_resources(book):
                 except Exception as e:
                     logger.warning(f"Failed to delete cached ebook {book.ebook_filename}: {e}")
 
-    if book.sync_mode == 'ebook_only' and book.kosync_doc_id:
+    if book.sync_mode == "ebook_only" and book.kosync_doc_id:
         logger.info(f"Deleting KOSync document record for ebook-only mapping: '{book.kosync_doc_id[:8]}'")
         database_service.delete_kosync_document(book.kosync_doc_id)
 
-    collection_name = os.environ.get('ABS_COLLECTION_NAME', 'Synced with KOReader')
+    collection_name = os.environ.get("ABS_COLLECTION_NAME", "Synced with KOReader")
     try:
         get_abs_service().remove_from_collection(book.abs_id, collection_name)
     except Exception as e:
@@ -493,12 +515,12 @@ def cleanup_mapping_resources(book):
 
     if book.ebook_filename:
         shelf_filename = book.original_ebook_filename or book.ebook_filename
-        bl_client = get_booklore_client()
+        bl_client = get_grimmory_client()
         if bl_client.is_configured():
             try:
                 bl_client.remove_from_shelf(shelf_filename)
             except Exception as e:
-                logger.warning(f"Failed to remove from Booklore shelf: {e}")
+                logger.warning(f"Failed to remove from Grimmory shelf: {e}")
 
 
 def restart_server():
@@ -511,17 +533,27 @@ def restart_server():
     os.kill(os.getpid(), signal.SIGTERM)
 
 
+def _has_bookfusion_evidence(match_dict):
+    """Check if a match dict has BookFusion-related evidence."""
+    if match_dict.get("source_family") == "bookfusion":
+        return True
+    return any(ev.startswith("bookfusion") for ev in (match_dict.get("evidence") or []))
+
+
 def serialize_suggestion(s):
     """Shared serializer for PendingSuggestion → JSON-ready dict."""
     matches = []
     for m in s.matches:
-        evidence = m.get("evidence") or []
-        has_bookfusion = m.get("source_family") == "bookfusion" or any(ev.startswith("bookfusion") for ev in evidence)
-        matches.append({
-            **m,
-            "evidence": evidence,
-            "has_bookfusion": has_bookfusion,
-        })
+        # Skip provenance-only entries (e.g. abs_audiobook markers from reverse suggestions)
+        if m.get("source") == "abs_audiobook" and not m.get("action_kind"):
+            continue
+        matches.append(
+            {
+                **m,
+                "evidence": m.get("evidence") or [],
+                "has_bookfusion": _has_bookfusion_evidence(m),
+            }
+        )
 
     has_bookfusion_evidence = any(m.get("has_bookfusion") for m in matches)
     return {
@@ -535,16 +567,16 @@ def serialize_suggestion(s):
         "created_at": s.created_at.isoformat() if s.created_at else None,
         "has_bookfusion_evidence": has_bookfusion_evidence,
         "top_match": matches[0] if matches else None,
-        "status": s.status,
-        "hidden": s.status == 'hidden',
+        "status": "hidden" if s.status == "dismissed" else s.status,
+        "hidden": s.status in ("hidden", "dismissed"),
     }
 
 
-def find_booklore_metadata(book, booklore_by_filename):
-    """Find best Booklore metadata entry for a book by filename."""
+def find_grimmory_metadata(book, grimmory_by_filename):
+    """Find best Grimmory metadata entry for a book by filename."""
     for fn in (book.ebook_filename, book.original_ebook_filename):
         if fn:
-            candidates = booklore_by_filename.get(fn.lower(), [])
+            candidates = grimmory_by_filename.get(fn.lower(), [])
             match = next((b for b in candidates if b.title), candidates[0] if candidates else None)
             if match:
                 return match
@@ -566,5 +598,5 @@ def safe_folder_name(name: str) -> str:
     invalid = '<>:"/\\|?*'
     name = html.escape(str(name).strip())[:150]
     for c in invalid:
-        name = name.replace(c, '_')
+        name = name.replace(c, "_")
     return name.strip() or "Unknown"

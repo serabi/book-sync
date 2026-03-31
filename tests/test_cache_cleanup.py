@@ -11,7 +11,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 # Add project root to path
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, project_root)
 
 print(f"DEBUG: PYTHONPATH: {sys.path[0]}")
@@ -19,12 +19,15 @@ print(f"DEBUG: PYTHONPATH: {sys.path[0]}")
 try:
     from src.db.models import Book, PendingSuggestion
     from src.sync_manager import SyncManager
+
     print("DEBUG: Imports successful")
 except Exception as e:
     print(f"ERROR: Import failed: {e}")
     import traceback
+
     traceback.print_exc()
     sys.exit(1)
+
 
 def run_test():
     temp_dir = tempfile.mkdtemp()
@@ -66,8 +69,8 @@ def run_test():
         # Initialize SyncManager with mocks
         sync_manager = SyncManager(
             database_service=db_service,
-            sync_clients={}, # Avoid connection checks
-            epub_cache_dir=cache_dir
+            sync_clients={},  # Avoid connection checks
+            epub_cache_dir=cache_dir,
         )
         print("DEBUG: SyncManager initialized")
 
@@ -94,10 +97,12 @@ def run_test():
     except Exception as e:
         print(f"\n[FAIL] Test failed: {e}")
         import traceback
+
         traceback.print_exc()
         return False
     finally:
         shutil.rmtree(temp_dir)
+
 
 if __name__ == "__main__":
     success = run_test()
