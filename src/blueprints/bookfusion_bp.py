@@ -66,18 +66,25 @@ def upload_book():
         return jsonify({"error": "Upload to BookFusion failed"}), 500
 
     bf_book_id = result.get("id")
+    already_linked = False
     if bf_book_id:
-        db_service.save_bookfusion_book(
-            BookfusionBook(
-                bookfusion_id=bf_book_id,
-                title=title,
-                authors=authors,
-                filename=ebook_filename,
-                matched_book_id=book.id,
+        existing = db_service.get_bookfusion_book_by_book_id(book.id)
+        if existing:
+            already_linked = True
+            logger.info(f"BookFusion book already linked: bf_id={bf_book_id}, book_id={book.id}")
+        else:
+            db_service.save_bookfusion_book(
+                BookfusionBook(
+                    bookfusion_id=bf_book_id,
+                    title=title,
+                    authors=authors,
+                    filename=ebook_filename,
+                    matched_book_id=book.id,
+                )
             )
-        )
+            logger.info(f"BookFusion book linked: bf_id={bf_book_id}, book_id={book.id}")
 
-    return jsonify({"success": True, "result": result})
+    return jsonify({"success": True, "already_linked": already_linked, "result": result})
 
 
 @bookfusion_bp.route("/api/bookfusion/sync-highlights", methods=["POST"])

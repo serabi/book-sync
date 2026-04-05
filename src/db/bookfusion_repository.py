@@ -97,9 +97,14 @@ class BookFusionRepository(BaseRepository):
 
     def link_bookfusion_highlights_by_book_id(self, bookfusion_book_id, book_id):
         """Link all highlights for a BookFusion book to a library book by book_id."""
+        normalized_id = bookfusion_book_id
+        if normalized_id.startswith("book-"):
+            normalized_id = normalized_id[5:]
         with self.get_session() as session:
             session.query(BookfusionHighlight).filter(
-                BookfusionHighlight.bookfusion_book_id == bookfusion_book_id
+                (BookfusionHighlight.bookfusion_book_id == bookfusion_book_id)
+                | (BookfusionHighlight.bookfusion_book_id == normalized_id)
+                | (BookfusionHighlight.bookfusion_book_id == f"book-{normalized_id}")
             ).update({BookfusionHighlight.matched_book_id: book_id}, synchronize_session=False)
 
     def get_bookfusion_highlights_for_book_by_book_id(self, book_id):

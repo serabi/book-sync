@@ -821,9 +821,13 @@
                     .then(function(r) { return r.json(); })
                     .then(function(data) {
                         if (data.success) {
-                            uploadBtn.textContent = 'Uploaded';
+                            if (data.already_linked) {
+                                uploadBtn.textContent = 'Already linked';
+                            } else {
+                                uploadBtn.textContent = 'Uploaded';
+                            }
                             uploadBtn.classList.add('done');
-                            setTimeout(function() { window.location.reload(); }, 1000);
+                            setTimeout(function() { window.location.reload(); }, 1500);
                         } else {
                             uploadBtn.textContent = data.error || 'Failed';
                             uploadBtn.classList.add('error');
