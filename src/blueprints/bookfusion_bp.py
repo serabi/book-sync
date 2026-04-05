@@ -1,6 +1,7 @@
 """BookFusion blueprint — upload books and sync highlights."""
 
 import logging
+import re
 from datetime import datetime
 
 from flask import Blueprint, jsonify, request
@@ -11,6 +12,32 @@ from src.db.models import BookfusionBook
 logger = logging.getLogger(__name__)
 
 bookfusion_bp = Blueprint("bookfusion", __name__)
+BOOKFUSION_ENTRY_SPLIT = "\n— "
+
+
+def _normalize_bookfusion_chapter(chapter):
+    chapter = re.sub(r"^#{1,6}\s*", "", (chapter or "").strip())
+    return re.sub(r"^[*_]+|[*_]+$", "", chapter).strip()
+
+
+def _bookfusion_entry_key(entry):
+    if not entry:
+        return ("", "")
+
+    text = entry.strip()
+    if text.startswith("\U0001f4d6"):
+        text = text[1:].lstrip()
+    if text.startswith("\U0001f4d6"):
+        text = text[1:].lstrip()
+
+    quote, chapter = text, ""
+    if BOOKFUSION_ENTRY_SPLIT in text:
+        quote, chapter = text.split(BOOKFUSION_ENTRY_SPLIT, 1)
+    return (quote.strip(), _normalize_bookfusion_chapter(chapter))
+
+
+def _bookfusion_highlight_key(quote, chapter):
+    return ((quote or "").strip(), _normalize_bookfusion_chapter(chapter))
 
 
 @bookfusion_bp.route("/api/bookfusion/upload", methods=["POST"])
@@ -198,13 +225,12 @@ def save_highlight_to_journal():
                 }
             )
 
+    db_service.cleanup_bookfusion_import_notes(book.id)
     existing_entries = db_service.get_reading_journal_entries_for_book(book.id, "highlight")
     existing_keys = set()
     for entry in existing_entries:
         if entry.entry:
-            existing_keys.add(entry.entry.strip())
-
-    cleanup_stats = db_service.cleanup_bookfusion_import_notes(abs_id)
+            existing_keys.add(_bookfusion_entry_key(entry.entry))
     saved = 0
     skipped = 0
 
@@ -216,13 +242,15 @@ def save_highlight_to_journal():
         if not quote:
             continue
 
-        entry_text = quote
-        if chapter:
-            entry_text += f"\n— {chapter}"
-
-        if entry_text in existing_keys:
+        highlight_key = _bookfusion_highlight_key(quote, chapter)
+        if highlight_key in existing_keys:
             skipped += 1
             continue
+
+        entry_text = quote
+        if chapter:
+            chapter_clean = chapter.lstrip("#").strip()
+            entry_text += f"\n— *{chapter_clean}*"
 
         created_at = None
         if highlighted_at_raw:
@@ -239,8 +267,9 @@ def save_highlight_to_journal():
             db_service.add_reading_journal(
                 book.id, "highlight", entry=entry_text, created_at=created_at, abs_id=book.abs_id
             )
+            existing_keys.add(highlight_key)
             saved += 1
         except Exception as e:
             logger.warning(f"Failed to save journal entry: {e}")
 
-    return jsonify({"success": True, "saved": saved, "skipped": skipped, "cleanup": cleanup_stats})
+    return jsonify({"success": True, "saved": saved, "skipped": skipped})

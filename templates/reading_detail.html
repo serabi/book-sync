@@ -504,7 +504,7 @@
                                     {% endif %}
                                 </div>
                                 {% if journal.entry %}
-                                <p class="r-tl-text">{{ journal.entry }}</p>
+                                <div class="r-tl-text">{{ journal.entry|markdown }}</div>
                                 {% endif %}
                                 {% if journal.event in ['note', 'highlight', 'progress', 'resumed', 'paused', 'dnf'] or (journal.event in ['started', 'finished'] and journal.id) %}
                                 <div class="r-tl-menu" data-journal-id="{{ journal.id }}" data-journal-event="{{ journal.event }}">

@@ -6,11 +6,9 @@ import threading
 import time
 from pathlib import Path
 
-import nh3
 import schedule
 from dependency_injector import providers
 from flask import Flask, current_app, request
-from markupsafe import Markup
 
 from src.api.hardcover_routes import hardcover_bp, init_hardcover_routes
 from src.api.kosync_admin import kosync_admin_bp
@@ -18,6 +16,7 @@ from src.api.kosync_server import kosync_sync_bp
 from src.blueprints import register_blueprints
 from src.blueprints.helpers import safe_folder_name
 from src.utils.config_loader import ConfigLoader
+from src.utils.markdown import render_markdown_markup, sanitize_html
 from src.version import get_update_status
 
 
@@ -495,17 +494,6 @@ def _log_security_warnings():
         logger.info("Tip: Set KOSYNC_PUBLIC_URL in settings if you expose KOSync through a reverse proxy")
 
 
-_ALLOWED_HTML_TAGS = {"p", "br", "b", "i", "em", "strong", "ul", "ol", "li"}
-
-
-def _sanitize_html(value):
-    """Allow only safe formatting tags and strip all attributes/protocols."""
-    if not value:
-        return ""
-    cleaned = nh3.clean(str(value), tags=_ALLOWED_HTML_TAGS, attributes={})
-    return Markup(cleaned)
-
-
 # --- Application Factory ---
 def create_app(test_container=None):
     STATIC_DIR = os.environ.get("STATIC_DIR", "/app/static")
@@ -521,7 +509,8 @@ def create_app(test_container=None):
     # Register context processors, jinja globals
     app.context_processor(inject_global_vars)
     app.jinja_env.globals["safe_folder_name"] = safe_folder_name
-    app.jinja_env.filters["sanitize_html"] = _sanitize_html
+    app.jinja_env.filters["sanitize_html"] = sanitize_html
+    app.jinja_env.filters["markdown"] = render_markdown_markup
 
     # Register all application blueprints
     register_blueprints(app)

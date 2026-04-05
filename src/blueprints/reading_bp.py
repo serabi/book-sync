@@ -21,6 +21,7 @@ from src.services.book_metadata_service import build_book_metadata, build_servic
 from src.services.reading_service import ReadingService
 from src.services.reading_stats_service import ReadingStatsService
 from src.utils.cover_resolver import resolve_book_covers
+from src.utils.markdown import render_markdown_html
 
 logger = logging.getLogger(__name__)
 
@@ -629,6 +630,7 @@ def add_journal(book_ref):
                 "id": journal.id,
                 "event": journal.event,
                 "entry": journal.entry,
+                "entry_html": render_markdown_html(journal.entry),
                 "percentage": journal.percentage,
                 "created_at": journal.created_at.isoformat() if journal.created_at else None,
             },
@@ -695,6 +697,7 @@ def update_journal(journal_id):
                     "id": journal.id,
                     "event": journal.event,
                     "entry": journal.entry,
+                    "entry_html": render_markdown_html(journal.entry),
                     "percentage": journal.percentage,
                     "created_at": journal.created_at.isoformat() if journal.created_at else None,
                 },
@@ -714,6 +717,7 @@ def update_journal(journal_id):
                 "id": journal.id,
                 "event": journal.event,
                 "entry": journal.entry,
+                "entry_html": render_markdown_html(journal.entry),
                 "percentage": journal.percentage,
                 "created_at": journal.created_at.isoformat() if journal.created_at else None,
             },

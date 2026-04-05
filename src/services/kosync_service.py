@@ -11,7 +11,7 @@ import os
 import re
 import threading
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from src.db.models import Book, KosyncDocument
@@ -576,7 +576,7 @@ class KosyncService:
         device = str(data.get("device", ""))[:128]
         device_id = str(data.get("device_id", ""))[:64]
 
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
 
         kosync_doc = self._db.get_kosync_document(doc_hash)
 

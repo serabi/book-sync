@@ -200,7 +200,7 @@ class BookFusionRepository(BaseRepository):
     def unlink_bookfusion_by_book_id(self, book_id):
         with self.get_session() as session:
             session.query(BookfusionBook).filter(BookfusionBook.matched_book_id == book_id).update(
-                {BookfusionBook.matched_book_id: None, BookfusionBook.matched_abs_id: None}, synchronize_session=False
+                {BookfusionBook.matched_book_id: None}, synchronize_session=False
             )
             session.query(BookfusionHighlight).filter(BookfusionHighlight.matched_book_id == book_id).update(
                 {BookfusionHighlight.matched_book_id: None}, synchronize_session=False
