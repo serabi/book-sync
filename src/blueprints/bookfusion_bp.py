@@ -74,7 +74,6 @@ def upload_book():
                 authors=authors,
                 filename=ebook_filename,
                 matched_book_id=book.id,
-                matched_abs_id=abs_id,
             )
         )
 
