@@ -21,6 +21,7 @@ from src.services.book_metadata_service import build_book_metadata, build_servic
 from src.services.reading_service import ReadingService
 from src.services.reading_stats_service import ReadingStatsService
 from src.utils.cover_resolver import resolve_book_covers
+from src.utils.markdown import render_markdown_html
 
 logger = logging.getLogger(__name__)
 
@@ -344,6 +345,9 @@ def reading_detail(book_ref):
         or database_service.is_bookfusion_linked_by_book_id(book.id)
     )
 
+    # Check if book is eligible for BookFusion upload (has ebook file)
+    bookfusion_upload_eligible = bool(book.ebook_filename or book.original_ebook_filename)
+
     container = get_container()
     metadata = build_book_metadata(book, container, database_service, abs_service)
     hardcover = metadata.get("_hardcover")
@@ -401,6 +405,7 @@ def reading_detail(book_ref):
         journals=journals,
         bf_highlights=bf_highlights,
         has_bookfusion_link=has_bookfusion_link,
+        bookfusion_upload_eligible=bookfusion_upload_eligible,
         has_linked_tbr=has_linked_tbr,
         metadata=metadata,
         services_enabled=services_enabled,
@@ -485,7 +490,8 @@ def update_rating(book_ref):
             hardcover_synced = bool(sync_result.get("hardcover_synced"))
             hardcover_error = sync_result.get("hardcover_error")
     except Exception as e:
-        hardcover_error = str(e)
+        logger.warning("Hardcover rating sync failed for book %s: %s", book.id, e)
+        hardcover_error = "Hardcover sync failed"
 
     return jsonify(
         {
@@ -625,6 +631,7 @@ def add_journal(book_ref):
                 "id": journal.id,
                 "event": journal.event,
                 "entry": journal.entry,
+                "entry_html": render_markdown_html(journal.entry),
                 "percentage": journal.percentage,
                 "created_at": journal.created_at.isoformat() if journal.created_at else None,
             },
@@ -691,6 +698,7 @@ def update_journal(journal_id):
                     "id": journal.id,
                     "event": journal.event,
                     "entry": journal.entry,
+                    "entry_html": render_markdown_html(journal.entry),
                     "percentage": journal.percentage,
                     "created_at": journal.created_at.isoformat() if journal.created_at else None,
                 },
@@ -710,6 +718,7 @@ def update_journal(journal_id):
                 "id": journal.id,
                 "event": journal.event,
                 "entry": journal.entry,
+                "entry_html": render_markdown_html(journal.entry),
                 "percentage": journal.percentage,
                 "created_at": journal.created_at.isoformat() if journal.created_at else None,
             },
