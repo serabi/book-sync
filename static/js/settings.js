@@ -536,6 +536,7 @@ document.addEventListener('DOMContentLoaded', function () {
             if (!confirm('This will re-download all highlights from BookFusion. Continue?')) {
                 return;
             }
+            bfResyncBtn.classList.remove('error', 'done');
             bfResyncBtn.disabled = true;
             bfResyncBtn.textContent = 'Syncing...';
             fetch('/api/bookfusion/sync-highlights', {
@@ -546,15 +547,18 @@ document.addEventListener('DOMContentLoaded', function () {
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 if (data.success) {
+                    bfResyncBtn.classList.remove('error');
                     bfResyncBtn.textContent = 'Synced (' + data.new_highlights + ' new)';
                     bfResyncBtn.classList.add('done');
                 } else {
+                    bfResyncBtn.classList.remove('done');
                     bfResyncBtn.textContent = data.error || 'Failed';
                     bfResyncBtn.classList.add('error');
                     bfResyncBtn.disabled = false;
                 }
             })
             .catch(function() {
+                bfResyncBtn.classList.remove('done');
                 bfResyncBtn.textContent = 'Error';
                 bfResyncBtn.classList.add('error');
                 bfResyncBtn.disabled = false;

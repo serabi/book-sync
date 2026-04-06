@@ -81,13 +81,18 @@ def upload_book():
         with open(file_path, "rb") as f:
             file_bytes = f.read()
     except Exception as e:
-        logger.error(f"Failed to read ebook file: {e}")
+        logger.error("Failed to read ebook file: %s", e)
         return jsonify({"error": "Failed to read ebook file"}), 500
 
     title = book.title or ""
     authors = book.author or ""
 
-    logger.info(f"BookFusion upload request: title='{title}', authors='{authors}', filename='{ebook_filename}'")
+    logger.info(
+        "BookFusion upload request: title='%s', authors='%s', filename='%s'",
+        title,
+        authors,
+        ebook_filename,
+    )
     result = bf_client.upload_book(ebook_filename, file_bytes, title, authors)
     if not result:
         return jsonify({"error": "Upload to BookFusion failed"}), 500

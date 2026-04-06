@@ -909,39 +909,6 @@
             }
         })();
 
-        // BookFusion import to journal handler
-        (function() {
-            var importBtn = document.getElementById('bulk-import-highlights');
-            if (importBtn) {
-                importBtn.addEventListener('click', function() {
-                    var bookId = this.dataset.bookId;
-                    importBtn.disabled = true;
-                    importBtn.textContent = 'Importing...';
-                    fetch('/api/bookfusion/save-journal', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ abs_id: _rdAbsId })
-                    })
-                    .then(function(r) { return r.json(); })
-                    .then(function(data) {
-                        if (data.success) {
-                            importBtn.textContent = 'Imported (' + data.saved + ')';
-                            importBtn.classList.add('done');
-                        } else {
-                            importBtn.textContent = data.error || 'Failed';
-                            importBtn.classList.add('error');
-                            importBtn.disabled = false;
-                        }
-                    })
-                    .catch(function() {
-                        importBtn.textContent = 'Error';
-                        importBtn.classList.add('error');
-                        importBtn.disabled = false;
-                    });
-                });
-            }
-        })();
-
         {% if active_tab != 'overview' %}
         switchTab({{ active_tab | tojson }});
         {% endif %}
@@ -1221,26 +1188,32 @@
             var importBtn = document.getElementById('bulk-import-highlights');
             if (!importBtn) return;
             importBtn.addEventListener('click', function() {
-                var bookId = importBtn.dataset.bookId;
+                importBtn.classList.remove('error', 'done');
                 importBtn.disabled = true;
                 importBtn.textContent = 'Importing...';
 
                 fetch('/api/bookfusion/save-journal', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ abs_id: bookId }),
+                    body: JSON.stringify({ abs_id: _rdAbsId }),
                 })
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
                     if (data.success) {
+                        importBtn.classList.remove('error');
+                        importBtn.classList.add('done');
                         importBtn.textContent = 'Imported ' + data.saved + ' highlights';
                     } else {
+                        importBtn.classList.remove('done');
+                        importBtn.classList.add('error');
                         importBtn.textContent = data.error || 'Import failed';
                         importBtn.disabled = false;
                     }
                 })
                 .catch(function() {
-                    importBtn.textContent = 'Import All to Journal';
+                    importBtn.classList.remove('done');
+                    importBtn.classList.add('error');
+                    importBtn.textContent = 'Error';
                     importBtn.disabled = false;
                 });
             });

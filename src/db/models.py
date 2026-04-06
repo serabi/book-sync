@@ -765,7 +765,7 @@ class GrimmoryBook(Base):
     title = Column(String(500))
     authors = Column(String(500))
     raw_metadata = Column(Text)
-    last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    last_updated = Column(DateTime, default=utc_now, onupdate=utc_now)
 
     __table_args__ = (UniqueConstraint("server_id", "filename", name="uq_grimmory_server_filename"),)
 

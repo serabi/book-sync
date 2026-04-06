@@ -12,5 +12,5 @@ def test_sanitize_html_returns_markup():
 
 
 def test_reading_detail_uses_block_container_for_markdown():
-    template = Path("/Volumes/externalSSD/development/pagekeeper/templates/reading_detail.html").read_text()
+    template = (Path(__file__).resolve().parent.parent / "templates" / "reading_detail.html").read_text()
     assert '<div class="r-tl-text">{{ journal.entry|markdown }}</div>' in template
