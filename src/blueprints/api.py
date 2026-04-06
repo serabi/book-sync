@@ -14,7 +14,6 @@ from src.blueprints.helpers import (
     get_database_service,
     get_grimmory_client,
     get_kosync_id_for_ebook,
-    serialize_suggestion,
 )
 from src.db.models import Book
 

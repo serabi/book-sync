@@ -21,7 +21,6 @@ from src.blueprints.helpers import (
     get_kosync_id_for_ebook,
     get_manager,
     get_searchable_ebooks,
-    serialize_suggestion,
 )
 from src.db.models import Book, StorytellerSubmission
 from src.services.kosync_service import ensure_kosync_document

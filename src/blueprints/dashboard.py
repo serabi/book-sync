@@ -9,14 +9,10 @@ from pathlib import Path
 from flask import Blueprint, render_template
 
 from src.blueprints.helpers import (
-    find_grimmory_metadata,
-    get_abs_service,
-    get_container,
+    get_book_or_404,
     get_database_service,
-    get_enabled_grimmory_server_ids,
-    get_hardcover_book_url,
-    get_service_web_url,
-    serialize_suggestion,
+    get_grimmory_client,
+    serialize_detected_book,
 )
 from src.utils.cover_resolver import resolve_book_covers
 from src.version import APP_VERSION
@@ -415,21 +411,6 @@ def index():
     except Exception:
         pass
 
-    # Pending suggestions — for dashboard banner (legacy, will be replaced)
-    top_suggestions = []
-    suggestions_enabled = os.environ.get("SUGGESTIONS_ENABLED", "false").lower() in ("true", "1", "yes", "on")
-    if suggestions_enabled:
-        try:
-            pending = database_service.get_all_pending_suggestions()
-            for s in pending[:10]:
-                serialized = serialize_suggestion(s)
-                if serialized["top_match"] and serialized["top_match"].get("confidence") == "high":
-                    top_suggestions.append(serialized)
-                    if len(top_suggestions) >= 3:
-                        break
-        except Exception:
-            pass
-
     return render_template(
         "index.html",
         mappings=mappings,
@@ -439,6 +420,5 @@ def index():
         grimmory_label=grimmory_label,
         kosync_unlinked_count=kosync_unlinked_count,
         unlinked_reading=unlinked_reading,
-        top_suggestions=top_suggestions,
         detected_books=detected_books,
     )
